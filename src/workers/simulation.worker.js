@@ -15,6 +15,55 @@ const PERCENTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
 
+// Build a smoothed "representative" outcome for a percentile by triangular-kernel
+// averaging the band of runs whose total-withdrawn rank sits within ±halfW of the
+// target rank. halfW = 0 collapses to the single run at that rank (no smoothing).
+function smoothedPercentile(params, result, rankW, centerRank, halfW) {
+  const n = rankW.length;
+  const lo = Math.max(0, centerRank - halfW);
+  const hi = Math.min(n - 1, centerRank + halfW);
+
+  let balances = null;
+  let withdrawals = null;
+  let returns = null;
+  let totalWithdrawn = 0;
+  let finalBalance = 0;
+  let avgReturn = 0;
+  let wSum = 0;
+
+  for (let r = lo; r <= hi; r++) {
+    const simIndex = rankW[r];
+    const w = halfW > 0 ? 1 - Math.abs(r - centerRank) / (halfW + 1) : 1;
+    const { path } = regeneratePath(params, result.baseSeed, simIndex);
+
+    if (balances === null) {
+      balances = new Array(path.balances.length).fill(0);
+      withdrawals = new Array(path.withdrawals.length).fill(0);
+      returns = new Array(path.returns.length).fill(0);
+    }
+    for (let t = 0; t < balances.length; t++) balances[t] += w * path.balances[t];
+    for (let t = 0; t < withdrawals.length; t++) withdrawals[t] += w * path.withdrawals[t];
+    for (let t = 0; t < returns.length; t++) returns[t] += w * path.returns[t];
+
+    totalWithdrawn += w * result.totalWithdrawn[simIndex];
+    finalBalance += w * result.finalBalance[simIndex];
+    avgReturn += w * result.avgReturn[simIndex];
+    wSum += w;
+  }
+
+  for (let t = 0; t < balances.length; t++) balances[t] /= wSum;
+  for (let t = 0; t < withdrawals.length; t++) withdrawals[t] /= wSum;
+  for (let t = 0; t < returns.length; t++) returns[t] /= wSum;
+
+  return {
+    totalWithdrawn: totalWithdrawn / wSum,
+    finalBalance: finalBalance / wSum,
+    avgReturn: avgReturn / wSum,
+    path: { balances, withdrawals, returns },
+    windowCount: hi - lo + 1,
+  };
+}
+
 self.onmessage = (e) => {
   const { type, params } = e.data || {};
   if (type !== 'run') return;
@@ -27,18 +76,15 @@ self.onmessage = (e) => {
     const n = result.numSimulations;
     const numYears = params.numYears;
 
-    // Percentile cards & timelines use the total-withdrawn ranking.
+    // Percentile cards & timelines use the total-withdrawn ranking. Each is a
+    // kernel-weighted average of the band of runs around the target rank, which
+    // greatly reduces the run-to-run noise of a single representative path.
     const rankW = rankByWithdrawn(result);
+    const halfW = Math.round((params.smoothFraction || 0) * n);
     const percentiles = {};
     for (const p of PERCENTILES) {
-      const simIndex = rankW[percentileIndex(n, p)];
-      const re = regeneratePath(params, result.baseSeed, simIndex);
-      percentiles[`p${Math.round(p * 100)}`] = {
-        totalWithdrawn: result.totalWithdrawn[simIndex],
-        finalBalance: result.finalBalance[simIndex],
-        avgReturn: result.avgReturn[simIndex],
-        path: re.path,
-      };
+      const centerRank = percentileIndex(n, p);
+      percentiles[`p${Math.round(p * 100)}`] = smoothedPercentile(params, result, rankW, centerRank, halfW);
     }
 
     // 3D topography samples paths across the SAME total-withdrawn ranking used

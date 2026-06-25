@@ -149,6 +149,64 @@ describe('success / depletion metric', () => {
   });
 });
 
+describe('front-loaded spending', () => {
+  // Deterministic engine: zero-variance, zero-return assets and no dynamic
+  // adjustment, so each year's withdrawal is purely base * ageFactor (+bonus).
+  function flatParams() {
+    return {
+      numYears: 10,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1e9, base: 100_000, floorBalance: 0, floorPenalty: 0,
+        ceilingBalance: Infinity, ceilingBonus: 0,
+        spendDrift: 0, goGoBonus: 0, goGoYears: 0,
+      },
+      dynConfig: {
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+    };
+  }
+
+  it('leaves withdrawals flat with neutral defaults', () => {
+    const s = simulatePath(flatParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals.every((w) => Math.abs(w - 100_000) < 1e-6)).toBe(true);
+  });
+
+  it('declines withdrawals over time with a negative annual real change', () => {
+    const p = flatParams();
+    p.portfolio.spendDrift = -0.1;
+    const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
+    expect(w[0]).toBeCloseTo(100_000, 3);
+    expect(w[1]).toBeCloseTo(90_000, 3);
+    expect(w[0]).toBeGreaterThan(w[9]);
+  });
+
+  it('adds a flat bonus only during the early years', () => {
+    const p = flatParams();
+    p.portfolio.goGoBonus = 50_000;
+    p.portfolio.goGoYears = 3;
+    const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
+    expect(w[0]).toBeCloseTo(150_000, 3);
+    expect(w[2]).toBeCloseTo(150_000, 3);
+    expect(w[3]).toBeCloseTo(100_000, 3);
+  });
+});
+
 describe('simulatePath path mode', () => {
   it('omits path arrays when collectPath is false', () => {
     const s = simulatePath(lognormalParams(), createRng(deriveSeed(123, 0)), false);

@@ -134,7 +134,12 @@ export function simulatePath(params, rng, collectPath = false) {
     balance = balance * (1 + realReturn);
 
     const adjAmount = resolveAdjustment(balance, portfolioReturn * 100, portfolio, dynConfig);
-    const targetWithdrawal = Math.max(0, portfolio.base + adjAmount);
+    // Front-loading: scale the whole target by an annual real-change factor (j=0 in
+    // year one, so the first year is unscaled), then add a flat early-years bonus.
+    const ageFactor = (1 + (portfolio.spendDrift || 0)) ** j;
+    let targetWithdrawal = (portfolio.base + adjAmount) * ageFactor;
+    if (j < portfolio.goGoYears) targetWithdrawal += portfolio.goGoBonus;
+    targetWithdrawal = Math.max(0, targetWithdrawal);
     const actualWithdrawal = Math.min(balance, targetWithdrawal);
     balance -= actualWithdrawal;
 

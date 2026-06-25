@@ -18,6 +18,9 @@ const FIELDS = [
   { key: 'numYears', dom: 'numYears', type: 'int', def: 40 },
   { key: 'numSimulations', dom: 'numSimulations', type: 'int', def: 10000 },
   { key: 'randomSeed', dom: 'randomSeed', type: 'string', def: '' },
+  // Half-width (in % of all runs) of the band averaged around each percentile to
+  // smooth the representative path/cards. 0 = single run (no smoothing).
+  { key: 'smoothWindowPct', dom: 'smoothWindowPct', type: 'float', def: 1 },
 
   { key: 'startYear', dom: 'startYear', type: 'int', def: 1970 },
   { key: 'endYear', dom: 'endYear', type: 'int', def: 2025 },
@@ -36,6 +39,12 @@ const FIELDS = [
   { key: 'floorPenalty', dom: 'floorPenalty', type: 'float', def: 50 },
   { key: 'ceilingBalance', dom: 'ceilingBalance', type: 'currency', def: 5000000 },
   { key: 'ceilingBonus', dom: 'ceilingBonus', type: 'float', def: 50 },
+
+  // Front-loading: annual real change applied to the whole target withdrawal, plus
+  // an optional flat bonus for the first goGoYears years. Defaults are neutral.
+  { key: 'spendChangePct', dom: 'spendChangePct', type: 'float', def: 0 },
+  { key: 'goGoBonus', dom: 'goGoBonus', type: 'currency', def: 0 },
+  { key: 'goGoYears', dom: 'goGoYears', type: 'int', def: 10 },
 
   { key: 'dynLowRet', dom: 'dynLowRet', type: 'float', def: -15 },
   { key: 'dynLowBal', dom: 'dynLowBal', type: 'currency', def: 1000000 },
@@ -162,6 +171,9 @@ export function buildSimParams(scenario, samples) {
     seed,
     distMethod: scenario.distMethod,
     blockSize: scenario.blockSize || 1,
+    // Fraction of runs on each side of a percentile rank to average together
+    // (clamped to a sane range). Consumed by the worker's path smoothing.
+    smoothFraction: Math.min(Math.max(num(scenario.smoothWindowPct) / 100, 0), 0.1),
     allocation: {
       usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
       usLgValue: (scenario.usLgValueAllocation || 0) / 100,
@@ -177,6 +189,10 @@ export function buildSimParams(scenario, samples) {
       floorPenalty: (scenario.floorPenalty || 0) / 100,
       ceilingBalance: parseCurrency(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
+      // Front-loading controls.
+      spendDrift: (scenario.spendChangePct || 0) / 100,
+      goGoBonus: parseCurrency(scenario.goGoBonus),
+      goGoYears: scenario.goGoYears || 0,
     },
     dynConfig: {
       low: { ret: scenario.dynLowRet, bal: parseCurrency(scenario.dynLowBal), adj: parseCurrency(scenario.dynLowAdj) },

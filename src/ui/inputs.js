@@ -60,9 +60,26 @@ export function renderYearLabels(years) {
   container.innerHTML = html;
 }
 
+// Wrap `.pct-input` fields with an in-box % suffix (log-normal profile grid).
+function adornPctInputs() {
+  document.querySelectorAll('input.pct-input').forEach((input) => {
+    if (input.closest('.input-adorned')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'input-adorned has-suffix';
+    const suffix = document.createElement('span');
+    suffix.className = 'input-adorn-suffix';
+    suffix.textContent = '%';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    wrap.appendChild(suffix);
+  });
+}
+
 // Wire up purely-local interactions and forward "something changed" to `onChange`.
 export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  adornPctInputs();
 
   document.querySelectorAll('.currency-input').forEach((input) => {
     input.addEventListener('blur', () => {

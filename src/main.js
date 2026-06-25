@@ -269,7 +269,9 @@ function applyScenario(scenario) {
 // ---- Bootstrap --------------------------------------------------------------
 
 function init() {
-  const initial = loadAutosave() || defaultScenario();
+  // Merge over defaults so fields added after an autosave was written (e.g.
+  // smoothWindowPct) still get their default instead of rendering blank.
+  const initial = { ...defaultScenario(), ...(loadAutosave() || {}) };
   writeScenarioToDom(initial);
   toggleDistMethod(initial.distMethod);
 

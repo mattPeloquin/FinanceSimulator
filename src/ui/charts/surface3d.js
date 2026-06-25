@@ -6,7 +6,7 @@ import { Chart } from './chartSetup.js';
 let echartsModule = null;
 let chartInstance = null;
 
-const BOX_WIDTH = 220;
+const BOX_WIDTH = 280;
 const BOX_DEPTH = 120;
 const BOX_HEIGHT = 80;
 
@@ -22,8 +22,8 @@ const AXIS_NAME_COLOR = '#475569'; // slate-600
 const AXIS_LABEL_COLOR = '#64748b'; // slate-500
 const AXIS_LINE_COLOR = '#cbd5e1'; // slate-300
 
-const DIM_OPACITY = 0.01; // opacity of non-focused columns
-const POP_FRACTION = 0.1; // how far the focused row floats up (fraction of zCap)
+const DIM_OPACITY = 0.02; // opacity of non-focused columns
+const POP_FRACTION = 0; // how far the focused row floats up (fraction of zCap)
 
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
