@@ -1,0 +1,128 @@
+// Pure helpers for turning the historical dataset into (a) a resampling pool and
+// (b) log-normal profile estimates. DOM-free and unit-testable.
+
+import { historicalData } from '../data/historicalData.js';
+
+const PROFILE_KEYS = ['us_lg_growth', 'us_lg_value', 'us_sm_mid', 'ex_us', 'bond', 'cash', 'inflation'];
+
+// Canonical ordering for the log-normal vector (6 asset classes + inflation).
+// The simulation engine indexes its correlated draws in exactly this order.
+export const LOGNORMAL_ORDER = PROFILE_KEYS;
+
+// Year-data records (inclusive range), in chronological order.
+export function getSampleYears(startYear, endYear, data = historicalData) {
+  const years = [];
+  for (let year = startYear; year <= endYear; year++) {
+    if (data[year]) years.push(data[year]);
+  }
+  return years;
+}
+
+// Population mean and standard deviation for one key (matches the original).
+function calculateProfile(records, key) {
+  const values = records.map((d) => d[key]);
+  const n = values.length;
+  const m = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.map((x) => (x - m) ** 2).reduce((a, b) => a + b, 0) / n;
+  return { mean: m, stdDev: Math.sqrt(variance) };
+}
+
+// Log-normal profiles (in percent) for each asset class plus inflation.
+export function computeProfiles(records) {
+  const out = {};
+  for (const key of PROFILE_KEYS) out[key] = calculateProfile(records, key);
+  return out;
+}
+
+// Pearson correlation matrix (N×N) across `keys`, estimated from records. A key
+// with zero variance yields zero correlation with everything (diagonal stays 1).
+export function computeCorrelationMatrix(records, keys = LOGNORMAL_ORDER) {
+  const n = records.length;
+  const N = keys.length;
+  const means = keys.map((k) => records.reduce((a, r) => a + r[k], 0) / n);
+  const stds = keys.map((k, j) =>
+    Math.sqrt(records.reduce((a, r) => a + (r[k] - means[j]) ** 2, 0) / n)
+  );
+
+  const corr = Array.from({ length: N }, () => new Array(N).fill(0));
+  for (let a = 0; a < N; a++) {
+    corr[a][a] = 1;
+    for (let b = a + 1; b < N; b++) {
+      let cov = 0;
+      for (let r = 0; r < n; r++) cov += (records[r][keys[a]] - means[a]) * (records[r][keys[b]] - means[b]);
+      cov /= n;
+      const denom = stds[a] * stds[b];
+      const c = denom > 0 ? cov / denom : 0;
+      corr[a][b] = c;
+      corr[b][a] = c;
+    }
+  }
+  return corr;
+}
+
+// Cholesky factor L (lower-triangular, L·Lᵀ = M). Sample correlation matrices are
+// positive-semidefinite; near-singular pivots are clamped so the factor stays
+// usable (producing a valid, possibly reduced-rank, correlation structure).
+export function choleskyDecompose(M) {
+  const N = M.length;
+  const L = Array.from({ length: N }, () => new Array(N).fill(0));
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = M[i][j];
+      for (let k = 0; k < j; k++) sum -= L[i][k] * L[j][k];
+      if (i === j) {
+        L[i][j] = sum > 1e-12 ? Math.sqrt(sum) : 0;
+      } else {
+        L[i][j] = L[j][j] > 1e-12 ? sum / L[j][j] : 0;
+      }
+    }
+  }
+  return L;
+}
+
+// Convenience: Cholesky factor of the historical correlation matrix, or null when
+// there isn't enough data to estimate one (caller falls back to uncorrelated draws).
+export function correlationCholesky(records, keys = LOGNORMAL_ORDER) {
+  if (!records || records.length < 2) return null;
+  return choleskyDecompose(computeCorrelationMatrix(records, keys));
+}
+
+// Map computed profiles onto the scenario log-normal fields (rounded like the UI).
+export function profilesToScenarioFields(profiles) {
+  const r = (v) => Number(v.toFixed(2));
+  return {
+    usLgGrowthMean: r(profiles.us_lg_growth.mean),
+    usLgGrowthStdDev: r(profiles.us_lg_growth.stdDev),
+    usLgValueMean: r(profiles.us_lg_value.mean),
+    usLgValueStdDev: r(profiles.us_lg_value.stdDev),
+    usSmMidMean: r(profiles.us_sm_mid.mean),
+    usSmMidStdDev: r(profiles.us_sm_mid.stdDev),
+    exUsMean: r(profiles.ex_us.mean),
+    exUsStdDev: r(profiles.ex_us.stdDev),
+    bondReturnMean: r(profiles.bond.mean),
+    bondReturnStdDev: r(profiles.bond.stdDev),
+    cashReturnMean: r(profiles.cash.mean),
+    cashReturnStdDev: r(profiles.cash.stdDev),
+    inflationMean: r(profiles.inflation.mean),
+    inflationStdDev: r(profiles.inflation.stdDev),
+  };
+}
+
+// Per-year series for the allocation mini-charts.
+export function getMiniChartSeries(startYear, endYear, data = historicalData) {
+  const years = Object.keys(data)
+    .map(Number)
+    .filter((y) => y >= startYear && y <= endYear)
+    .sort((a, b) => a - b);
+
+  return {
+    years,
+    inflation: years.map((y) => data[y].inflation),
+    us_lg_growth: years.map((y) => data[y].us_lg_growth),
+    us_lg_value: years.map((y) => data[y].us_lg_value),
+    us_sm_mid: years.map((y) => data[y].us_sm_mid),
+    ex_us: years.map((y) => data[y].ex_us),
+    bond: years.map((y) => data[y].bond),
+    cash: years.map((y) => data[y].cash),
+  };
+}
