@@ -1,0 +1,22 @@
+---
+description: Enforce client-side only, single HTML file build constraints
+alwaysApply: true
+---
+
+# Single-File Architecture Constraints
+
+This project uses `vite-plugin-singlefile` to bundle the entire application into a single `index.html` file. 
+
+- **No Backend:** Never add Node.js server-side logic, Express servers, or database connections.
+- **Client-Side Only:** All logic must run completely in the browser.
+- **Data Persistence:** If saving user state is required, strictly use `localStorage` or `sessionStorage`. Do not rely on external databases or APIs.
+- **Asset Inlining:** Avoid adding large external media assets (like giant images or videos) that cannot be easily inlined or would bloat the single HTML file.
+
+```javascript
+// ❌ BAD: Trying to use Node built-ins or server-side concepts
+import fs from 'fs';
+const data = fs.readFileSync('data.json');
+
+// ✅ GOOD: Using browser-native APIs and local storage
+const savedScenarios = JSON.parse(localStorage.getItem('scenarios') || '[]');
+```

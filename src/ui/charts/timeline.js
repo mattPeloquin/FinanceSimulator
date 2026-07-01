@@ -81,7 +81,7 @@ export function drawTimelineCharts(percentiles, numYears) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { type: 'logarithmic', min: 100000, ticks: { callback: (v) => formatK(v) } } },
+      scales: { y: { type: 'logarithmic', min: 100000, title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } } },
       plugins: {
         tooltip: {
           callbacks: {
@@ -106,7 +106,7 @@ export function drawTimelineCharts(percentiles, numYears) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, ticks: { callback: (v) => formatK(v) } } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } } },
       plugins: {
         tooltip: {
           callbacks: {
@@ -120,4 +120,9 @@ export function drawTimelineCharts(percentiles, numYears) {
       },
     },
   });
+
+  if (import.meta.env.DEV) {
+    window.__TEST_HOOKS__.balanceChart = balanceChart;
+    window.__TEST_HOOKS__.withdrawalChart = withdrawalChart;
+  }
 }

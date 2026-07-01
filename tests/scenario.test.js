@@ -5,17 +5,34 @@ import {
   validateScenario,
   parseCurrency,
   formatCurrency,
+  parseSpecificWithdrawals,
+  migrateScenario,
+  MONEY_SCALE,
 } from '../src/state/scenario.js';
 import { getSampleYears, computeProfiles } from '../src/core/history.js';
 
 describe('currency helpers', () => {
-  it('parses comma-separated strings', () => {
-    expect(parseCurrency('4,000,000')).toBe(4000000);
-    expect(parseCurrency('80000')).toBe(80000);
+  it('parses comma-separated strings as $000s', () => {
+    expect(parseCurrency('4,000')).toBe(4000);
+    expect(parseCurrency('80')).toBe(80);
     expect(parseCurrency('')).toBe(0);
   });
   it('formats numbers with separators', () => {
-    expect(formatCurrency(4000000)).toBe('4,000,000');
+    expect(formatCurrency(4000)).toBe('4,000');
+  });
+});
+
+describe('migrateScenario', () => {
+  it('converts v1 dollar fields to $000s', () => {
+    const v1 = { startBalance: 4000000, baseWithdrawal: 80000, numYears: 40 };
+    const v2 = migrateScenario(v1, 1);
+    expect(v2.startBalance).toBe(4000);
+    expect(v2.baseWithdrawal).toBe(80);
+    expect(v2.numYears).toBe(40);
+  });
+  it('leaves v2 scenarios unchanged', () => {
+    const s = { startBalance: 4000, baseWithdrawal: 80 };
+    expect(migrateScenario(s, 2)).toEqual(s);
   });
 });
 
@@ -26,9 +43,9 @@ describe('buildSimParams', () => {
     const p = buildSimParams(s, { years: [] });
     expect(p.seed).toBe(7);
     expect(p.allocation.usLgGrowth).toBeCloseTo(0.35, 6);
-    expect(p.portfolio.start).toBe(4000000);
+    expect(p.portfolio.start).toBe(4000 * MONEY_SCALE);
     expect(p.portfolio.floorPenalty).toBeCloseTo(0.5, 6);
-    expect(p.dynConfig.high.adj).toBe(200000);
+    expect(p.dynConfig.high.adj).toBe(200 * MONEY_SCALE);
   });
 
   it('uses a random seed when none is provided', () => {
@@ -37,6 +54,33 @@ describe('buildSimParams', () => {
     const p = buildSimParams(s, { years: [] });
     expect(Number.isInteger(p.seed)).toBe(true);
     expect(p.seed).toBeGreaterThanOrEqual(0);
+  });
+
+  it('parses specific withdrawals as thousands of dollars', () => {
+    const s = defaultScenario();
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '80\n85\n90';
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.specificWithdrawals).toEqual([80000, 85000, 90000]);
+  });
+});
+
+describe('parseSpecificWithdrawals', () => {
+  it('splits on common spreadsheet delimiters', () => {
+    expect(parseSpecificWithdrawals('80\n85\n90')).toEqual([80000, 85000, 90000]);
+    expect(parseSpecificWithdrawals('80\t85\t90')).toEqual([80000, 85000, 90000]);
+    expect(parseSpecificWithdrawals('80;85;90')).toEqual([80000, 85000, 90000]);
+    expect(parseSpecificWithdrawals('80|85|90')).toEqual([80000, 85000, 90000]);
+    expect(parseSpecificWithdrawals('80, 85, 90')).toEqual([80000, 85000, 90000]);
+    expect(parseSpecificWithdrawals('80,85,90')).toEqual([80000, 85000, 90000]);
+  });
+
+  it('preserves thousand separators inside a single value', () => {
+    expect(parseSpecificWithdrawals('1,234')).toEqual([1234000]);
+  });
+
+  it('parses negative values as deposits', () => {
+    expect(parseSpecificWithdrawals('-50\n80')).toEqual([-50000, 80000]);
   });
 });
 

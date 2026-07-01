@@ -3,7 +3,7 @@
 //   - named sessions in IndexedDB
 //   - JSON export / import for sharing
 
-import { SCHEMA_VERSION } from './scenario.js';
+import { SCHEMA_VERSION, migrateScenario } from './scenario.js';
 
 const AUTOSAVE_KEY = 'sor:autosave';
 const DB_NAME = 'sor-sessions';
@@ -12,9 +12,9 @@ const EXPORT_TYPE = 'sor-scenario';
 
 // ---- Autosave (localStorage) ------------------------------------------------
 
-export function saveAutosave(scenario) {
+export function saveAutosave(scenario, name = '') {
   try {
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario }));
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario, name }));
   } catch {
     /* storage may be unavailable (private mode / quota) — non-fatal */
   }
@@ -25,7 +25,11 @@ export function loadAutosave() {
     const raw = localStorage.getItem(AUTOSAVE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && parsed.scenario ? parsed.scenario : null;
+    if (!parsed || !parsed.scenario) return null;
+    return {
+      scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
+      name: parsed.name || ''
+    };
   } catch {
     return null;
   }
@@ -73,7 +77,9 @@ function requestToPromise(request) {
 export async function saveSession(name, scenario) {
   const db = await openDb();
   try {
-    await requestToPromise(tx(db, 'readwrite').put({ name, scenario, savedAt: Date.now() }));
+    await requestToPromise(
+      tx(db, 'readwrite').put({ name, scenario, schemaVersion: SCHEMA_VERSION, savedAt: Date.now() })
+    );
   } finally {
     db.close();
   }
@@ -83,7 +89,7 @@ export async function loadSession(name) {
   const db = await openDb();
   try {
     const record = await requestToPromise(tx(db, 'readonly').get(name));
-    return record ? record.scenario : null;
+    return record ? migrateScenario(record.scenario, record.schemaVersion ?? 1) : null;
   } finally {
     db.close();
   }
@@ -138,5 +144,8 @@ export async function importScenarioFromFile(file) {
   if (!parsed || parsed.type !== EXPORT_TYPE || !parsed.scenario) {
     throw new Error('Not a valid simulator scenario file.');
   }
-  return { scenario: parsed.scenario, name: parsed.name || '' };
+  return {
+    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
+    name: parsed.name || '',
+  };
 }

@@ -1,0 +1,33 @@
+---
+description: Strict usage of Tailwind CSS for styling
+globs: "**/*.{js,html}"
+alwaysApply: false
+---
+
+# Tailwind CSS Exclusivity
+
+To maintain a consistent design system and keep things simple for non-technical vibe coders, we strictly use Tailwind CSS utility classes.
+
+- **No Custom CSS:** Do not write custom CSS in `.css` files or use `<style>` blocks.
+- **No Inline Styles:** Do not use the `style="..."` attribute unless it is strictly necessary for dynamic Javascript-calculated values (like a chart progress bar width).
+
+```html
+<!-- ❌ BAD: Using inline styles -->
+<div style="background-color: red; padding: 10px; border-radius: 5px;">
+  Warning
+</div>
+
+<!-- ✅ GOOD: Using Tailwind utility classes -->
+<div class="bg-red-500 p-4 rounded-md">
+  Warning
+</div>
+```
+
+```javascript
+// ❌ BAD: Applying styles directly via JS
+element.style.marginTop = '20px';
+element.style.color = '#333';
+
+// ✅ GOOD: Toggling Tailwind classes via JS
+element.classList.add('mt-5', 'text-gray-800');
+```

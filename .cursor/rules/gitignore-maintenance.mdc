@@ -1,0 +1,16 @@
+---
+description: Ensure .gitignore is kept up to date when adding new tools or dependencies
+alwaysApply: true
+---
+
+# Gitignore Maintenance
+
+- Whenever adding new tools, frameworks, or testing libraries (like Playwright, Jest, etc.), you MUST evaluate if the `.gitignore` needs to be updated.
+- Ensure build artifacts, test results, coverage reports, caches, and environment variable files are ignored.
+- Common directories to ignore when adding testing/build tools:
+  - `test-results/`
+  - `playwright-report/`
+  - `coverage/`
+  - `dist/` or `build/`
+  - `.cache/`
+- Do not commit `.env` or `.local` files containing secrets or local configuration.

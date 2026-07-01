@@ -133,15 +133,41 @@ export function simulatePath(params, rng, collectPath = false) {
 
     balance = balance * (1 + realReturn);
 
-    const adjAmount = resolveAdjustment(balance, portfolioReturn * 100, portfolio, dynConfig);
-    // Front-loading: scale the whole target by an annual real-change factor (j=0 in
-    // year one, so the first year is unscaled), then add a flat early-years bonus.
-    const ageFactor = (1 + (portfolio.spendDrift || 0)) ** j;
-    let targetWithdrawal = (portfolio.base + adjAmount) * ageFactor;
-    if (j < portfolio.goGoYears) targetWithdrawal += portfolio.goGoBonus;
-    targetWithdrawal = Math.max(0, targetWithdrawal);
-    const actualWithdrawal = Math.min(balance, targetWithdrawal);
-    balance -= actualWithdrawal;
+    const adjAmount = dynConfig.enabled 
+      ? resolveAdjustment(balance, portfolioReturn * 100, portfolio, dynConfig) 
+      : 0;
+
+    let targetWithdrawal;
+    let baseVal;
+    if (portfolio.strategy === 'specific') {
+      const sp = portfolio.specificWithdrawals || [];
+      baseVal = j < sp.length ? sp[j] : 0;
+      targetWithdrawal = baseVal + adjAmount;
+    } else {
+      baseVal = portfolio.base;
+      // Front-loading: scale the whole target by an annual real-change factor (j=0 in
+      // year one, so the first year is unscaled), then add a flat early-years bonus.
+      const ageFactor = (1 + (portfolio.spendDrift || 0)) ** j;
+      targetWithdrawal = (portfolio.base + adjAmount) * ageFactor;
+      if (j < portfolio.goGoYears) targetWithdrawal += portfolio.goGoBonus;
+    }
+
+    if (baseVal >= 0 && targetWithdrawal < 0) {
+      targetWithdrawal = 0;
+    }
+
+    let actualWithdrawal;
+    if (targetWithdrawal < 0) {
+      // Negative target = deposit (adds to balance); floor does not apply.
+      actualWithdrawal = targetWithdrawal;
+      balance -= actualWithdrawal;
+    } else {
+      if (portfolio.withdrawalFloor > 0) {
+        targetWithdrawal = Math.max(targetWithdrawal, portfolio.withdrawalFloor);
+      }
+      actualWithdrawal = Math.min(balance, targetWithdrawal);
+      balance -= actualWithdrawal;
+    }
 
     totalWithdrawn += actualWithdrawal;
 

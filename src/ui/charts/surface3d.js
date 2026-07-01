@@ -8,10 +8,19 @@ let chartInstance = null;
 
 const BOX_WIDTH = 280;
 const BOX_DEPTH = 120;
-const BOX_HEIGHT = 80;
+const BOX_HEIGHT = 60;
 
-const RETURN_MIN = -0.3;
-const RETURN_MAX = 0.3;
+// Initial view — orbit angles, zoom, and pan pivot (maps to grid3D.viewControl).
+// Adjust in the browser, then copy from __SOR_SURFACE__.getOption().grid3D[0].viewControl.
+const CAMERA_ALPHA = 15; // vertical tilt (°); higher = more top-down
+const CAMERA_BETA = 220; // horizontal orbit (°); spins the scene left/right
+const CAMERA_DISTANCE = 220; // zoom; lower = closer to the grid
+const PAN_CENTER_X = -20; // pan pivot X (scene units)
+const PAN_CENTER_Y = -30; // pan pivot Y; negative shifts plot upward on screen
+const PAN_CENTER_Z = 0; // pan pivot Z (scene units)
+
+const RETURN_MIN = -0.5;
+const RETURN_MAX = 0.5;
 
 // Z axis is capped at this multiple of the starting portfolio value.
 const Z_CAP_MULTIPLE = 2;
@@ -25,9 +34,17 @@ const AXIS_LINE_COLOR = '#cbd5e1'; // slate-300
 const DIM_OPACITY = 0.02; // opacity of non-focused columns
 const POP_FRACTION = 0; // how far the focused row floats up (fraction of zCap)
 
+const FLOAT_PANEL_WIDTH = 188;
+const FLOAT_PANEL_CHART_HEIGHT = 76;
+const FLOAT_THEME = {
+  ok: { line: '#16a34a', fill: 'rgba(22,163,74,0.14)', point: '#16a34a' },
+  depleted: { line: '#ea580c', fill: 'rgba(249,115,22,0.2)', point: '#f97316' },
+};
+
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
   columns: [], // columns[x] = array of data points for that simulation
+  depletedCols: [], // parallel to columns: true when the path runs out of money
   barWidth: 1,
   barDepth: 1,
   zCap: 0,
@@ -51,24 +68,56 @@ function lerpColor(a, b, t) {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-// Continuous red -> green ramp (no yellow): deep red at -30%, fading through
-// light red to light green at the zero crossing, up to deep green at +30%.
-function buildReturnColorRamp(samples = 363) {
+// Map a nominal return to the red/green ramp color at that value.
+function colorForReturn(v) {
+  const clamped = Math.max(RETURN_MIN, Math.min(RETURN_MAX, v));
   const deepRed = [127, 29, 29];
   const lightRed = [248, 113, 113];
   const lightGreen = [134, 239, 172];
   const deepGreen = [21, 128, 61];
 
+  if (clamped < 0) {
+    const t = (clamped - RETURN_MIN) / (0 - RETURN_MIN);
+    return lerpColor(deepRed, lightRed, t);
+  }
+  return lerpColor(lightGreen, deepGreen, clamped / RETURN_MAX);
+}
+
+// Depleted paths: warning orange with a narrow return span so variance stays vivid.
+const DEPLETED_RETURN_SPAN = 0.12; // ±12% maps to the full orange ramp
+
+function colorForDepletedReturn(v) {
+  const clamped = Math.max(-DEPLETED_RETURN_SPAN, Math.min(DEPLETED_RETURN_SPAN, v));
+  const t = (clamped + DEPLETED_RETURN_SPAN) / (2 * DEPLETED_RETURN_SPAN);
+  const lowBright = [234, 88, 12];   // orange-600
+  const highBright = [253, 186, 116]; // orange-300
+  return lerpColor(lowBright, highBright, t);
+}
+
+// Continuous red -> green ramp for the visualMap legend scale.
+function buildReturnColorRamp(samples = 363) {
   const colors = [];
   for (let i = 0; i < samples; i++) {
     const v = RETURN_MIN + ((RETURN_MAX - RETURN_MIN) * i) / (samples - 1);
-    if (v < 0) {
-      colors.push(lerpColor(deepRed, lightRed, (v - RETURN_MIN) / (0 - RETURN_MIN)));
-    } else {
-      colors.push(lerpColor(lightGreen, deepGreen, v / RETURN_MAX));
-    }
+    colors.push(colorForReturn(v));
   }
   return colors;
+}
+
+function pathDepleted(balances) {
+  return balances.some((b, i) => i > 0 && b <= 0);
+}
+
+function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted) {
+  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn];
+  if (depleted) {
+    return { value, itemStyle: { color: colorForDepletedReturn(ret) } };
+  }
+  return value;
+}
+
+function pointValue(p) {
+  return Array.isArray(p) ? p : p.value;
 }
 
 function axisConfig(name, extra = {}) {
@@ -99,15 +148,16 @@ function ensureFloatPanel() {
 
   floatPanel = document.createElement('div');
   floatPanel.style.cssText =
-    'position:absolute;top:12px;right:12px;width:320px;background:rgba(255,255,255,0.96);' +
-    'border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,0.15);' +
-    'padding:10px;z-index:10;pointer-events:none;display:none;';
+    `position:absolute;top:0;right:0;width:${FLOAT_PANEL_WIDTH}px;` +
+    'background:rgba(255,255,255,0.94);border-left:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;' +
+    'border-radius:0 0 0 6px;box-shadow:0 2px 6px rgba(0,0,0,0.08);' +
+    'padding:5px 6px;z-index:10;pointer-events:auto;display:none;';
 
   floatTitle = document.createElement('div');
-  floatTitle.style.cssText = 'font-size:12px;font-weight:600;color:#334155;margin-bottom:6px;';
+  floatTitle.style.cssText = 'font-size:10px;font-weight:600;color:#334155;margin-bottom:3px;line-height:1.2;';
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'height:150px;';
+  wrap.style.cssText = `height:${FLOAT_PANEL_CHART_HEIGHT}px;`;
   floatCanvas = document.createElement('canvas');
   wrap.appendChild(floatCanvas);
 
@@ -116,29 +166,75 @@ function ensureFloatPanel() {
   container.appendChild(floatPanel);
 }
 
+function floatChartOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'nearest', intersect: true },
+    scales: {
+      x: {
+        title: { display: false },
+        ticks: { maxTicksLimit: 5, font: { size: 8 }, padding: 0 },
+        grid: { display: false },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { maxTicksLimit: 4, callback: (v) => formatK(v), font: { size: 8 }, padding: 0 },
+        grid: { color: 'rgba(148,163,184,0.2)' },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        displayColors: false,
+        callbacks: {
+          title: (items) => (items[0] ? `Year ${items[0].label}` : ''),
+          label: (ctx) => formatK(ctx.raw),
+        },
+      },
+    },
+  };
+}
+
+function applyFloatChartTheme(depleted) {
+  if (!floatChart) return;
+  const theme = depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
+  const ds = floatChart.data.datasets[0];
+  ds.borderColor = theme.line;
+  ds.backgroundColor = theme.fill;
+  ds.pointBackgroundColor = theme.point;
+}
+
 function showFloatWithdrawal(col) {
   ensureFloatPanel();
   const points = surfaceState.columns[col];
   if (!floatPanel || !points) return;
 
+  const depleted = surfaceState.depletedCols[col] ?? false;
   const labels = [];
   const data = [];
   for (const p of points) {
-    if (p[1] === 0) continue; // skip year 0 (no withdrawal)
-    labels.push(p[1]);
-    data.push(p[5]);
+    const vals = pointValue(p);
+    if (vals[1] === 0) continue; // skip year 0 (no withdrawal)
+    labels.push(vals[1]);
+    data.push(vals[5]);
   }
 
-  const total = points[0] ? points[0][6] : 0;
+  const total = points[0] ? pointValue(points[0])[6] : 0;
   const numCols = surfaceState.columns.length;
   const pLabel = 'P' + Math.round(10 + (col / numCols) * 50);
-  floatTitle.textContent = `${pLabel} · Withdrawals over time (Total ${formatK(total)})`;
+  const status = depleted ? 'Depleted' : 'Funded';
+  floatTitle.textContent = `${pLabel} · ${status} · ${formatK(total)}`;
+  floatTitle.style.color = depleted ? '#c2410c' : '#15803d';
 
   if (floatChart) {
     floatChart.data.labels = labels;
     floatChart.data.datasets[0].data = data;
+    applyFloatChartTheme(depleted);
     floatChart.update('none');
   } else {
+    const theme = depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
     floatChart = new Chart(floatCanvas.getContext('2d'), {
       type: 'line',
       data: {
@@ -147,25 +243,20 @@ function showFloatWithdrawal(col) {
           {
             label: 'Withdrawal',
             data,
-            borderColor: '#4f46e5',
-            backgroundColor: 'rgba(79,70,229,0.12)',
-            borderWidth: 2,
+            borderColor: theme.line,
+            backgroundColor: theme.fill,
+            borderWidth: 1.5,
             tension: 0.1,
-            pointRadius: 0,
             fill: true,
+            pointRadius: 2.5,
+            pointHoverRadius: 4,
+            pointBackgroundColor: theme.point,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 1,
           },
         ],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-          x: { title: { display: true, text: 'Year', font: { size: 9 } }, ticks: { maxTicksLimit: 8, font: { size: 9 } } },
-          y: { beginAtZero: true, ticks: { callback: (v) => formatK(v), font: { size: 9 } } },
-        },
-        plugins: { legend: { display: false } },
-      },
+      options: floatChartOptions(),
     });
   }
 
@@ -177,12 +268,13 @@ function hideFloatPanel() {
 }
 
 function tooltipFormatter(params) {
-  const y = params.value[1];
-  const ret = params.value[3];
-  const bal = params.value[4];
-  const wd = params.value[5];
-  const total = params.value[6];
-  const avg = params.value[7];
+  const vals = pointValue(params.value);
+  const y = vals[1];
+  const ret = vals[3];
+  const bal = vals[4];
+  const wd = vals[5];
+  const total = vals[6];
+  const avg = vals[7];
   return (
     `Total Withdrawn: <b>${formatK(total)}</b>` +
     `<br>Avg Annual Return: <b>${(avg * 100).toFixed(2)}%</b>` +
@@ -213,8 +305,9 @@ function applyFocus() {
   // Lift every bar in the focused column by a constant offset so the whole
   // path pops up as a unit, and raise the axis ceiling so nothing clips.
   const lift = zCap * POP_FRACTION;
+  // Pinned column uses plain data so the visualMap red/green ramp applies.
   const lifted = columns[col].map((p) => {
-    const q = p.slice();
+    const q = pointValue(p).slice();
     q[2] = q[2] + lift;
     return q;
   });
@@ -240,7 +333,7 @@ function bindEvents() {
   // to read its values; click the same column again to release.
   chartInstance.on('click', (params) => {
     if (!params || !params.value) return;
-    const col = params.value[0];
+    const col = pointValue(params.value)[0];
     surfaceState.pinnedCol = surfaceState.pinnedCol === col ? null : col;
     surfaceState.columnClickHandled = true;
     applyFocus();
@@ -267,6 +360,7 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
   const dom = document.getElementById('surfaceChart');
   if (!chartInstance) {
     chartInstance = echarts.init(dom);
+    dom.oncontextmenu = (e) => e.preventDefault();
     // Exposed for quick camera-angle inspection from the console:
     //   __SOR_SURFACE__.getOption().grid3D[0].viewControl
     window.__SOR_SURFACE__ = chartInstance;
@@ -282,15 +376,20 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
   // Data dims: [x, y, cappedHeight, return, realBalance, withdrawal, totalWithdrawn, avgReturn]
   const data3D = [];
   const columns = [];
+  const depletedCols = [];
   for (let x = 0; x < numCols; x++) {
     const { balances, returns, withdrawals, totalWithdrawn, avgReturn } = surfacePaths[x];
+    const depleted = pathDepleted(balances);
+    depletedCols.push(depleted);
     const colPoints = [];
     for (let y = 0; y <= numYears; y++) {
       const balance = Math.max(0, balances[y]);
       const height = Math.min(balance, zCap);
       const ret = y > 0 ? returns[y - 1] : returns[0] || 0;
       const withdrawal = y > 0 && withdrawals ? withdrawals[y - 1] : 0;
-      const point = [x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0];
+      const point = makeBarPoint(
+        x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted
+      );
       data3D.push(point);
       colPoints.push(point);
     }
@@ -303,6 +402,7 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
 
   // Reset interaction state for the new dataset.
   surfaceState.columns = columns;
+  surfaceState.depletedCols = depletedCols;
   surfaceState.barWidth = barWidth;
   surfaceState.barDepth = barDepth;
   surfaceState.zCap = zCap;
@@ -342,7 +442,18 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
         boxWidth: BOX_WIDTH,
         boxDepth: BOX_DEPTH,
         boxHeight: BOX_HEIGHT,
-        viewControl: { alpha: 24.29, beta: 225.41, distance: 279.91, autoRotate: false },
+        viewControl: {
+          alpha: CAMERA_ALPHA,
+          beta: CAMERA_BETA,
+          distance: CAMERA_DISTANCE,
+          center: [PAN_CENTER_X, PAN_CENTER_Y, PAN_CENTER_Z],
+          autoRotate: false,
+          rotateMouseButton: 'left',
+          panMouseButton: 'right',
+          rotateSensitivity: 1,
+          zoomSensitivity: 1,
+          panSensitivity: 1,
+        },
         environment: SCENE_BG,
         // Light from behind the opening camera view (matching its azimuth),
         // lifted slightly above so the front faces are well lit.
@@ -383,6 +494,11 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
   );
 
   bindEvents();
+
+  if (import.meta.env.DEV) {
+    window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+    window.__TEST_HOOKS__.surfaceChart = chartInstance;
+  }
 
   if (!window.__sorSurfaceResizeBound) {
     window.addEventListener('resize', () => chartInstance && chartInstance.resize());

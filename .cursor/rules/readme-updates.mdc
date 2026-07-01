@@ -1,0 +1,11 @@
+---
+description: Ensure README.md stays up to date with project changes
+alwaysApply: true
+---
+
+# README Maintenance
+
+- Whenever adding new features, changing deployment steps, modifying setup requirements, or altering the core architecture, you MUST evaluate if the `README.md` needs to be updated.
+- The `README.md` is targeted at **non-technical users**. 
+- Ensure any updates to the documentation remain simple, clear, and focus on ease of deployment and use.
+- Avoid technical jargon. When documenting new capabilities, explain them in terms of how the user can interact with them or how they can use "vibe coding" to extend them.

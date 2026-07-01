@@ -2,6 +2,7 @@
 // place; the canonical values still live in the scenario state model.
 import { ALLOCATION_KEYS, parseCurrency } from '../state/scenario.js';
 import { Chart } from './charts/chartSetup.js';
+import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
 // accordion is opened so they fill the now-visible container.
@@ -46,6 +47,30 @@ export function toggleDistMethod(method) {
     lognormal.classList.remove('form-section-hidden');
   } else {
     lognormal.classList.add('form-section-hidden');
+  }
+}
+
+export function toggleWithdrawalStrategy(strategy) {
+  const baseSection = document.getElementById('strategy-base-section');
+  const specificSection = document.getElementById('strategy-specific-section');
+  if (strategy === 'specific') {
+    baseSection.classList.add('hidden');
+    specificSection.classList.remove('hidden');
+    const textarea = document.getElementById('specificWithdrawals');
+    if (textarea) syncWithdrawalPreview(textarea.value);
+  } else {
+    baseSection.classList.remove('hidden');
+    specificSection.classList.add('hidden');
+    destroyWithdrawalPreviewChart();
+  }
+}
+
+export function toggleDynamicAdjustments(enabled) {
+  const wrapper = document.getElementById('dynamic-adjustments-wrapper');
+  if (enabled) {
+    wrapper.classList.remove('hidden');
+  } else {
+    wrapper.classList.add('hidden');
   }
 }
 
@@ -115,10 +140,35 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   });
 
+  document.querySelectorAll('input[name="withdrawal-strategy"]').forEach((radio) => {
+    radio.addEventListener('change', (e) => {
+      toggleWithdrawalStrategy(e.target.value);
+      notify();
+    });
+  });
+
+  const dynAdjCheck = document.getElementById('enableDynamicAdjustments');
+  if (dynAdjCheck) {
+    dynAdjCheck.addEventListener('change', (e) => {
+      toggleDynamicAdjustments(e.target.checked);
+      notify();
+    });
+  }
+
+  const specificWithdrawals = document.getElementById('specificWithdrawals');
+  if (specificWithdrawals) {
+    specificWithdrawals.addEventListener('input', (e) => {
+      syncWithdrawalPreview(e.target.value);
+      notify();
+    });
+    specificWithdrawals.addEventListener('change', notify);
+  }
+
   // Catch-all for the remaining number/text inputs so autosave stays current.
-  document.querySelectorAll('input:not(.currency-input):not(.allocation-input)').forEach((input) => {
-    if (input.name === 'distribution-method') return;
-    if (input.id === 'blockSize' || input.id === 'blockSizeSlider') return;
+  document.querySelectorAll('input:not(.currency-input):not(.allocation-input), textarea').forEach((input) => {
+    if (input.name === 'distribution-method' || input.name === 'withdrawal-strategy') return;
+    if (input.id === 'blockSize' || input.id === 'blockSizeSlider' || input.id === 'enableDynamicAdjustments') return;
+    if (input.id === 'specificWithdrawals') return;
     input.addEventListener('change', notify);
   });
 

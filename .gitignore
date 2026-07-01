@@ -2,3 +2,17 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Testing
+coverage/
+
+# Environment variables
+.env
+.env.local
+.env.*.local

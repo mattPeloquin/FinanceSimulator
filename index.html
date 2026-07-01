@@ -10,7 +10,7 @@
 </head>
 <body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen p-4 py-12">
 
-    <div class="w-full max-w-6xl bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-8">
+    <div class="w-full max-w-[1400px] xl:max-w-[1600px] 2xl:max-w-[1800px] bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-8">
 
         <!-- Header Section -->
         <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -45,9 +45,9 @@
                         </div>
                         <div>
                             <label for="startBalance" class="block text-sm font-medium text-slate-700">Starting Portfolio</label>
-                            <div class="input-adorned has-prefix mt-1">
-                                <span class="input-adorn-prefix">$</span>
-                                <input type="text" id="startBalance" value="4,000,000" class="currency-input block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <div class="input-adorned has-suffix mt-1">
+                                <input type="text" id="startBalance" value="4,000" class="currency-input block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                                <span class="input-adorn-suffix">000s</span>
                             </div>
                         </div>
                     </div>
@@ -215,46 +215,92 @@
                     <h2 class="text-lg font-semibold text-slate-700 mb-4">Withdrawal Strategy</h2>
                     <div class="space-y-4 p-4 border rounded-lg bg-indigo-50/30">
 
-                        <div>
-                            <label for="baseWithdrawal" class="block text-sm font-medium text-slate-700">Base Nominal Withdrawal</label>
-                            <div class="input-adorned has-prefix mt-1">
-                                <span class="input-adorn-prefix">$</span>
-                                <input type="text" id="baseWithdrawal" value="80,000" class="currency-input block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                        <fieldset>
+                            <legend class="text-sm font-medium text-slate-700">Withdrawal Schedule</legend>
+                            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <label for="withdrawal-strategy-base" class="relative flex items-start p-3 border rounded-lg cursor-pointer bg-white/60 has-[:checked]:bg-indigo-50 has-[:checked]:border-indigo-400 has-[:checked]:ring-1 has-[:checked]:ring-indigo-400 transition-colors">
+                                    <div class="flex items-center h-5">
+                                        <input id="withdrawal-strategy-base" name="withdrawal-strategy" type="radio" value="base" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300" checked>
+                                    </div>
+                                    <div class="ml-3 text-sm min-w-0">
+                                        <span class="block font-medium text-slate-700">Base + Spending Over Time</span>
+                                        <span class="block text-xs text-slate-500 mt-0.5">Fixed base amount with optional front-loading and go-go years.</span>
+                                    </div>
+                                </label>
+                                <label for="withdrawal-strategy-specific" class="relative flex items-start p-3 border rounded-lg cursor-pointer bg-white/60 has-[:checked]:bg-indigo-50 has-[:checked]:border-indigo-400 has-[:checked]:ring-1 has-[:checked]:ring-indigo-400 transition-colors">
+                                    <div class="flex items-center h-5">
+                                        <input id="withdrawal-strategy-specific" name="withdrawal-strategy" type="radio" value="specific" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
+                                    </div>
+                                    <div class="ml-3 text-sm min-w-0">
+                                        <span class="block font-medium text-slate-700">Specific List</span>
+                                        <span class="block text-xs text-slate-500 mt-0.5">Paste yearly amounts. Negative = deposit. One per row.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <div id="strategy-base-section" class="mt-4">
+                            <div>
+                                <label for="baseWithdrawal" class="block text-sm font-medium text-slate-700">Base Nominal Withdrawal</label>
+                                <div class="input-adorned has-suffix mt-1">
+                                    <input type="text" id="baseWithdrawal" value="80" class="currency-input block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                                    <span class="input-adorn-suffix">000s</span>
+                                </div>
+                            </div>
+
+                            <!-- Spending Over Time (front-loading) -->
+                            <div class="mt-4">
+                                <h3 class="text-sm font-semibold text-slate-800 mb-1">Spending Over Time</h3>
+                                <p class="text-xs text-slate-500 mb-3">Bias spending earlier in retirement. The <strong>annual real change</strong> scales the whole withdrawal each year (negative = spend more now, less later); the <strong>early-years bonus</strong> adds a flat amount for the first few years (the "go-go years").</p>
+                                <div class="grid grid-cols-3 gap-3 text-sm">
+                                    <div>
+                                        <label for="spendChangePct" class="text-[10px] uppercase text-slate-500 font-semibold">Annual Real Change</label>
+                                        <div class="input-adorned has-suffix">
+                                            <input type="number" id="spendChangePct" value="0" step="0.5" class="w-full rounded border-slate-300 shadow-sm p-1 text-center">
+                                            <span class="input-adorn-suffix">%</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label for="goGoBonus" class="text-[10px] uppercase text-slate-500 font-semibold">Early-Years Bonus</label>
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="goGoBonus" value="0" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label for="goGoYears" class="text-[10px] uppercase text-slate-500 font-semibold">Bonus Years</label>
+                                        <input type="number" id="goGoYears" value="10" min="0" class="w-full rounded border-slate-300 shadow-sm p-1 text-center">
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Spending Over Time (front-loading) -->
-                        <div class="mt-4 pt-4 border-t border-slate-200">
-                            <h3 class="text-sm font-semibold text-slate-800 mb-1">Spending Over Time</h3>
-                            <p class="text-xs text-slate-500 mb-3">Bias spending earlier in retirement. The <strong>annual real change</strong> scales the whole withdrawal each year (negative = spend more now, less later); the <strong>early-years bonus</strong> adds a flat amount for the first few years (the "go-go years").</p>
-                            <div class="grid grid-cols-3 gap-3 text-sm">
-                                <div>
-                                    <label for="spendChangePct" class="text-[10px] uppercase text-slate-500 font-semibold">Annual Real Change</label>
-                                    <div class="input-adorned has-suffix">
-                                        <input type="number" id="spendChangePct" value="0" step="0.5" class="w-full rounded border-slate-300 shadow-sm p-1 text-center">
-                                        <span class="input-adorn-suffix">%</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="goGoBonus" class="text-[10px] uppercase text-slate-500 font-semibold">Early-Years Bonus</label>
-                                    <div class="input-adorned has-prefix">
-                                        <span class="input-adorn-prefix">$</span>
-                                        <input type="text" id="goGoBonus" value="0" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="goGoYears" class="text-[10px] uppercase text-slate-500 font-semibold">Bonus Years</label>
-                                    <input type="number" id="goGoYears" value="10" min="0" class="w-full rounded border-slate-300 shadow-sm p-1 text-center">
-                                </div>
+                        <div id="strategy-specific-section" class="hidden">
+                            <label for="specificWithdrawals" class="block text-sm font-medium text-slate-700">Specific Withdrawal List</label>
+                            <p class="text-xs text-slate-500 mb-2">Paste from a spreadsheet — new lines, tabs, commas, semicolons, or pipes. Negative values are deposits. 0 used for remaining years.</p>
+                            <textarea id="specificWithdrawals" rows="6" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 font-mono" placeholder="80&#10;85&#10;90"></textarea>
+                            <div class="mt-3 relative h-36 bg-white rounded-md border border-slate-200">
+                                <canvas id="specificWithdrawalsChart" class="absolute inset-0 w-full h-full p-2"></canvas>
                             </div>
                         </div>
 
                         <div class="mt-4 pt-4 border-t border-slate-200">
-                            <h3 class="text-sm font-semibold text-slate-800 mb-1">Dynamic Withdrawal Adjustment</h3>
-                            <p class="text-xs text-slate-500 mb-3">Flexibly adjust your withdrawal amount based on the nominal market return. <strong>Balance overrides</strong> will ignore the market trigger if your portfolio crosses them.</p>
+                            <div class="flex items-center justify-between mb-1">
+                                <h3 class="text-sm font-semibold text-slate-800">Dynamic Adjustments & Guardrails</h3>
+                                <label class="inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="enableDynamicAdjustments" class="sr-only peer" checked>
+                                    <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    <span class="ms-2 text-xs font-medium text-slate-600">Enable</span>
+                                </label>
+                            </div>
+                            
+                            <div id="dynamic-adjustments-wrapper">
+                                <div class="mt-2">
+                                    <h4 class="text-xs font-semibold text-slate-700 mb-1">Dynamic Withdrawal Adjustment</h4>
+                                    <p class="text-xs text-slate-500 mb-3">Flexibly adjust your withdrawal amount based on the nominal market return. <strong>Balance overrides</strong> will ignore the market trigger if your portfolio crosses them.</p>
 
-                            <div class="grid grid-cols-3 gap-3 text-sm">
-                                <!-- Low -->
+                                    <div class="grid grid-cols-3 gap-3 text-sm">
+                                        <!-- Low -->
                                 <div class="space-y-2 bg-white p-2 rounded border border-slate-200 shadow-sm">
                                     <span class="block font-medium text-slate-700 text-center border-b pb-1">Low Return</span>
                                     <div>
@@ -266,16 +312,16 @@
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Bal <span class="text-red-500">&lt;</span> Override</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="dynLowBal" value="1,000,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="dynLowBal" value="1,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Extra Adj</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
+                                        <div class="input-adorned has-suffix">
                                             <input type="text" id="dynLowAdj" value="0" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                 </div>
@@ -291,16 +337,16 @@
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Bal <span class="text-green-500">&gt;</span> Override</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="dynMedBal" value="5,000,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="dynMedBal" value="5,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Extra Adj</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="dynMedAdj" value="100,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="dynMedAdj" value="100" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                 </div>
@@ -316,60 +362,69 @@
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Bal <span class="text-blue-500">&gt;</span> Override</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="dynHighBal" value="8,000,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="dynHighBal" value="8,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                     <div>
                                         <label class="text-[10px] uppercase text-slate-500 font-semibold">Extra Adj</label>
-                                        <div class="input-adorned has-prefix">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="dynHighAdj" value="200,000" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                        <div class="input-adorned has-suffix">
+                                            <input type="text" id="dynHighAdj" value="200" class="currency-input w-full rounded border-slate-300 shadow-sm p-1">
+                                            <span class="input-adorn-suffix">000s</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                            </div> <!-- END mt-2 -->
 
-                        <!-- Balance-Based Guardrails -->
-                        <div class="mt-4 pt-4 border-t border-slate-200">
-                            <h3 class="text-sm font-semibold text-slate-800 mb-1">Balance-Based Guardrails</h3>
-                            <p class="text-xs text-slate-500 mb-3">Adjust your <strong>additional withdrawal amount</strong> if your portfolio crosses these absolute thresholds.</p>
+                            <!-- Balance-Based Guardrails -->
+                            <div class="mt-4 pt-4 border-t border-slate-200">
+                                <h4 class="text-xs font-semibold text-slate-800 mb-1">Balance-Based Guardrails</h4>
+                                <p class="text-xs text-slate-500 mb-3">Adjust your <strong>additional withdrawal amount</strong> if your portfolio crosses these absolute thresholds. Set a <strong>minimum withdrawal</strong> to always stress-test depletion, even when adjustments would cut spending.</p>
 
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <!-- Floor -->
-                                <div class="bg-white p-3 rounded border border-slate-200 shadow-sm flex items-center justify-between">
-                                    <div>
-                                        <label class="block text-xs font-semibold text-slate-700">Floor Balance</label>
-                                        <div class="input-adorned has-prefix mt-1">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="floorBalance" value="2,000,000" class="currency-input w-24 rounded border-slate-300 shadow-sm p-1 text-sm">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- Floor -->
+                                    <div class="bg-white p-3 rounded border border-slate-200 shadow-sm flex items-center justify-between">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700">Floor Balance</label>
+                                            <div class="input-adorned has-suffix mt-1">
+                                                <input type="text" id="floorBalance" value="2,000" class="currency-input w-24 rounded border-slate-300 shadow-sm p-1 text-sm">
+                                                <span class="input-adorn-suffix">000s</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <label class="block text-xs font-semibold text-slate-700">Decrease Cut</label>
+                                            <div class="input-adorned has-suffix mt-1">
+                                                <input type="number" id="floorPenalty" value="50" class="w-16 rounded border-slate-300 shadow-sm p-1 text-sm text-center">
+                                                <span class="input-adorn-suffix">%</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="text-right">
-                                        <label class="block text-xs font-semibold text-slate-700">Decrease Cut</label>
-                                        <div class="input-adorned has-suffix mt-1">
-                                            <input type="number" id="floorPenalty" value="50" class="w-16 rounded border-slate-300 shadow-sm p-1 text-sm text-center">
-                                            <span class="input-adorn-suffix">%</span>
+                                    <!-- Ceiling -->
+                                    <div class="bg-white p-3 rounded border border-slate-200 shadow-sm flex items-center justify-between">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700">Ceiling Balance</label>
+                                            <div class="input-adorned has-suffix mt-1">
+                                                <input type="text" id="ceilingBalance" value="5,000" class="currency-input w-24 rounded border-slate-300 shadow-sm p-1 text-sm">
+                                                <span class="input-adorn-suffix">000s</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <label class="block text-xs font-semibold text-slate-700">Increase Bonus</label>
+                                            <div class="input-adorned has-suffix mt-1">
+                                                <input type="number" id="ceilingBonus" value="50" class="w-16 rounded border-slate-300 shadow-sm p-1 text-sm text-center">
+                                                <span class="input-adorn-suffix">%</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <!-- Ceiling -->
-                                <div class="bg-white p-3 rounded border border-slate-200 shadow-sm flex items-center justify-between">
-                                    <div>
-                                        <label class="block text-xs font-semibold text-slate-700">Ceiling Balance</label>
-                                        <div class="input-adorned has-prefix mt-1">
-                                            <span class="input-adorn-prefix">$</span>
-                                            <input type="text" id="ceilingBalance" value="5,000,000" class="currency-input w-24 rounded border-slate-300 shadow-sm p-1 text-sm">
-                                        </div>
-                                    </div>
-                                    <div class="text-right">
-                                        <label class="block text-xs font-semibold text-slate-700">Increase Bonus</label>
-                                        <div class="input-adorned has-suffix mt-1">
-                                            <input type="number" id="ceilingBonus" value="50" class="w-16 rounded border-slate-300 shadow-sm p-1 text-sm text-center">
-                                            <span class="input-adorn-suffix">%</span>
-                                        </div>
+                                <div class="mt-3 bg-white p-3 rounded border border-slate-200 shadow-sm">
+                                    <label for="withdrawalFloor" class="block text-xs font-semibold text-slate-700">Minimum Withdrawal</label>
+                                    <p class="text-[10px] text-slate-500 mt-0.5">Always withdraw at least this amount each year (capped by portfolio balance), even if adjustments or your schedule would go lower.</p>
+                                    <div class="input-adorned has-suffix mt-2 max-w-xs">
+                                        <input type="text" id="withdrawalFloor" value="0" class="currency-input w-full rounded border-slate-300 shadow-sm p-1 text-sm">
+                                        <span class="input-adorn-suffix">000s</span>
                                     </div>
                                 </div>
                             </div>
@@ -401,6 +456,7 @@
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
         <!-- Action Button -->
@@ -565,7 +621,7 @@
             <!-- Charts -->
             <div class="space-y-8">
                 <div>
-                    <h3 class="text-lg font-semibold text-slate-700 mb-2">Portfolio Balance Timeline (Logarithmic)</h3>
+                    <h3 class="text-lg font-semibold text-slate-700 mb-2">Portfolio Balance Timeline</h3>
                     <p class="text-sm text-slate-500 mb-4">Shows the trajectory of the 60th, 50th, 40th, 30th, 20th, and 10th percentile paths.</p>
                     <div class="h-80 w-full"><canvas id="balanceChart"></canvas></div>
                 </div>
@@ -573,8 +629,8 @@
                 <!-- 3D Column Chart -->
                 <div class="pt-4 border-t">
                     <h3 class="text-lg font-semibold text-slate-700 mb-2">3D Topography (10th to 60th Percentiles)</h3>
-                    <p class="text-sm text-slate-500 mb-4">A 3D column plot of 200 representative paths slicing from the 10th to 60th percentiles. The column height represents portfolio balance. The color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). Rotate and zoom freely; <strong>single-click</strong> a column to pop that whole simulation up above the others and pin it, then mouse over each year for its values. Click the same column again, or any empty space, to release.</p>
-                    <div id="surfaceChart" class="h-[600px] w-full rounded-lg overflow-hidden border border-slate-200 bg-slate-100"></div>
+                    <p class="text-sm text-slate-500 mb-4">A 3D column plot of 200 representative paths slicing from the 10th to 60th percentiles. The column height represents portfolio balance. The color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release.</p>
+                    <div id="surfaceChart" class="h-[420px] w-full rounded-lg overflow-hidden border border-slate-200 bg-slate-100"></div>
                 </div>
 
                 <details class="group border rounded-lg">
@@ -610,6 +666,26 @@
         </div>
 
     </div>
+
+    <!-- Custom Dialogs -->
+    <dialog id="saveSessionDialog" class="p-6 rounded-xl shadow-2xl border-0 backdrop:bg-slate-900/50 min-w-[320px]">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Save Session</h3>
+        <label for="saveSessionName" class="block text-sm font-medium text-slate-700 mb-1">Session Name</label>
+        <input type="text" id="saveSessionName" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border mb-6" placeholder="My Scenario">
+        <div class="flex justify-end gap-3">
+            <button id="cancelSaveSession" class="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium transition-colors">Cancel</button>
+            <button id="confirmSaveSession" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm transition-colors">Save</button>
+        </div>
+    </dialog>
+
+    <dialog id="confirmDeleteDialog" class="p-6 rounded-xl shadow-2xl border-0 backdrop:bg-slate-900/50 min-w-[320px]">
+        <h3 class="text-lg font-bold text-slate-900 mb-2">Delete Session</h3>
+        <p id="deleteSessionText" class="text-sm text-slate-600 mb-6">Are you sure you want to delete this session?</p>
+        <div class="flex justify-end gap-3">
+            <button id="cancelDeleteSession" class="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium transition-colors">Cancel</button>
+            <button id="confirmDeleteSession" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium shadow-sm transition-colors">Delete</button>
+        </div>
+    </dialog>
 
     <script type="module" src="/src/main.js"></script>
 </body>

@@ -205,6 +205,86 @@ describe('front-loaded spending', () => {
     expect(w[2]).toBeCloseTo(150_000, 3);
     expect(w[3]).toBeCloseTo(100_000, 3);
   });
+
+  it('enforces a minimum withdrawal floor regardless of adjustments', () => {
+    const p = flatParams();
+    p.portfolio.base = 50_000;
+    p.portfolio.withdrawalFloor = 80_000;
+    const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
+    expect(w[0]).toBeCloseTo(80_000, 3);
+  });
+});
+
+describe('deposits from negative withdrawals', () => {
+  function flatParams() {
+    return {
+      numYears: 2,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        strategy: 'specific',
+        specificWithdrawals: [],
+        start: 1_000_000,
+        base: 0,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendDrift: 0,
+        goGoBonus: 0,
+        goGoYears: 0,
+        withdrawalFloor: 0,
+      },
+      dynConfig: { enabled: false, low: { ret: 0, bal: 0, adj: 0 }, med: { ret: 0, bal: 0, adj: 0 }, high: { ret: 0, bal: 0, adj: 0 } },
+      samples: null,
+    };
+  }
+
+  it('adds to balance when a specific-list amount is negative', () => {
+    const p = flatParams();
+    p.portfolio.specificWithdrawals = [-50_000, 100_000];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(-50_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_050_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(100_000, 3);
+    expect(s.path.balances[2]).toBeCloseTo(950_000, 3);
+  });
+
+  it('skips the withdrawal floor when the target is a deposit', () => {
+    const p = flatParams();
+    p.numYears = 1;
+    p.portfolio.specificWithdrawals = [-100_000];
+    p.portfolio.withdrawalFloor = 80_000;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(-100_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_100_000, 3);
+  });
+
+  it('prevents dynamic adjustments from turning a withdrawal into a deposit', () => {
+    const p = flatParams();
+    p.numYears = 1;
+    p.portfolio.strategy = 'base';
+    p.portfolio.base = 50_000;
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: 0, bal: 0, adj: -100_000 };
+    p.dynConfig.med = { ret: 0, bal: 0, adj: -100_000 };
+    p.dynConfig.high = { ret: 0, bal: 0, adj: -100_000 };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    // Adjustment is -100k, base is +50k. Target would be -50k, but should clamp to 0.
+    expect(s.path.withdrawals[0]).toBeCloseTo(0, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_000_000, 3);
+  });
 });
 
 describe('simulatePath path mode', () => {

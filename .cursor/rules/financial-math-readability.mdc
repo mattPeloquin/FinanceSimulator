@@ -1,0 +1,23 @@
+---
+description: Ensure financial logic is heavily commented and accessible
+globs: src/core/**/*.js
+alwaysApply: false
+---
+
+# Financial Math Readability
+
+This project is extended by "vibe coders" (non-technical users using AI). Complex financial math must be easily understandable by a layperson.
+
+- **Explain the "Why" and "What"**: Every mathematical calculation must have a plain-English comment explaining exactly what it represents in the real world.
+- **Avoid cryptic variable names**: Use descriptive, full-word variable names (`annualInflationRate` instead of `infR`).
+
+```javascript
+// ❌ BAD: Unclear math and cryptic variables
+const r = b * (1 + i) - w;
+
+// ✅ GOOD: Accessible, well-commented logic
+// Calculate the new portfolio balance after one year.
+// 1. Grow the current balance by the market return rate
+// 2. Subtract the annual withdrawal amount
+const nextYearBalance = currentBalance * (1 + marketReturnRate) - annualWithdrawal;
+```

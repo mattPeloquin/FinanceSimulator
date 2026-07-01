@@ -30,6 +30,8 @@ import {
   toggleDistMethod,
   updateAllocationTotal,
   renderYearLabels,
+  toggleWithdrawalStrategy,
+  toggleDynamicAdjustments,
 } from './ui/inputs.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderResults } from './ui/results.js';
@@ -162,7 +164,7 @@ function runSimulation() {
 let autosaveTimer = null;
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(() => saveAutosave(readScenarioFromDom()), 400);
+  autosaveTimer = setTimeout(() => saveAutosave(readScenarioFromDom(), currentSessionName), 400);
 }
 
 async function refreshSessionList(selectName = currentSessionName) {
@@ -187,44 +189,102 @@ function escapeHtml(str) {
   );
 }
 
-async function handleSaveSession() {
+function handleSaveSession() {
   const suggested = currentSessionName || '';
-  const name = (window.prompt('Save session as:', suggested) || '').trim();
-  if (!name) return;
-  try {
-    await saveSession(name, readScenarioFromDom());
-    currentSessionName = name;
-    await refreshSessionList(name);
-  } catch (err) {
-    alert(`Could not save session: ${err.message}`);
+  const dialog = document.getElementById('saveSessionDialog');
+  const input = document.getElementById('saveSessionName');
+  input.value = suggested;
+  
+  const onSave = async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    dialog.close();
+    cleanup();
+    try {
+      await saveSession(name, readScenarioFromDom());
+      currentSessionName = name;
+      await refreshSessionList(name);
+      scheduleAutosave();
+    } catch (err) {
+      alert(`Could not save session: ${err.message}`);
+    }
+  };
+
+  const onCancel = () => {
+    dialog.close();
+    cleanup();
+  };
+
+  const onKeydown = (e) => {
+    if (e.key === 'Enter') onSave();
+  };
+
+  function cleanup() {
+    document.getElementById('confirmSaveSession').removeEventListener('click', onSave);
+    document.getElementById('cancelSaveSession').removeEventListener('click', onCancel);
+    input.removeEventListener('keydown', onKeydown);
   }
+
+  document.getElementById('confirmSaveSession').addEventListener('click', onSave);
+  document.getElementById('cancelSaveSession').addEventListener('click', onCancel);
+  input.addEventListener('keydown', onKeydown);
+  
+  dialog.showModal();
+  input.focus();
+  input.select();
 }
 
-async function handleDeleteSession() {
+function handleDeleteSession() {
   const select = document.getElementById('sessionSelect');
   const name = select.value;
   if (!name) return;
-  if (!window.confirm(`Delete session "${name}"?`)) return;
-  try {
-    await deleteSession(name);
-    if (currentSessionName === name) currentSessionName = '';
-    await refreshSessionList('');
-  } catch (err) {
-    alert(`Could not delete session: ${err.message}`);
+
+  const dialog = document.getElementById('confirmDeleteDialog');
+  document.getElementById('deleteSessionText').textContent = `Are you sure you want to delete session "${name}"?`;
+
+  const onDelete = async () => {
+    dialog.close();
+    cleanup();
+    try {
+      await deleteSession(name);
+      if (currentSessionName === name) {
+        currentSessionName = '';
+        scheduleAutosave();
+      }
+      await refreshSessionList('');
+    } catch (err) {
+      alert(`Could not delete session: ${err.message}`);
+    }
+  };
+
+  const onCancel = () => {
+    dialog.close();
+    cleanup();
+  };
+
+  function cleanup() {
+    document.getElementById('confirmDeleteSession').removeEventListener('click', onDelete);
+    document.getElementById('cancelDeleteSession').removeEventListener('click', onCancel);
   }
+
+  document.getElementById('confirmDeleteSession').addEventListener('click', onDelete);
+  document.getElementById('cancelDeleteSession').addEventListener('click', onCancel);
+  
+  dialog.showModal();
 }
 
 async function handleSelectSession(e) {
   const name = e.target.value;
   if (!name) {
     currentSessionName = '';
+    applyScenario({});
     return;
   }
   try {
     const scenario = await loadSession(name);
     if (!scenario) return;
-    applyScenario(scenario);
     currentSessionName = name;
+    applyScenario(scenario);
   } catch (err) {
     alert(`Could not load session: ${err.message}`);
   }
@@ -239,8 +299,8 @@ async function handleImportFile(e) {
   if (!file) return;
   try {
     const { scenario, name } = await importScenarioFromFile(file);
-    applyScenario(scenario);
     currentSessionName = '';
+    applyScenario(scenario);
     if (name) document.getElementById('historical-range-msg').textContent = `Imported "${name}".`;
     await refreshSessionList('');
   } catch (err) {
@@ -255,6 +315,8 @@ function applyScenario(scenario) {
   const merged = { ...defaultScenario(), ...scenario };
   writeScenarioToDom(merged);
   toggleDistMethod(merged.distMethod);
+  toggleWithdrawalStrategy(merged.withdrawalStrategy || 'base');
+  toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
   updateAllocationTotal();
   // Refresh charts/samples for the range; keep the scenario's own profiles.
   const hasProfiles = merged.usLgGrowthMean != null && merged.usLgGrowthMean !== '';
@@ -268,34 +330,43 @@ function applyScenario(scenario) {
 
 // ---- Bootstrap --------------------------------------------------------------
 
-function init() {
-  // Merge over defaults so fields added after an autosave was written (e.g.
-  // smoothWindowPct) still get their default instead of rendering blank.
-  const initial = { ...defaultScenario(), ...(loadAutosave() || {}) };
-  writeScenarioToDom(initial);
-  toggleDistMethod(initial.distMethod);
+async function init() {
+  try {
+    if (import.meta.env.DEV) {
+      window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+    }
+    // Merge over defaults so fields added after an autosave was written (e.g.
+    // smoothWindowPct) still get their default instead of rendering blank.
+    const autosaved = loadAutosave() || {};
+  const initial = { ...defaultScenario(), ...(autosaved.scenario || {}) };
+    currentSessionName = autosaved.name || '';
+    
+    writeScenarioToDom(initial);
+    toggleDistMethod(initial.distMethod);
+    toggleWithdrawalStrategy(initial.withdrawalStrategy || 'base');
+    toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
 
-  setupInputBehaviors({
-    onChange: scheduleAutosave,
-    onDistMethodChange: () => {},
-  });
+    setupInputBehaviors({
+      onChange: scheduleAutosave,
+      onDistMethodChange: () => {},
+    });
 
-  document.getElementById('runButton').addEventListener('click', runSimulation);
+    document.getElementById('runButton').addEventListener('click', runSimulation);
 
-  // Year-range inputs drive the charts + profiles directly (debounced typing).
-  document.getElementById('startYear').addEventListener('input', scheduleHistoryUpdate);
-  document.getElementById('endYear').addEventListener('input', scheduleHistoryUpdate);
+    // Year-range inputs drive the charts + profiles directly (debounced typing).
+    document.getElementById('startYear').addEventListener('input', scheduleHistoryUpdate);
+    document.getElementById('endYear').addEventListener('input', scheduleHistoryUpdate);
 
-  document.getElementById('saveSessionButton').addEventListener('click', handleSaveSession);
-  document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);
-  document.getElementById('exportSessionButton').addEventListener('click', handleExportSession);
-  document.getElementById('importSessionButton').addEventListener('click', () =>
-    document.getElementById('importFileInput').click()
-  );
-  document.getElementById('importFileInput').addEventListener('change', handleImportFile);
-  document.getElementById('sessionSelect').addEventListener('change', handleSelectSession);
+    document.getElementById('saveSessionButton').addEventListener('click', handleSaveSession);
+    document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);
+    document.getElementById('exportSessionButton').addEventListener('click', handleExportSession);
+    document.getElementById('importSessionButton').addEventListener('click', () =>
+      document.getElementById('importFileInput').click()
+    );
+    document.getElementById('importFileInput').addEventListener('change', handleImportFile);
+    document.getElementById('sessionSelect').addEventListener('change', handleSelectSession);
 
-  updateAllocationTotal();
+    updateAllocationTotal();
 
   // Populate profiles + mini charts on first paint (mirrors original behaviour).
   const hasProfiles = initial.usLgGrowthMean != null && initial.usLgGrowthMean !== '';
@@ -305,7 +376,20 @@ function init() {
     applyHistoryProfiles();
   }
 
-  refreshSessionList();
+  await refreshSessionList();
+  if (currentSessionName) {
+    document.getElementById('sessionSelect').value = currentSessionName;
+  } else {
+    document.getElementById('sessionSelect').value = '';
+  }
+
+  if (import.meta.env.DEV) {
+    window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+    window.__TEST_HOOKS__.initComplete = true;
+  }
+} catch (err) {
+    console.error('Failed to init:', err);
+  }
 }
 
 if (document.readyState === 'loading') {

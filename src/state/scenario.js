@@ -7,12 +7,15 @@
 
 import { correlationCholesky } from '../core/history.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+// All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
+export const MONEY_SCALE = 1000;
 
 // type: how the raw input string is parsed and re-formatted.
 //   int      -> integer
 //   float    -> float
-//   currency -> float, displayed with thousands separators
+//   currency -> float in thousands ($000s), displayed with thousands separators
 //   string   -> raw string (e.g. optional seed)
 const FIELDS = [
   { key: 'numYears', dom: 'numYears', type: 'int', def: 40 },
@@ -33,28 +36,32 @@ const FIELDS = [
   { key: 'bondAllocation', dom: 'bondAllocation', type: 'float', def: 0 },
   { key: 'cashAllocation', dom: 'cashAllocation', type: 'float', def: 10 },
 
-  { key: 'startBalance', dom: 'startBalance', type: 'currency', def: 4000000 },
-  { key: 'baseWithdrawal', dom: 'baseWithdrawal', type: 'currency', def: 80000 },
-  { key: 'floorBalance', dom: 'floorBalance', type: 'currency', def: 2000000 },
+  { key: 'startBalance', dom: 'startBalance', type: 'currency', def: 4000 },
+  { key: 'baseWithdrawal', dom: 'baseWithdrawal', type: 'currency', def: 80 },
+  { key: 'floorBalance', dom: 'floorBalance', type: 'currency', def: 2000 },
   { key: 'floorPenalty', dom: 'floorPenalty', type: 'float', def: 50 },
-  { key: 'ceilingBalance', dom: 'ceilingBalance', type: 'currency', def: 5000000 },
+  { key: 'ceilingBalance', dom: 'ceilingBalance', type: 'currency', def: 5000 },
   { key: 'ceilingBonus', dom: 'ceilingBonus', type: 'float', def: 50 },
+  // Minimum withdrawal each year in $000s (after adjustments), regardless of strategy.
+  { key: 'withdrawalFloor', dom: 'withdrawalFloor', type: 'currency', def: 0 },
 
   // Front-loading: annual real change applied to the whole target withdrawal, plus
   // an optional flat bonus for the first goGoYears years. Defaults are neutral.
   { key: 'spendChangePct', dom: 'spendChangePct', type: 'float', def: 0 },
   { key: 'goGoBonus', dom: 'goGoBonus', type: 'currency', def: 0 },
   { key: 'goGoYears', dom: 'goGoYears', type: 'int', def: 10 },
+  { key: 'specificWithdrawals', dom: 'specificWithdrawals', type: 'string', def: '' },
 
+  { key: 'enableDynamicAdjustments', dom: 'enableDynamicAdjustments', type: 'boolean', def: true },
   { key: 'dynLowRet', dom: 'dynLowRet', type: 'float', def: -15 },
-  { key: 'dynLowBal', dom: 'dynLowBal', type: 'currency', def: 1000000 },
+  { key: 'dynLowBal', dom: 'dynLowBal', type: 'currency', def: 1000 },
   { key: 'dynLowAdj', dom: 'dynLowAdj', type: 'currency', def: 0 },
   { key: 'dynMedRet', dom: 'dynMedRet', type: 'float', def: 5 },
-  { key: 'dynMedBal', dom: 'dynMedBal', type: 'currency', def: 5000000 },
-  { key: 'dynMedAdj', dom: 'dynMedAdj', type: 'currency', def: 100000 },
+  { key: 'dynMedBal', dom: 'dynMedBal', type: 'currency', def: 5000 },
+  { key: 'dynMedAdj', dom: 'dynMedAdj', type: 'currency', def: 100 },
   { key: 'dynHighRet', dom: 'dynHighRet', type: 'float', def: 20 },
-  { key: 'dynHighBal', dom: 'dynHighBal', type: 'currency', def: 8000000 },
-  { key: 'dynHighAdj', dom: 'dynHighAdj', type: 'currency', def: 200000 },
+  { key: 'dynHighBal', dom: 'dynHighBal', type: 'currency', def: 8000 },
+  { key: 'dynHighAdj', dom: 'dynHighAdj', type: 'currency', def: 200 },
 
   { key: 'usLgGrowthMean', dom: 'usLgGrowthMean', type: 'float', def: null },
   { key: 'usLgGrowthStdDev', dom: 'usLgGrowthStdDev', type: 'float', def: null },
@@ -89,14 +96,31 @@ export function parseCurrency(val) {
   return parseFloat(String(val).replace(/,/g, '')) || 0;
 }
 
+/** Convert a $000s scenario value to dollars for the simulation engine. */
+export function toDollars(thousands) {
+  return parseCurrency(thousands) * MONEY_SCALE;
+}
+
 export function formatCurrency(val) {
   const n = parseCurrency(val);
   if (Number.isNaN(n)) return '';
   return n.toLocaleString('en-US');
 }
 
+/** Upgrade v1 scenarios that stored currency fields in full dollars. */
+export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
+  if (!scenario || schemaVersion >= 2) return scenario;
+  const migrated = { ...scenario };
+  for (const f of FIELDS) {
+    if (f.type === 'currency' && migrated[f.key] != null && migrated[f.key] !== '') {
+      migrated[f.key] = migrated[f.key] / MONEY_SCALE;
+    }
+  }
+  return migrated;
+}
+
 export function defaultScenario() {
-  const scenario = { distMethod: 'resampling' };
+  const scenario = { distMethod: 'resampling', withdrawalStrategy: 'base' };
   for (const f of FIELDS) scenario[f.key] = f.def;
   return scenario;
 }
@@ -110,10 +134,18 @@ export function readScenarioFromDom(doc = document) {
       scenario[f.key] = f.def;
       continue;
     }
-    scenario[f.key] = parseField(el.value, f.type);
+    if (f.type === 'boolean') {
+      scenario[f.key] = el.checked;
+    } else {
+      scenario[f.key] = parseField(el.value, f.type);
+    }
   }
   const checked = doc.querySelector('input[name="distribution-method"]:checked');
   scenario.distMethod = checked ? checked.value : 'resampling';
+  
+  const strat = doc.querySelector('input[name="withdrawal-strategy"]:checked');
+  scenario.withdrawalStrategy = strat ? strat.value : 'base';
+  
   return scenario;
 }
 
@@ -122,13 +154,21 @@ export function writeScenarioToDom(scenario, doc = document) {
   for (const f of FIELDS) {
     const el = doc.getElementById(f.dom);
     if (!el) continue;
-    const value = scenario[f.key];
-    el.value = formatField(value, f.type);
+    if (f.type === 'boolean') {
+      el.checked = !!scenario[f.key];
+    } else {
+      const value = scenario[f.key];
+      el.value = formatField(value, f.type);
+    }
   }
 
   const method = scenario.distMethod || 'resampling';
   const radio = doc.querySelector(`input[name="distribution-method"][value="${method}"]`);
   if (radio) radio.checked = true;
+
+  const strat = scenario.withdrawalStrategy || 'base';
+  const stratRadio = doc.querySelector(`input[name="withdrawal-strategy"][value="${strat}"]`);
+  if (stratRadio) stratRadio.checked = true;
 
   // Keep the block-size slider in sync with its number input.
   const slider = doc.getElementById('blockSizeSlider');
@@ -159,6 +199,25 @@ function formatField(value, type) {
   return String(value);
 }
 
+const WITHDRAWAL_THOUSAND_COMMA = '\uFFFF';
+
+/** Parse pasted withdrawal amounts (in thousands) from mixed spreadsheet delimiters. */
+export function parseSpecificWithdrawals(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  // Protect commas in 1,234-style grouping before splitting on list delimiters.
+  const protectedRaw = raw.replace(/(\d),(?=\d{3}(?:\d|,|\b))/g, `$1${WITHDRAWAL_THOUSAND_COMMA}`);
+  // Remaining commas separate values (e.g. "80, 85" or "80,85,90").
+  const withCommasSplit = protectedRaw.replace(/,(?=\s*-?\d)/g, '\n');
+  const tokens = withCommasSplit
+    .split(/[\r\n\t;,|]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return tokens.map((t) => {
+    const cleaned = t.replace(new RegExp(WITHDRAWAL_THOUSAND_COMMA, 'g'), ',').replace(/^\$/, '').trim();
+    return toDollars(parseCurrency(cleaned));
+  });
+}
+
 // Convert a scenario plus the resolved historical samples into the flat params
 // object consumed by the simulation engine.
 export function buildSimParams(scenario, samples) {
@@ -183,21 +242,25 @@ export function buildSimParams(scenario, samples) {
       cash: (scenario.cashAllocation || 0) / 100,
     },
     portfolio: {
-      start: parseCurrency(scenario.startBalance),
-      base: parseCurrency(scenario.baseWithdrawal),
-      floorBalance: parseCurrency(scenario.floorBalance),
+      strategy: scenario.withdrawalStrategy || 'base',
+      specificWithdrawals: parseSpecificWithdrawals(scenario.specificWithdrawals),
+      start: toDollars(scenario.startBalance),
+      base: toDollars(scenario.baseWithdrawal),
+      floorBalance: toDollars(scenario.floorBalance),
       floorPenalty: (scenario.floorPenalty || 0) / 100,
-      ceilingBalance: parseCurrency(scenario.ceilingBalance) || Infinity,
+      ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
+      withdrawalFloor: toDollars(scenario.withdrawalFloor),
       // Front-loading controls.
       spendDrift: (scenario.spendChangePct || 0) / 100,
-      goGoBonus: parseCurrency(scenario.goGoBonus),
+      goGoBonus: toDollars(scenario.goGoBonus),
       goGoYears: scenario.goGoYears || 0,
     },
     dynConfig: {
-      low: { ret: scenario.dynLowRet, bal: parseCurrency(scenario.dynLowBal), adj: parseCurrency(scenario.dynLowAdj) },
-      med: { ret: scenario.dynMedRet, bal: parseCurrency(scenario.dynMedBal), adj: parseCurrency(scenario.dynMedAdj) },
-      high: { ret: scenario.dynHighRet, bal: parseCurrency(scenario.dynHighBal), adj: parseCurrency(scenario.dynHighAdj) },
+      enabled: scenario.enableDynamicAdjustments ?? true,
+      low: { ret: scenario.dynLowRet, bal: toDollars(scenario.dynLowBal), adj: toDollars(scenario.dynLowAdj) },
+      med: { ret: scenario.dynMedRet, bal: toDollars(scenario.dynMedBal), adj: toDollars(scenario.dynMedAdj) },
+      high: { ret: scenario.dynHighRet, bal: toDollars(scenario.dynHighBal), adj: toDollars(scenario.dynHighAdj) },
     },
     logNormal: {
       usLgGrowth: { mean: num(scenario.usLgGrowthMean) / 100, stdDev: num(scenario.usLgGrowthStdDev) / 100 },
