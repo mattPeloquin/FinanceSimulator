@@ -20,13 +20,19 @@
 
 <dialog id="withdrawalChartDialog" class="p-6 rounded-xl shadow-2xl border-0 backdrop:bg-slate-900/50 w-[90vw] max-w-4xl h-[80vh] max-h-[800px]">
     <div class="flex flex-col h-full">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-bold text-slate-900" id="withdrawalChartDialogTitle">Withdrawal Analysis</h3>
-            <button onclick="document.getElementById('withdrawalChartDialog').close()" class="text-slate-400 hover:text-slate-600 p-1">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-slate-900" id="withdrawalChartDialogTitle">Withdrawal Analysis</h3>
+                <div id="withdrawalChartDialogSubtitle" class="text-sm font-normal text-slate-500 mt-1"></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="withdrawalChartDialogAvgReturn" class="text-sm text-slate-500"></div>
+                <button onclick="document.getElementById('withdrawalChartDialog').close()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="flex-1 relative min-h-0 w-full">
             <canvas id="largeWithdrawalCanvas"></canvas>

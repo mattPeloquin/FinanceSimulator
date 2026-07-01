@@ -34,8 +34,8 @@ const AXIS_LINE_COLOR = '#cbd5e1'; // slate-300
 const DIM_OPACITY = 0.02; // opacity of non-focused columns
 const POP_FRACTION = 0; // how far the focused row floats up (fraction of zCap)
 
-const FLOAT_PANEL_WIDTH = 188;
-const FLOAT_PANEL_CHART_HEIGHT = 76;
+const FLOAT_PANEL_WIDTH = 221;
+const FLOAT_PANEL_CHART_HEIGHT = 102;
 const FLOAT_THEME = {
   ok: { line: '#16a34a', fill: 'rgba(22,163,74,0.14)', point: '#16a34a' },
   depleted: { line: '#ea580c', fill: 'rgba(249,115,22,0.2)', point: '#f97316' },
@@ -49,6 +49,7 @@ const surfaceState = {
   barDepth: 1,
   zCap: 0,
   pinnedCol: null,
+  largeChartCol: null,
   columnClickHandled: false,
   eventsBound: false,
 };
@@ -166,6 +167,28 @@ function ensureFloatPanel() {
   container.appendChild(floatPanel);
 }
 
+function getTooltipLines(col, dataIndex) {
+  const points = surfaceState.columns[col];
+  if (!points) return [];
+  const p = points[dataIndex + 1];
+  if (!p) return [];
+  const vals = pointValue(p);
+  const y = vals[1];
+  const ret = vals[3];
+  const bal = vals[4];
+  const wd = vals[5];
+  const unadj = vals[8];
+  const delta = wd - unadj;
+  const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
+  return [
+    `Year: ${y}`,
+    `Withdrawn: ${formatK(wd)}${deltaStr}`,
+    `Original Plan: ${formatK(unadj)}`,
+    `Balance: ${formatK(bal)}`,
+    `Market Return: ${(ret * 100).toFixed(1)}%`
+  ];
+}
+
 function floatChartOptions() {
   return {
     responsive: true,
@@ -187,10 +210,15 @@ function floatChartOptions() {
     plugins: {
       legend: { display: false },
       tooltip: {
-        displayColors: true,
+        displayColors: false,
+        bodyFont: { size: 9 },
+        padding: 4,
         callbacks: {
-          title: (items) => (items[0] ? `Year ${items[0].label}` : ''),
-          label: (ctx) => `${ctx.dataset.label}: ${formatK(ctx.raw)}`,
+          title: () => null,
+          label: (ctx) => {
+            if (ctx.datasetIndex !== 1) return null;
+            return getTooltipLines(surfaceState.pinnedCol, ctx.dataIndex);
+          },
         },
       },
     },
@@ -214,20 +242,29 @@ function showFloatWithdrawal(col) {
   const labels = [];
   const actualData = [];
   const unadjustedData = [];
+  let totalUnadjusted = 0;
   for (const p of points) {
     const vals = pointValue(p);
     if (vals[1] === 0) continue; // skip year 0 (no withdrawal)
     labels.push(vals[1]);
     actualData.push(vals[5]);
     unadjustedData.push(vals[8]);
+    totalUnadjusted += vals[8];
   }
 
   const total = points[0] ? pointValue(points[0])[6] : 0;
+  const avg = points[0] ? pointValue(points[0])[7] : 0;
   const numCols = surfaceState.columns.length;
   const pLabel = 'P' + Math.round(10 + (col / numCols) * 50);
   const status = depleted ? 'Depleted' : 'Funded';
-  floatTitle.textContent = `${pLabel} · ${status} · ${formatK(total)}`;
-  floatTitle.style.color = depleted ? '#c2410c' : '#15803d';
+  floatTitle.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div style="color:${depleted ? '#c2410c' : '#15803d'}">${pLabel} · ${status}</div>
+      <div style="font-weight:normal;color:#64748b;">Avg Return: ${(avg * 100).toFixed(2)}%</div>
+    </div>
+    <div style="font-weight:normal;color:#64748b;margin-top:1px">Withdrawn: ${formatK(total)} (Plan: ${formatK(totalUnadjusted)})</div>
+  `;
+  floatTitle.style.color = '';
 
   if (floatChart) {
     floatChart.data.labels = labels;
@@ -288,6 +325,8 @@ function openLargeWithdrawalChart(col) {
   const dialog = document.getElementById('withdrawalChartDialog');
   if (!dialog) return;
 
+  surfaceState.largeChartCol = col;
+
   const points = surfaceState.columns[col];
   if (!points) return;
 
@@ -295,18 +334,29 @@ function openLargeWithdrawalChart(col) {
   const labels = [];
   const actualData = [];
   const unadjustedData = [];
+  let totalUnadjusted = 0;
   for (const p of points) {
     const vals = pointValue(p);
     if (vals[1] === 0) continue;
     labels.push(vals[1]);
     actualData.push(vals[5]);
     unadjustedData.push(vals[8]);
+    totalUnadjusted += vals[8];
   }
 
+  const total = points[0] ? pointValue(points[0])[6] : 0;
+  const avg = points[0] ? pointValue(points[0])[7] : 0;
   const numCols = surfaceState.columns.length;
   const pLabel = 'P' + Math.round(10 + (col / numCols) * 50);
+  
   const title = document.getElementById('withdrawalChartDialogTitle');
   if (title) title.textContent = `Withdrawal Analysis - ${pLabel}`;
+  
+  const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
+  if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(total)} | Plan: ${formatK(totalUnadjusted)}`;
+  
+  const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
+  if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${(avg * 100).toFixed(2)}%`;
 
   const canvas = document.getElementById('largeWithdrawalCanvas');
   const theme = depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
@@ -373,8 +423,13 @@ function openLargeWithdrawalChart(col) {
         plugins: {
           legend: { position: 'top' },
           tooltip: {
+            displayColors: false,
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${formatK(ctx.raw)}`,
+              title: () => null,
+              label: (ctx) => {
+                if (ctx.datasetIndex !== 1) return null;
+                return getTooltipLines(surfaceState.largeChartCol, ctx.dataIndex);
+              },
             },
           },
         },
