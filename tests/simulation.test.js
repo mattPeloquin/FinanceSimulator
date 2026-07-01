@@ -335,6 +335,14 @@ describe('deposits from negative withdrawals', () => {
     expect(s.path.balances[1]).toBeCloseTo(1_100_000, 3);
   });
 
+  it('reuses the last list value for years beyond the pasted list', () => {
+    const p = flatParams();
+    p.numYears = 4;
+    p.portfolio.specificWithdrawals = [50_000, 60_000];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.unadjustedWithdrawals).toEqual([50_000, 60_000, 60_000, 60_000]);
+  });
+
   it('prevents dynamic adjustments from turning a withdrawal into a deposit', () => {
     const p = flatParams();
     p.numYears = 1;

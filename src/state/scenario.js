@@ -218,6 +218,16 @@ export function parseSpecificWithdrawals(raw) {
   });
 }
 
+/** Truncate or extend a parsed list to match the simulation horizon (raw input unchanged). */
+export function fitSpecificWithdrawalsToHorizon(amounts, numYears) {
+  if (numYears <= 0) return [];
+  const trimmed = amounts.slice(0, numYears);
+  if (trimmed.length === 0) return Array(numYears).fill(0);
+  const last = trimmed[trimmed.length - 1];
+  while (trimmed.length < numYears) trimmed.push(last);
+  return trimmed;
+}
+
 // Convert a scenario plus the resolved historical samples into the flat params
 // object consumed by the simulation engine.
 export function buildSimParams(scenario, samples) {
@@ -243,7 +253,10 @@ export function buildSimParams(scenario, samples) {
     },
     portfolio: {
       strategy: scenario.withdrawalStrategy || 'base',
-      specificWithdrawals: parseSpecificWithdrawals(scenario.specificWithdrawals),
+      specificWithdrawals: fitSpecificWithdrawalsToHorizon(
+        parseSpecificWithdrawals(scenario.specificWithdrawals),
+        scenario.numYears,
+      ),
       start: toDollars(scenario.startBalance),
       base: toDollars(scenario.baseWithdrawal),
       floorBalance: toDollars(scenario.floorBalance),

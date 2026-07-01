@@ -1,5 +1,5 @@
 // Live preview of the specific-withdrawal list entered in the form.
-import { parseSpecificWithdrawals } from '../../state/scenario.js';
+import { fitSpecificWithdrawalsToHorizon, parseSpecificWithdrawals } from '../../state/scenario.js';
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
 
@@ -104,7 +104,9 @@ export function updateWithdrawalPreviewChart(amounts) {
 }
 
 export function syncWithdrawalPreview(raw) {
-  updateWithdrawalPreviewChart(parseSpecificWithdrawals(raw));
+  const numYears = parseInt(document.getElementById('numYears')?.value, 10) || 40;
+  const amounts = fitSpecificWithdrawalsToHorizon(parseSpecificWithdrawals(raw), numYears);
+  updateWithdrawalPreviewChart(amounts);
 }
 
 export function resizeWithdrawalPreviewChart() {

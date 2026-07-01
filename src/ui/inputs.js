@@ -175,6 +175,16 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     specificWithdrawals.addEventListener('change', notify);
   }
 
+  const numYears = document.getElementById('numYears');
+  if (numYears) {
+    numYears.addEventListener('input', () => {
+      const strategy = document.querySelector('input[name="withdrawal-strategy"]:checked')?.value;
+      if (strategy === 'specific' && specificWithdrawals) {
+        syncWithdrawalPreview(specificWithdrawals.value);
+      }
+    });
+  }
+
   // Catch-all for the remaining number/text inputs so autosave stays current.
   document.querySelectorAll('input:not(.currency-input):not(.allocation-input), textarea').forEach((input) => {
     if (input.name === 'distribution-method' || input.name === 'withdrawal-strategy') return;

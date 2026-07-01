@@ -3,6 +3,7 @@
 
 import { createRng, deriveSeed } from './rng.js';
 import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
+import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
 
@@ -39,6 +40,11 @@ export function simulatePath(params, rng, collectPath = false) {
 
   const sampleYears = samples ? samples.years : null;
   const sampleLen = sampleYears ? sampleYears.length : 0;
+
+  const fittedWithdrawals =
+    portfolio.strategy === 'specific'
+      ? fitSpecificWithdrawalsToHorizon(portfolio.specificWithdrawals || [], numYears)
+      : null;
 
   // Log-normal setup (only used when distMethod === 'lognormal').
   // Assets/inflation ordered to match the correlation Cholesky factor.
@@ -142,8 +148,7 @@ export function simulatePath(params, rng, collectPath = false) {
     let unadjustedTarget;
     let baseVal;
     if (portfolio.strategy === 'specific') {
-      const sp = portfolio.specificWithdrawals || [];
-      baseVal = j < sp.length ? sp[j] : 0;
+      baseVal = fittedWithdrawals[j];
       targetWithdrawal = baseVal + adjAmount;
       unadjustedTarget = baseVal;
     } else {

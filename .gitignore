@@ -13,6 +13,17 @@ playwright/.cache/
 # Testing
 coverage/
 
+# Root scratch / debug artifacts (keep project root clean)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.tmp
+/*.bak
+/scratch/
+/debug/
+
 # Environment variables
 .env
 .env.local

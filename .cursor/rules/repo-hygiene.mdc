@@ -1,0 +1,39 @@
+---
+description: Keep the repo root clean; do not leave scratch or debug files behind
+alwaysApply: true
+---
+
+# Repository Hygiene
+
+Keep the project root limited to config, entry points, and documentation. Do not leave temporary or debug files where they can be accidentally committed.
+
+## Where Things Belong
+
+| Kind of file | Location |
+|---|---|
+| Unit tests (Vitest) | `tests/*.test.js` |
+| End-to-end tests (Playwright) | `tests/e2e/*.spec.js` |
+| Application source | `src/` |
+| Debug screenshots, scratch HTML, throwaway scripts | Delete when done, or use an ignored folder (`scratch/`, `debug/`) |
+
+## Before Finishing a Task
+
+- Remove ad-hoc files created for debugging (screenshots, one-off HTML, scratch scripts).
+- Do not add new files to the project root unless they are project config (e.g. `vite.config.js`, `package.json`) or top-level docs (`README.md`).
+- If a new tool produces artifacts not already in `.gitignore`, update `.gitignore` per the gitignore-maintenance rule.
+
+## Examples
+
+```
+# ❌ BAD: Debug screenshot left in root after chart work
+spending-scale-sparkline.png
+
+# ❌ BAD: Throwaway test script in root
+test-withdrawal-scratch.js
+
+# ✅ GOOD: Unit test in the tests folder
+tests/withdrawal.test.js
+
+# ✅ GOOD: Delete the screenshot when debugging is done
+# (or save under scratch/ which is gitignored)
+```

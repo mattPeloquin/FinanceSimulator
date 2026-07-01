@@ -14,3 +14,4 @@ alwaysApply: true
   - `dist/` or `build/`
   - `.cache/`
 - Do not commit `.env` or `.local` files containing secrets or local configuration.
+- When adding scratch/debug workflows, ensure root-level artifacts (screenshots, `.tmp`, `.bak`, `scratch/`, `debug/`) stay ignored — see the repo-hygiene rule.

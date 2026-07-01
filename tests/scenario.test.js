@@ -6,6 +6,7 @@ import {
   parseCurrency,
   formatCurrency,
   parseSpecificWithdrawals,
+  fitSpecificWithdrawalsToHorizon,
   migrateScenario,
   MONEY_SCALE,
 } from '../src/state/scenario.js';
@@ -56,12 +57,14 @@ describe('buildSimParams', () => {
     expect(p.seed).toBeGreaterThanOrEqual(0);
   });
 
-  it('parses specific withdrawals as thousands of dollars', () => {
+  it('fits specific withdrawals to the simulation horizon', () => {
     const s = defaultScenario();
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '80\n85\n90';
     const p = buildSimParams(s, { years: [] });
-    expect(p.portfolio.specificWithdrawals).toEqual([80000, 85000, 90000]);
+    expect(p.portfolio.specificWithdrawals).toHaveLength(40);
+    expect(p.portfolio.specificWithdrawals.slice(0, 3)).toEqual([80000, 85000, 90000]);
+    expect(p.portfolio.specificWithdrawals.slice(3)).toEqual(Array(37).fill(90000));
   });
 });
 
@@ -81,6 +84,21 @@ describe('parseSpecificWithdrawals', () => {
 
   it('parses negative values as deposits', () => {
     expect(parseSpecificWithdrawals('-50\n80')).toEqual([-50000, 80000]);
+  });
+});
+
+describe('fitSpecificWithdrawalsToHorizon', () => {
+  it('truncates when the list is longer than the horizon', () => {
+    const amounts = [10, 20, 30, 40, 50];
+    expect(fitSpecificWithdrawalsToHorizon(amounts, 3)).toEqual([10, 20, 30]);
+  });
+
+  it('extends with the last value when the list is shorter than the horizon', () => {
+    expect(fitSpecificWithdrawalsToHorizon([80000, 85000], 4)).toEqual([80000, 85000, 85000, 85000]);
+  });
+
+  it('fills with zero when the list is empty', () => {
+    expect(fitSpecificWithdrawalsToHorizon([], 3)).toEqual([0, 0, 0]);
   });
 });
 
