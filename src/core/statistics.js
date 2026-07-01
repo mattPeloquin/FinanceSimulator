@@ -58,6 +58,12 @@ export function buildHistogram(values, numBins) {
     if (values[i] > maxResult) maxResult = values[i];
   }
 
+  // All values identical (e.g. a single simulation): a zero-width range cannot
+  // be split into bins, so return one bin holding everything.
+  if (maxResult === minResult) {
+    return { labels: [minResult], bins: [values.length], binSize: 0, min: minResult, max: maxResult };
+  }
+
   const binSize = (maxResult - minResult) / numBins;
   const bins = new Array(numBins).fill(0);
   const labels = Array.from({ length: numBins }, (_, i) => minResult + i * binSize);

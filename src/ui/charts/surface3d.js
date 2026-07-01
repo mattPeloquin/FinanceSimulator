@@ -109,6 +109,13 @@ function pathDepleted(balances) {
   return balances.some((b, i) => i > 0 && b <= 0);
 }
 
+// Columns are sampled evenly from the 10th to the 60th percentile, so the first
+// column is P10 and the LAST column is P60 (hence numCols - 1 in the divisor).
+function percentileLabel(col, numCols) {
+  const fraction = numCols > 1 ? col / (numCols - 1) : 0;
+  return 'P' + Math.round(10 + fraction * 50);
+}
+
 function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, unadjusted) {
   const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted];
   if (depleted) {
@@ -189,6 +196,73 @@ function getTooltipLines(col, dataIndex) {
   ];
 }
 
+// Pull the year-by-year withdrawal series out of one pinned column's points.
+function extractWithdrawalSeries(col) {
+  const points = surfaceState.columns[col];
+  if (!points) return null;
+
+  const labels = [];
+  const actualData = [];
+  const unadjustedData = [];
+  let totalUnadjusted = 0;
+  for (const p of points) {
+    const vals = pointValue(p);
+    if (vals[1] === 0) continue; // skip year 0 (no withdrawal)
+    labels.push(vals[1]);
+    actualData.push(vals[5]);
+    unadjustedData.push(vals[8]);
+    totalUnadjusted += vals[8];
+  }
+
+  return {
+    depleted: surfaceState.depletedCols[col] ?? false,
+    labels,
+    actualData,
+    unadjustedData,
+    totalUnadjusted,
+    total: points[0] ? pointValue(points[0])[6] : 0,
+    avg: points[0] ? pointValue(points[0])[7] : 0,
+  };
+}
+
+// Chart.js datasets comparing the original withdrawal plan against what was
+// actually withdrawn. Shared by the small float panel and the large dialog;
+// `large` just scales line and point sizes up.
+function withdrawalComparisonDatasets(series, { large = false } = {}) {
+  const theme = series.depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
+  return [
+    {
+      label: 'Original Plan',
+      data: series.unadjustedData,
+      borderColor: '#94a3b8',
+      borderWidth: large ? 2 : 1.5,
+      borderDash: large ? [5, 5] : [4, 4],
+      tension: 0.1,
+      fill: { target: 'origin' },
+      backgroundColor: 'rgba(148, 163, 184, 0.2)',
+      pointRadius: 0,
+      pointHoverRadius: 0,
+    },
+    {
+      label: 'Actual Withdrawal',
+      data: series.actualData,
+      borderColor: theme.line,
+      borderWidth: large ? 2 : 1.5,
+      tension: 0.1,
+      fill: {
+        target: '-1',
+        above: 'rgba(22, 163, 74, 0.2)',
+        below: 'rgba(234, 88, 12, 0.2)',
+      },
+      pointRadius: large ? 3 : 1.5,
+      pointHoverRadius: large ? 5 : 2.5,
+      pointBackgroundColor: theme.point,
+      pointBorderColor: '#fff',
+      pointBorderWidth: 1,
+    },
+  ];
+}
+
 function floatChartOptions() {
   return {
     responsive: true,
@@ -235,81 +309,30 @@ function applyFloatChartTheme(depleted) {
 
 function showFloatWithdrawal(col) {
   ensureFloatPanel();
-  const points = surfaceState.columns[col];
-  if (!floatPanel || !points) return;
+  const series = extractWithdrawalSeries(col);
+  if (!floatPanel || !series) return;
 
-  const depleted = surfaceState.depletedCols[col] ?? false;
-  const labels = [];
-  const actualData = [];
-  const unadjustedData = [];
-  let totalUnadjusted = 0;
-  for (const p of points) {
-    const vals = pointValue(p);
-    if (vals[1] === 0) continue; // skip year 0 (no withdrawal)
-    labels.push(vals[1]);
-    actualData.push(vals[5]);
-    unadjustedData.push(vals[8]);
-    totalUnadjusted += vals[8];
-  }
-
-  const total = points[0] ? pointValue(points[0])[6] : 0;
-  const avg = points[0] ? pointValue(points[0])[7] : 0;
-  const numCols = surfaceState.columns.length;
-  const pLabel = 'P' + Math.round(10 + (col / numCols) * 50);
-  const status = depleted ? 'Depleted' : 'Funded';
+  const pLabel = percentileLabel(col, surfaceState.columns.length);
+  const status = series.depleted ? 'Depleted' : 'Funded';
   floatTitle.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-      <div style="color:${depleted ? '#c2410c' : '#15803d'}">${pLabel} · ${status}</div>
-      <div style="font-weight:normal;color:#64748b;">Avg Return: ${(avg * 100).toFixed(2)}%</div>
+      <div style="color:${series.depleted ? '#c2410c' : '#15803d'}">${pLabel} · ${status}</div>
+      <div style="font-weight:normal;color:#64748b;">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
     </div>
-    <div style="font-weight:normal;color:#64748b;margin-top:1px">Withdrawn: ${formatK(total)} (Plan: ${formatK(totalUnadjusted)})</div>
+    <div style="font-weight:normal;color:#64748b;margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
   `;
   floatTitle.style.color = '';
 
   if (floatChart) {
-    floatChart.data.labels = labels;
-    floatChart.data.datasets[0].data = unadjustedData;
-    floatChart.data.datasets[1].data = actualData;
-    applyFloatChartTheme(depleted);
+    floatChart.data.labels = series.labels;
+    floatChart.data.datasets[0].data = series.unadjustedData;
+    floatChart.data.datasets[1].data = series.actualData;
+    applyFloatChartTheme(series.depleted);
     floatChart.update('none');
   } else {
-    const theme = depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
     floatChart = new Chart(floatCanvas.getContext('2d'), {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Original Plan',
-            data: unadjustedData,
-            borderColor: '#94a3b8',
-            borderWidth: 1.5,
-            borderDash: [4, 4],
-            tension: 0.1,
-            fill: { target: 'origin' },
-            backgroundColor: 'rgba(148, 163, 184, 0.2)',
-            pointRadius: 0,
-            pointHoverRadius: 0,
-          },
-          {
-            label: 'Actual Withdrawal',
-            data: actualData,
-            borderColor: theme.line,
-            borderWidth: 1.5,
-            tension: 0.1,
-            fill: {
-              target: '-1',
-              above: 'rgba(22, 163, 74, 0.2)',
-              below: 'rgba(234, 88, 12, 0.2)',
-            },
-            pointRadius: 1.5,
-            pointHoverRadius: 2.5,
-            pointBackgroundColor: theme.point,
-            pointBorderColor: '#fff',
-            pointBorderWidth: 1,
-          },
-        ],
-      },
+      data: { labels: series.labels, datasets: withdrawalComparisonDatasets(series) },
       options: floatChartOptions(),
     });
   }
@@ -327,84 +350,34 @@ function openLargeWithdrawalChart(col) {
 
   surfaceState.largeChartCol = col;
 
-  const points = surfaceState.columns[col];
-  if (!points) return;
+  const series = extractWithdrawalSeries(col);
+  if (!series) return;
 
-  const depleted = surfaceState.depletedCols[col] ?? false;
-  const labels = [];
-  const actualData = [];
-  const unadjustedData = [];
-  let totalUnadjusted = 0;
-  for (const p of points) {
-    const vals = pointValue(p);
-    if (vals[1] === 0) continue;
-    labels.push(vals[1]);
-    actualData.push(vals[5]);
-    unadjustedData.push(vals[8]);
-    totalUnadjusted += vals[8];
-  }
+  const pLabel = percentileLabel(col, surfaceState.columns.length);
 
-  const total = points[0] ? pointValue(points[0])[6] : 0;
-  const avg = points[0] ? pointValue(points[0])[7] : 0;
-  const numCols = surfaceState.columns.length;
-  const pLabel = 'P' + Math.round(10 + (col / numCols) * 50);
-  
   const title = document.getElementById('withdrawalChartDialogTitle');
   if (title) title.textContent = `Withdrawal Analysis - ${pLabel}`;
   
   const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
-  if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(total)} | Plan: ${formatK(totalUnadjusted)}`;
+  if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(series.total)} | Plan: ${formatK(series.totalUnadjusted)}`;
   
   const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
-  if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${(avg * 100).toFixed(2)}%`;
+  if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${(series.avg * 100).toFixed(2)}%`;
 
   const canvas = document.getElementById('largeWithdrawalCanvas');
-  const theme = depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
+  const theme = series.depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
 
   if (largeChart) {
-    largeChart.data.labels = labels;
-    largeChart.data.datasets[0].data = unadjustedData;
-    largeChart.data.datasets[1].data = actualData;
+    largeChart.data.labels = series.labels;
+    largeChart.data.datasets[0].data = series.unadjustedData;
+    largeChart.data.datasets[1].data = series.actualData;
     largeChart.data.datasets[1].borderColor = theme.line;
     largeChart.data.datasets[1].pointBackgroundColor = theme.point;
     largeChart.update();
   } else {
     largeChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Original Plan',
-            data: unadjustedData,
-            borderColor: '#94a3b8',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            tension: 0.1,
-            fill: { target: 'origin' },
-            backgroundColor: 'rgba(148, 163, 184, 0.2)',
-            pointRadius: 0,
-            pointHoverRadius: 0,
-          },
-          {
-            label: 'Actual Withdrawal',
-            data: actualData,
-            borderColor: theme.line,
-            borderWidth: 2,
-            tension: 0.1,
-            fill: {
-              target: '-1',
-              above: 'rgba(22, 163, 74, 0.2)',
-              below: 'rgba(234, 88, 12, 0.2)',
-            },
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            pointBackgroundColor: theme.point,
-            pointBorderColor: '#fff',
-            pointBorderWidth: 1,
-          },
-        ],
-      },
+      data: { labels: series.labels, datasets: withdrawalComparisonDatasets(series, { large: true }) },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -542,9 +515,11 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
   if (!chartInstance) {
     chartInstance = echarts.init(dom);
     dom.oncontextmenu = (e) => e.preventDefault();
-    // Exposed for quick camera-angle inspection from the console:
-    //   __SOR_SURFACE__.getOption().grid3D[0].viewControl
-    window.__SOR_SURFACE__ = chartInstance;
+    if (import.meta.env.DEV) {
+      // Exposed for quick camera-angle inspection from the console:
+      //   __SOR_SURFACE__.getOption().grid3D[0].viewControl
+      window.__SOR_SURFACE__ = chartInstance;
+    }
   }
 
   const numCols = surfacePaths.length;
@@ -611,7 +586,7 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
           color: AXIS_LABEL_COLOR,
           fontSize: 9,
           margin: 4,
-          formatter: (v) => 'P' + Math.round(10 + (v / numCols) * 50),
+          formatter: (v) => percentileLabel(v, numCols),
         },
       }),
       yAxis3D: axisConfig('Year', { min: 0, max: numYears, splitNumber: 5, inverse: true }),

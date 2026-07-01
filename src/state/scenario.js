@@ -251,8 +251,9 @@ export function buildSimParams(scenario, samples) {
       ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
       withdrawalFloor: toDollars(scenario.withdrawalFloor),
-      // Front-loading controls.
-      spendDrift: (scenario.spendChangePct || 0) / 100,
+      // Front-loading controls. Same name as the scenario's spendChangePct field,
+      // but converted from a percentage to a decimal rate.
+      spendChangeRate: (scenario.spendChangePct || 0) / 100,
       goGoBonus: toDollars(scenario.goGoBonus),
       goGoYears: scenario.goGoYears || 0,
     },
@@ -283,15 +284,35 @@ function num(v) {
   return Number.isNaN(n) ? 0 : n;
 }
 
+// Upper bounds keep a single run from locking up the browser for minutes.
+export const MAX_NUM_YEARS = 100;
+export const MAX_NUM_SIMULATIONS = 100000;
+
 // Validate a scenario for running. Returns an array of human-readable errors.
 export function validateScenario(scenario, { minYear, maxYear }) {
   const errors = [];
 
-  if (!Number.isFinite(scenario.numYears) || scenario.numYears < 1) {
-    errors.push('Investment horizon must be at least 1 year.');
+  if (!Number.isFinite(scenario.numYears) || scenario.numYears < 1 || scenario.numYears > MAX_NUM_YEARS) {
+    errors.push(`Investment horizon must be between 1 and ${MAX_NUM_YEARS} years.`);
   }
-  if (!Number.isFinite(scenario.numSimulations) || scenario.numSimulations < 1) {
-    errors.push('Number of simulations must be at least 1.');
+  if (
+    !Number.isFinite(scenario.numSimulations) ||
+    scenario.numSimulations < 1 ||
+    scenario.numSimulations > MAX_NUM_SIMULATIONS
+  ) {
+    errors.push(`Number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
+  }
+
+  // The dynamic adjustment curve interpolates between the three market-return
+  // anchors, so they must be strictly increasing (low < expected < high).
+  if (scenario.enableDynamicAdjustments) {
+    const { dynLowRet, dynMedRet, dynHighRet } = scenario;
+    if (
+      !Number.isFinite(dynLowRet) || !Number.isFinite(dynMedRet) || !Number.isFinite(dynHighRet) ||
+      !(dynLowRet < dynMedRet && dynMedRet < dynHighRet)
+    ) {
+      errors.push('Dynamic adjustment market triggers must increase: Low Return < Expected < High Return.');
+    }
   }
 
   const total = ALLOCATION_KEYS.reduce((sum, k) => sum + (scenario[k] || 0), 0);

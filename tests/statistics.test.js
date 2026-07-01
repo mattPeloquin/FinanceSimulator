@@ -75,4 +75,11 @@ describe('buildHistogram', () => {
     // The max value is placed in the last bin.
     expect(h.bins[3]).toBeGreaterThanOrEqual(1);
   });
+
+  it('returns a single bin when all values are identical', () => {
+    const h = buildHistogram([0.05, 0.05, 0.05], 75);
+    expect(h.labels).toEqual([0.05]);
+    expect(h.bins).toEqual([3]);
+    expect(Number.isNaN(h.labels[0])).toBe(false);
+  });
 });

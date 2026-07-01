@@ -31,6 +31,24 @@ describe('getDynamicAdjustment', () => {
   it('returns med adj exactly at the med trigger', () => {
     expect(getDynamicAdjustment(5, dynConfig)).toBeCloseTo(100_000, 6);
   });
+
+  it('never returns NaN when anchors share the same trigger return', () => {
+    const degenerate = {
+      low: { ret: 5, bal: 0, adj: 0 },
+      med: { ret: 5, bal: 0, adj: 100_000 },
+      high: { ret: 20, bal: 0, adj: 200_000 },
+    };
+    // Strictly between med and high still interpolates normally...
+    expect(getDynamicAdjustment(12.5, degenerate)).toBeCloseTo(150_000, 6);
+    // ...and the zero-width low..med segment falls back to the med anchor.
+    const highDegenerate = {
+      low: { ret: -15, bal: 0, adj: 0 },
+      med: { ret: 20, bal: 0, adj: 100_000 },
+      high: { ret: 20, bal: 0, adj: 200_000 },
+    };
+    const adj = getDynamicAdjustment(19.9, highDegenerate);
+    expect(Number.isNaN(adj)).toBe(false);
+  });
 });
 
 describe('resolveAdjustment', () => {

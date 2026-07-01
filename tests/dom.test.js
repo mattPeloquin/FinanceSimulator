@@ -1,11 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { FIELDS } from '../src/state/scenario.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const html = readFileSync(join(__dirname, '..', 'index.html'), 'utf8');
+
+// index.html is assembled from Handlebars partials at build time (see
+// vite.config.js). Mirror that here: collect every src/partials/**/*.html file
+// by name and recursively substitute {{> name }} references.
+function loadPartials(dir, partials = {}) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      loadPartials(full, partials);
+    } else if (entry.name.endsWith('.html')) {
+      partials[entry.name.replace(/\.html$/, '')] = readFileSync(full, 'utf8');
+    }
+  }
+  return partials;
+}
+
+function inlinePartials(source, partials) {
+  return source.replace(/\{\{>\s*([\w-]+)\s*\}\}/g, (_, name) =>
+    inlinePartials(partials[name] ?? '', partials)
+  );
+}
+
+const partials = loadPartials(join(__dirname, '..', 'src', 'partials'));
+const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials);
 
 // Required non-field element ids the app wires up at runtime.
 const REQUIRED_IDS = [
@@ -14,6 +37,11 @@ const REQUIRED_IDS = [
   'loadingIndicator',
   'loadingText',
   'progressBar',
+  'cancelSimulationButton',
+  'messageDialog',
+  'messageDialogTitle',
+  'messageDialogText',
+  'messageDialogOk',
   'totalAllocation',
   'year-labels',
   'historical-range-msg',

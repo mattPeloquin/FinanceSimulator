@@ -1,5 +1,13 @@
 // Annual nominal total returns (%) by asset class plus inflation (%), 1900-2025.
 // Sources: Fama-French, Damodaran, and historical reconstructions for early years.
+//
+// IMPORTANT — data quality disclaimer: these values are APPROXIMATIONS assembled
+// for illustration, not an audited dataset. Early decades in particular (roughly
+// pre-1928) are rounded reconstructions, since precise style-level index data
+// (e.g. "US large growth") does not exist that far back. The numbers are good
+// enough to explore sequence-of-returns risk, but do not treat any single year
+// as an exact historical fact. If you need precision, replace this table with
+// data from a source you trust — the format is one row per year.
 export const historicalData = {
   1900: { us_lg_growth: 14.5, us_lg_value: 12.0, us_sm_mid: 20.0, ex_us: 4.5, bond: 4.8, cash: 4.0, inflation: 1.3 },
   1901: { us_lg_growth: 16.5, us_lg_value: 18.2, us_sm_mid: 10.0, ex_us: 15.0, bond: 3.8, cash: 4.0, inflation: -1.3 },

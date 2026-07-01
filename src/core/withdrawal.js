@@ -9,10 +9,14 @@ export function getDynamicAdjustment(nominalReturnPercent, dynConfig) {
 
   if (nominalReturnPercent < dynConfig.med.ret) {
     const range = dynConfig.med.ret - dynConfig.low.ret;
+    // Anchors at the same return would mean dividing by zero; use the medium
+    // anchor's adjustment directly instead of producing NaN.
+    if (range <= 0) return dynConfig.med.adj;
     const pct = (nominalReturnPercent - dynConfig.low.ret) / range;
     return dynConfig.low.adj + pct * (dynConfig.med.adj - dynConfig.low.adj);
   } else {
     const range = dynConfig.high.ret - dynConfig.med.ret;
+    if (range <= 0) return dynConfig.med.adj;
     const pct = (nominalReturnPercent - dynConfig.med.ret) / range;
     return dynConfig.med.adj + pct * (dynConfig.high.adj - dynConfig.med.adj);
   }

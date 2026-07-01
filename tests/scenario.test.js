@@ -105,6 +105,31 @@ describe('validateScenario', () => {
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('Log-normal'))).toBe(true);
   });
+
+  it('flags a horizon or simulation count above the caps', () => {
+    const s = defaultScenario();
+    s.numYears = 101;
+    s.numSimulations = 100001;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('horizon'))).toBe(true);
+    expect(errors.some((e) => e.includes('simulations'))).toBe(true);
+  });
+
+  it('flags dynamic adjustment triggers that are not strictly increasing', () => {
+    const s = defaultScenario();
+    s.dynLowRet = 5;
+    s.dynMedRet = 5; // equal to low -> invalid
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Dynamic adjustment'))).toBe(true);
+  });
+
+  it('ignores trigger ordering when dynamic adjustments are disabled', () => {
+    const s = defaultScenario();
+    s.enableDynamicAdjustments = false;
+    s.dynLowRet = 5;
+    s.dynMedRet = 5;
+    expect(validateScenario(s, range)).toEqual([]);
+  });
 });
 
 describe('history helpers', () => {

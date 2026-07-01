@@ -35,12 +35,17 @@ import {
 } from './ui/inputs.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderResults } from './ui/results.js';
+import { openDialog, showAlert } from './ui/dialogs.js';
 
 const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 
 let historicalSamples = { years: [] };
 let currentWorker = null;
 let currentSessionName = '';
+
+// True once the user hand-edits any log-normal profile field. While set, changing
+// the year range no longer silently overwrites their numbers (see applyHistoryProfiles).
+let profilesEdited = false;
 
 // ---- History views ----------------------------------------------------------
 
@@ -64,26 +69,42 @@ function refreshHistoryView(startYear, endYear) {
 
 // Refresh the history view AND overwrite the log-normal profile fields from the
 // selected range. `silent` suppresses the invalid-range alert (used while the
-// user is still typing a year).
-function applyHistoryProfiles({ silent = false } = {}) {
+// user is still typing a year). `force` overwrites even hand-edited profiles.
+function applyHistoryProfiles({ silent = false, force = false } = {}) {
   const startYear = parseInt(document.getElementById('startYear').value, 10);
   const endYear = parseInt(document.getElementById('endYear').value, 10);
   if (!refreshHistoryView(startYear, endYear)) {
     if (!silent) {
-      alert(`Please enter a valid year range between ${YEAR_RANGE.minYear} and ${YEAR_RANGE.maxYear}.`);
+      showAlert(`Please enter a valid year range between ${YEAR_RANGE.minYear} and ${YEAR_RANGE.maxYear}.`);
     }
     return;
   }
   const records = historicalSamples.years;
   if (records.length === 0) return;
 
+  const msg = document.getElementById('historical-range-msg');
+
+  // The user hand-edited the profiles: keep their numbers and offer an explicit
+  // overwrite instead of silently clobbering them.
+  if (profilesEdited && !force) {
+    msg.textContent = 'Your edited profiles were kept. ';
+    const overwrite = document.createElement('button');
+    overwrite.type = 'button';
+    overwrite.className = 'text-indigo-600 underline hover:text-indigo-800';
+    overwrite.textContent = 'Overwrite from history';
+    overwrite.addEventListener('click', () => applyHistoryProfiles({ force: true }));
+    msg.appendChild(overwrite);
+    scheduleAutosave();
+    return;
+  }
+
   const fields = profilesToScenarioFields(computeProfiles(records));
   for (const [key, value] of Object.entries(fields)) {
     const el = document.getElementById(key);
     if (el) el.value = value;
   }
-  document.getElementById('historical-range-msg').textContent =
-    `Profiles updated based on ${records.length} years of data.`;
+  profilesEdited = false;
+  msg.textContent = `Profiles updated based on ${records.length} years of data.`;
   scheduleAutosave();
 }
 
@@ -123,7 +144,7 @@ function runSimulation() {
   const scenario = readScenarioFromDom();
   const errors = validateScenario(scenario, YEAR_RANGE);
   if (errors.length) {
-    alert(errors.join('\n'));
+    showAlert(errors.join('\n'), 'Please fix these inputs');
     return;
   }
 
@@ -147,16 +168,27 @@ function runSimulation() {
       currentWorker = null;
     } else if (msg.type === 'error') {
       setLoading(false);
-      alert(`Simulation error: ${msg.message}`);
+      showAlert(`Simulation error: ${msg.message}`);
       currentWorker.terminate();
       currentWorker = null;
     }
   };
   currentWorker.onerror = (err) => {
     setLoading(false);
-    alert(`Worker error: ${err.message}`);
+    showAlert(`Worker error: ${err.message}`);
+    currentWorker.terminate();
+    currentWorker = null;
   };
   currentWorker.postMessage({ type: 'run', params });
+}
+
+// Stop an in-flight simulation and return the UI to its idle state.
+function cancelSimulation() {
+  if (currentWorker) {
+    currentWorker.terminate();
+    currentWorker = null;
+  }
+  setLoading(false);
 }
 
 // ---- Persistence: autosave + named sessions ---------------------------------
@@ -190,46 +222,29 @@ function escapeHtml(str) {
 }
 
 function handleSaveSession() {
-  const suggested = currentSessionName || '';
   const dialog = document.getElementById('saveSessionDialog');
   const input = document.getElementById('saveSessionName');
-  input.value = suggested;
-  
+  input.value = currentSessionName || '';
+
   const onSave = async () => {
     const name = input.value.trim();
     if (!name) return;
     dialog.close();
-    cleanup();
     try {
       await saveSession(name, readScenarioFromDom());
       currentSessionName = name;
       await refreshSessionList(name);
       scheduleAutosave();
     } catch (err) {
-      alert(`Could not save session: ${err.message}`);
+      showAlert(`Could not save session: ${err.message}`);
     }
   };
 
-  const onCancel = () => {
-    dialog.close();
-    cleanup();
-  };
-
-  const onKeydown = (e) => {
-    if (e.key === 'Enter') onSave();
-  };
-
-  function cleanup() {
-    document.getElementById('confirmSaveSession').removeEventListener('click', onSave);
-    document.getElementById('cancelSaveSession').removeEventListener('click', onCancel);
-    input.removeEventListener('keydown', onKeydown);
-  }
-
-  document.getElementById('confirmSaveSession').addEventListener('click', onSave);
-  document.getElementById('cancelSaveSession').addEventListener('click', onCancel);
-  input.addEventListener('keydown', onKeydown);
-  
-  dialog.showModal();
+  openDialog(dialog, [
+    { el: document.getElementById('confirmSaveSession'), event: 'click', fn: onSave },
+    { el: document.getElementById('cancelSaveSession'), event: 'click', fn: () => dialog.close() },
+    { el: input, event: 'keydown', fn: (e) => { if (e.key === 'Enter') onSave(); } },
+  ]);
   input.focus();
   input.select();
 }
@@ -244,7 +259,6 @@ function handleDeleteSession() {
 
   const onDelete = async () => {
     dialog.close();
-    cleanup();
     try {
       await deleteSession(name);
       if (currentSessionName === name) {
@@ -253,24 +267,14 @@ function handleDeleteSession() {
       }
       await refreshSessionList('');
     } catch (err) {
-      alert(`Could not delete session: ${err.message}`);
+      showAlert(`Could not delete session: ${err.message}`);
     }
   };
 
-  const onCancel = () => {
-    dialog.close();
-    cleanup();
-  };
-
-  function cleanup() {
-    document.getElementById('confirmDeleteSession').removeEventListener('click', onDelete);
-    document.getElementById('cancelDeleteSession').removeEventListener('click', onCancel);
-  }
-
-  document.getElementById('confirmDeleteSession').addEventListener('click', onDelete);
-  document.getElementById('cancelDeleteSession').addEventListener('click', onCancel);
-  
-  dialog.showModal();
+  openDialog(dialog, [
+    { el: document.getElementById('confirmDeleteSession'), event: 'click', fn: onDelete },
+    { el: document.getElementById('cancelDeleteSession'), event: 'click', fn: () => dialog.close() },
+  ]);
 }
 
 async function handleSelectSession(e) {
@@ -286,7 +290,7 @@ async function handleSelectSession(e) {
     currentSessionName = name;
     applyScenario(scenario);
   } catch (err) {
-    alert(`Could not load session: ${err.message}`);
+    showAlert(`Could not load session: ${err.message}`);
   }
 }
 
@@ -304,7 +308,7 @@ async function handleImportFile(e) {
     if (name) document.getElementById('historical-range-msg').textContent = `Imported "${name}".`;
     await refreshSessionList('');
   } catch (err) {
-    alert(`Could not import file: ${err.message}`);
+    showAlert(`Could not import file: ${err.message}`);
   } finally {
     e.target.value = '';
   }
@@ -313,6 +317,9 @@ async function handleImportFile(e) {
 // Apply a full scenario to the DOM and refresh dependent views.
 function applyScenario(scenario) {
   const merged = { ...defaultScenario(), ...scenario };
+  // Loading a scenario replaces the profile fields wholesale, so they no longer
+  // count as hand-edited.
+  profilesEdited = false;
   writeScenarioToDom(merged);
   toggleDistMethod(merged.distMethod);
   toggleWithdrawalStrategy(merged.withdrawalStrategy || 'base');
@@ -352,10 +359,18 @@ async function init() {
     });
 
     document.getElementById('runButton').addEventListener('click', runSimulation);
+    document.getElementById('cancelSimulationButton').addEventListener('click', cancelSimulation);
 
     // Year-range inputs drive the charts + profiles directly (debounced typing).
     document.getElementById('startYear').addEventListener('input', scheduleHistoryUpdate);
     document.getElementById('endYear').addEventListener('input', scheduleHistoryUpdate);
+
+    // Typing in any log-normal profile field marks the profiles as hand-edited.
+    document.querySelectorAll('#lognormal-profiles input').forEach((input) => {
+      input.addEventListener('input', () => {
+        profilesEdited = true;
+      });
+    });
 
     document.getElementById('saveSessionButton').addEventListener('click', handleSaveSession);
     document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);

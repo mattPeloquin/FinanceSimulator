@@ -175,10 +175,4 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   setupAccordionResize();
 }
 
-export function allocationTotalValid() {
-  const inputs = document.querySelectorAll('.allocation-input');
-  const total = Array.from(inputs).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0);
-  return Math.abs(total - 100) <= 0.01;
-}
-
 export { ALLOCATION_KEYS };

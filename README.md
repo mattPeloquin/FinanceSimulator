@@ -70,3 +70,95 @@ Once you've vibe-coded your app to perfection and want to share it with the worl
 npm run build
 ```
 This will bundle your entire app into a single `index.html` file located in the `dist` folder. You can now send that file to anyone or drag-and-drop it onto a web host! Happy building!
+
+---
+
+## 🧠 How the Simulator Works (Logical Design & Flow)
+
+This section explains what actually happens "under the hood" when you press **Run Simulation** — from your inputs, through the math, to the charts on screen. It's useful background reading if you want to vibe-code changes to the engine or the visuals.
+
+### The big picture
+
+```mermaid
+flowchart TD
+    A["1. Your Inputs<br/>(the 'Scenario')"] --> B["2. Build Simulation Parameters"]
+    B --> C["3. Background Worker<br/>runs thousands of simulations"]
+    C --> D["4. Rank & Summarize<br/>(percentiles, success rate)"]
+    D --> E["5. Regenerate the ~200 paths<br/>that will actually be drawn"]
+    E --> F["6. Render Results<br/>(metric cards + charts)"]
+```
+
+### Step 1: Your inputs become a "Scenario"
+
+Everything you type into the form — starting balance, yearly withdrawal, asset mix, year range, dynamic adjustment rules — is collected into one flat object called a **scenario** (`src/state/scenario.js`). This single object is the source of truth for the whole app:
+
+- It is **autosaved** to your browser's local storage as you type, so refreshing the page never loses your work.
+- It can be saved as a **named session** (stored in your browser via IndexedDB), or **exported/imported** as a JSON file to share with others.
+- Money fields are entered in thousands of dollars ($000s) and converted to real dollars just before the math runs.
+
+The **historical data** (`src/data/historicalData.js`) is a built-in table of yearly returns from 1900 onward for six asset classes (US large growth, US large value, US small/mid, international, bonds, cash) plus inflation. When you change the year range, the app instantly recomputes the average return and volatility "profiles" for that window, redraws the mini history charts, and refreshes the pool of years available for resampling (`src/core/history.js`). If you've typed your own numbers into the profile fields, the app keeps them and shows an "Overwrite from history" link instead of replacing your edits.
+
+> **A note on the data:** the built-in numbers are good-faith approximations assembled for illustration — the early decades especially are rounded reconstructions, since precise style-level index data doesn't exist that far back. They're great for exploring risk, but don't treat any single year as an exact historical fact.
+
+### Step 2: Turning the scenario into engine-ready parameters
+
+When you click **Run Simulation**, the scenario is validated (allocation must total 100%, year range must be valid, etc.) and converted into a `params` object the math engine understands: percentages become decimals, $000s become dollars, and the pool of historical years for your chosen range is attached. If you left the random seed blank, a random one is picked — but entering the same seed twice will reproduce the exact same results.
+
+### Step 3: The simulation engine (runs off-screen in a Web Worker)
+
+The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
+
+The core engine (`src/core/simulation.js`) simulates one "possible future" at a time. For each simulated year it:
+
+1. **Picks the market's returns and inflation** using one of two methods you choose:
+   - **Historical resampling:** grabs real years from your chosen range, in short consecutive "blocks" (block bootstrapping), so crash-then-recovery patterns from actual history are preserved. The block size slider controls how long those runs of consecutive years are.
+   - **Log-normal model:** draws statistically generated returns based on the mean/volatility profiles, using the historical **correlation between asset classes** (so stocks and bonds still move together the way they did in real life) and year-to-year smoothing controlled by the same block-size setting.
+2. **Grows the portfolio** by that year's inflation-adjusted (real) return, weighted by your asset allocation.
+3. **Figures out this year's withdrawal**, starting from your base plan (or a pasted year-by-year list), then applying front-loading ("go-go years" bonus and spending drift), dynamic adjustments based on market performance and balance triggers, guardrail penalties/bonuses, and any minimum withdrawal floor (`src/core/withdrawal.js`).
+4. **Subtracts the withdrawal** and records whether the portfolio ran out of money (the "depletion year").
+
+This is repeated for every year in your horizon, and the whole thing is repeated for every simulation (10,000 by default).
+
+**A clever memory trick:** the engine uses a *seeded* random number generator (`src/core/rng.js`), where each simulation gets its own predictable seed. That means the engine only needs to keep four summary numbers per simulation (final balance, total withdrawn, average return, depletion year) — it can throw away the year-by-year details and **perfectly regenerate any individual path later** just by re-running it with the same seed. That's how 10,000 simulations stay fast and memory-light.
+
+### Step 4: Ranking and summarizing the outcomes
+
+Once all simulations finish, the worker (`src/core/statistics.js`) computes:
+
+- **Success rate** — the share of futures where the money never ran out.
+- **Median end balance** and **median total withdrawn** across all runs.
+- A **ranking of every simulation by total money withdrawn**, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
+- A **histogram** of average annual real returns across all simulations.
+
+### Step 5: Regenerating just the paths we'll draw
+
+Only the paths that will actually appear on screen are regenerated in full year-by-year detail (using the seed trick above):
+
+- The **6 percentile paths** (10th–60th) for the timeline charts.
+- About **200 paths sampled evenly between the 10th and 60th percentile** for the 3D chart.
+
+The worker then sends this compact, chart-ready package back to the page.
+
+### Step 6: Visualizing the results
+
+The results section (`src/ui/results.js` and `src/ui/charts/`) renders:
+
+| Visualization | What it shows |
+|---|---|
+| **Headline cards** | Success rate, median end balance, median total withdrawn. |
+| **Percentile cards** | Total withdrawn, end balance, and average return for the 10th–60th percentile outcomes. |
+| **Portfolio Balance Timeline** (Chart.js line chart) | Year-by-year balance for the six percentile paths on a logarithmic scale. Point markers encode each year's market: circles for up years, upside-down triangles for down years, sized by how big the move was. |
+| **3D "Explore specific paths" chart** (ECharts GL, loaded lazily only when needed) | ~200 representative paths as a 3D landscape — percentile across, years going back, balance as column height. Color shows that year's market return (red = crash, green = boom); paths that ran out of money are drawn in orange. Click a column to pin one simulation and inspect it year by year, including a pop-out chart comparing actual withdrawals against the original plan. |
+| **Dynamic Withdrawals Timeline** (collapsible) | How the yearly withdrawal amounts flexed up or down over time for each percentile path. |
+| **Distribution of Real Returns** (collapsible histogram) | How all the simulations' average annual real returns were spread out. |
+
+### Where to look when vibe-coding
+
+| You want to change… | Look in… |
+|---|---|
+| The math of growth/withdrawals | `src/core/simulation.js`, `src/core/withdrawal.js` |
+| The historical dataset | `src/data/historicalData.js` |
+| An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
+| A chart's look or behavior | `src/ui/charts/` (one file per chart) |
+| The summary numbers shown | `src/workers/simulation.worker.js` and `src/core/statistics.js` |
+| Saving/loading sessions | `src/state/persistence.js` |

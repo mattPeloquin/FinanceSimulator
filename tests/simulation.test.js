@@ -171,7 +171,7 @@ describe('front-loaded spending', () => {
       portfolio: {
         start: 1e9, base: 100_000, floorBalance: 0, floorPenalty: 0,
         ceilingBalance: Infinity, ceilingBonus: 0,
-        spendDrift: 0, goGoBonus: 0, goGoYears: 0,
+        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0,
       },
       dynConfig: {
         low: { ret: -100, bal: 0, adj: 0 },
@@ -189,7 +189,7 @@ describe('front-loaded spending', () => {
 
   it('declines withdrawals over time with a negative annual real change', () => {
     const p = flatParams();
-    p.portfolio.spendDrift = -0.1;
+    p.portfolio.spendChangeRate = -0.1;
     const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
     expect(w[0]).toBeCloseTo(100_000, 3);
     expect(w[1]).toBeCloseTo(90_000, 3);
@@ -241,7 +241,7 @@ describe('deposits from negative withdrawals', () => {
         floorPenalty: 0,
         ceilingBalance: Infinity,
         ceilingBonus: 0,
-        spendDrift: 0,
+        spendChangeRate: 0,
         goGoBonus: 0,
         goGoYears: 0,
         withdrawalFloor: 0,
