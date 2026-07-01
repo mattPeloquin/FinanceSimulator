@@ -3,6 +3,7 @@
 import { ALLOCATION_KEYS, parseCurrency } from '../state/scenario.js';
 import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
+import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
 // accordion is opened so they fill the now-visible container.
@@ -69,6 +70,8 @@ export function toggleDynamicAdjustments(enabled) {
   const wrapper = document.getElementById('dynamic-adjustments-wrapper');
   if (enabled) {
     wrapper.classList.remove('hidden');
+    // The sparkline can't render while the section is hidden; draw it now.
+    syncGuardrailPreview();
   } else {
     wrapper.classList.add('hidden');
   }
@@ -154,6 +157,14 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       notify();
     });
   }
+
+  // The spending-scale sparkline tracks its inputs (plus the starting balance,
+  // which sets the chart's x-range) as the user types.
+  for (const id of ['floorBalance', 'floorPenalty', 'ceilingBalance', 'ceilingBonus', 'startBalance']) {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener('input', syncGuardrailPreview);
+  }
+  syncGuardrailPreview();
 
   const specificWithdrawals = document.getElementById('specificWithdrawals');
   if (specificWithdrawals) {

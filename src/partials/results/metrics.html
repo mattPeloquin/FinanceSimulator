@@ -1,5 +1,5 @@
 <!-- Headline metrics -->
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
         <div class="text-[10px] uppercase tracking-wider text-indigo-400">Success Rate (not depleted)</div>
         <div id="successRate" class="text-2xl font-bold text-indigo-700"></div>
@@ -11,6 +11,10 @@
     <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
         <div class="text-[10px] uppercase tracking-wider text-slate-400">Median Total Withdrawn</div>
         <div id="medianWithdrawn" class="text-2xl font-bold text-slate-800"></div>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center" title="Total of the base withdrawal schedule, before any dynamic adjustments">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400">Planned Total Withdrawal</div>
+        <div id="plannedWithdrawn" class="text-2xl font-bold text-slate-800"></div>
     </div>
 </div>
 
@@ -28,11 +32,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p10Wd" class="text-xl font-bold text-slate-800"></div>
+                    <div id="p10Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p10Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p10EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>
@@ -49,11 +55,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p20Wd" class="text-xl font-bold text-slate-800"></div>
+                    <div id="p20Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p20Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p20EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>
@@ -70,11 +78,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p30Wd" class="text-xl font-bold text-slate-800"></div>
+                    <div id="p30Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p30Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p30EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>
@@ -91,11 +101,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p40Wd" class="text-xl font-bold text-slate-800"></div>
+                    <div id="p40Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p40Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p40EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>
@@ -113,11 +125,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p50Wd" class="text-xl font-bold text-indigo-700"></div>
+                    <div id="p50Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p50Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p50EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>
@@ -134,11 +148,13 @@
                 <div class="text-center">
                     <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Withdrawn</div>
                     <div id="p60Wd" class="text-xl font-bold text-slate-800"></div>
+                    <div id="p60Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-center border-t border-slate-200 pt-2">
                     <div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Bal</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">End Balance</div>
                         <div id="p60Bal" class="text-sm font-semibold text-slate-600"></div>
+                        <div id="p60EndYear" class="text-[10px] text-slate-400"></div>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">Return</div>

@@ -313,6 +313,14 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     ) {
       errors.push('Dynamic adjustment market triggers must increase: Low Return < Expected < High Return.');
     }
+
+    // The spending scale needs a neutral band: when both a floor and a ceiling
+    // are set (non-zero), the floor must sit below the ceiling.
+    const floor = parseCurrency(scenario.floorBalance);
+    const ceiling = parseCurrency(scenario.ceilingBalance);
+    if (floor > 0 && ceiling > 0 && floor >= ceiling) {
+      errors.push('Floor Balance must be less than Ceiling Balance.');
+    }
   }
 
   const total = ALLOCATION_KEYS.reduce((sum, k) => sum + (scenario[k] || 0), 0);

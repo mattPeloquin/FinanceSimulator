@@ -215,6 +215,70 @@ describe('front-loaded spending', () => {
   });
 });
 
+describe('balance-based spending scale', () => {
+  // Deterministic engine (zero-variance, zero-return assets) with dynamic
+  // adjustments enabled but neutral anchors, so only the scale acts.
+  function scaleParams() {
+    return {
+      numYears: 1,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1_000_000, base: 100_000, floorBalance: 2_000_000, floorPenalty: 0.5,
+        ceilingBalance: Infinity, ceilingBonus: 0,
+        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0, withdrawalFloor: 0,
+      },
+      dynConfig: {
+        enabled: true,
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+    };
+  }
+
+  it('ramps spending down below the floor', () => {
+    // Balance $1M with a $2M floor -> multiplier 1 - 0.5 * 0.5 = 0.75.
+    const s = simulatePath(scaleParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(75_000, 3);
+  });
+
+  it('never scales below the minimum withdrawal backstop', () => {
+    const p = scaleParams();
+    p.portfolio.floorPenalty = 1; // multiplier 0.5 -> 50k target...
+    p.portfolio.withdrawalFloor = 60_000; // ...but the backstop lifts it back.
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(60_000, 3);
+  });
+
+  it('ramps spending up above the ceiling with no cap', () => {
+    const p = scaleParams();
+    p.portfolio.start = 10_000_000;
+    p.portfolio.floorBalance = 0;
+    p.portfolio.ceilingBalance = 5_000_000;
+    p.portfolio.ceilingBonus = 0.5; // 10M = 2x ceiling -> multiplier 1.5
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(150_000, 3);
+  });
+
+  it('keeps the unadjusted plan free of scaling', () => {
+    const s = simulatePath(scaleParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.unadjustedWithdrawals[0]).toBeCloseTo(100_000, 3);
+  });
+});
+
 describe('deposits from negative withdrawals', () => {
   function flatParams() {
     return {

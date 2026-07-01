@@ -114,7 +114,7 @@ The core engine (`src/core/simulation.js`) simulates one "possible future" at a 
    - **Historical resampling:** grabs real years from your chosen range, in short consecutive "blocks" (block bootstrapping), so crash-then-recovery patterns from actual history are preserved. The block size slider controls how long those runs of consecutive years are.
    - **Log-normal model:** draws statistically generated returns based on the mean/volatility profiles, using the historical **correlation between asset classes** (so stocks and bonds still move together the way they did in real life) and year-to-year smoothing controlled by the same block-size setting.
 2. **Grows the portfolio** by that year's inflation-adjusted (real) return, weighted by your asset allocation.
-3. **Figures out this year's withdrawal**, starting from your base plan (or a pasted year-by-year list), then applying front-loading ("go-go years" bonus and spending drift), dynamic adjustments based on market performance and balance triggers, guardrail penalties/bonuses, and any minimum withdrawal floor (`src/core/withdrawal.js`).
+3. **Figures out this year's withdrawal**, starting from your base plan (or a pasted year-by-year list), then applying front-loading ("go-go years" bonus and spending drift), dynamic adjustments based on market performance and balance triggers, a smooth balance-based spending scale (spending gradually ramps down as the balance falls below your floor, and ramps up without limit as it grows past your ceiling — a live mini chart next to those inputs shows the exact curve you've configured), and any minimum withdrawal floor (`src/core/withdrawal.js`).
 4. **Subtracts the withdrawal** and records whether the portfolio ran out of money (the "depletion year").
 
 This is repeated for every year in your horizon, and the whole thing is repeated for every simulation (10,000 by default).
@@ -145,8 +145,8 @@ The results section (`src/ui/results.js` and `src/ui/charts/`) renders:
 
 | Visualization | What it shows |
 |---|---|
-| **Headline cards** | Success rate, median end balance, median total withdrawn. |
-| **Percentile cards** | Total withdrawn, end balance, and average return for the 10th–60th percentile outcomes. |
+| **Headline cards** | Success rate, median end balance, median total withdrawn, and the planned total withdrawal (what your base schedule would pay out before any dynamic adjustments). |
+| **Percentile cards** | Total withdrawn, end balance (with the year it ended — or the year the money ran out, shown in red), and average return for the 10th–60th percentile outcomes, plus a green/red delta showing how much more (or less) than the plan each outcome withdrew. |
 | **Portfolio Balance Timeline** (Chart.js line chart) | Year-by-year balance for the six percentile paths on a logarithmic scale. Point markers encode each year's market: circles for up years, upside-down triangles for down years, sized by how big the move was. |
 | **3D "Explore specific paths" chart** (ECharts GL, loaded lazily only when needed) | ~200 representative paths as a 3D landscape — percentile across, years going back, balance as column height. Color shows that year's market return (red = crash, green = boom); paths that ran out of money are drawn in orange. Click a column to pin one simulation and inspect it year by year, including a pop-out chart comparing actual withdrawals against the original plan. |
 | **Dynamic Withdrawals Timeline** (collapsible) | How the yearly withdrawal amounts flexed up or down over time for each percentile path. |

@@ -111,6 +111,10 @@ self.onmessage = (e) => {
 
     const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
 
+    // The planned (unadjusted) withdrawal schedule ignores market returns, so it
+    // is identical in every run — sum it once from the p50 path already in hand.
+    const plannedWithdrawn = percentiles.p50.path.unadjustedWithdrawals.reduce((a, b) => a + b, 0);
+
     self.postMessage({
       type: 'done',
       result: {
@@ -120,6 +124,7 @@ self.onmessage = (e) => {
         successRate: successRate(result.depletionYear, numYears),
         medianBalance: median(result.finalBalance),
         medianWithdrawn: median(result.totalWithdrawn),
+        plannedWithdrawn,
         percentiles,
         surfacePaths,
         histogram,

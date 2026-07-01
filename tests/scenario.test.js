@@ -123,6 +123,21 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('Dynamic adjustment'))).toBe(true);
   });
 
+  it('flags a floor balance at or above the ceiling balance', () => {
+    const s = defaultScenario();
+    s.floorBalance = 5000;
+    s.ceilingBalance = 5000;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Floor Balance'))).toBe(true);
+  });
+
+  it('allows a floor with no ceiling (ceiling = 0)', () => {
+    const s = defaultScenario();
+    s.floorBalance = 5000;
+    s.ceilingBalance = 0;
+    expect(validateScenario(s, range)).toEqual([]);
+  });
+
   it('ignores trigger ordering when dynamic adjustments are disabled', () => {
     const s = defaultScenario();
     s.enableDynamicAdjustments = false;

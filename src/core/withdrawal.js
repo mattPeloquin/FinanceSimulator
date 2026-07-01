@@ -23,9 +23,8 @@ export function getDynamicAdjustment(nominalReturnPercent, dynConfig) {
 }
 
 // Resolve the final additional withdrawal adjustment for a given year, applying
-// (1) the market-return curve, (2) absolute balance overrides, and
-// (3) floor/ceiling guardrails. Mirrors the original engine's ordering exactly.
-export function resolveAdjustment(balance, nominalReturnPercent, portfolio, dynConfig) {
+// (1) the market-return curve and (2) absolute balance overrides.
+export function resolveAdjustment(balance, nominalReturnPercent, dynConfig) {
   let adjAmount = getDynamicAdjustment(nominalReturnPercent, dynConfig);
 
   // Balance triggers override the annual market trigger.
@@ -37,12 +36,34 @@ export function resolveAdjustment(balance, nominalReturnPercent, portfolio, dynC
     adjAmount = Math.max(adjAmount, dynConfig.med.adj);
   }
 
-  // Guardrails apply only to the additional adjustment amount.
-  if (balance < portfolio.floorBalance) {
-    adjAmount -= Math.abs(adjAmount) * portfolio.floorPenalty;
-  } else if (balance > portfolio.ceilingBalance) {
-    adjAmount += Math.abs(adjAmount) * portfolio.ceilingBonus;
+  return adjAmount;
+}
+
+// Smooth balance-based spending scale (multiplier on the TOTAL withdrawal).
+// Instead of a cliff at the floor/ceiling thresholds, spending ramps gradually:
+//
+//   - Between floor and ceiling the multiplier is exactly 1 (no effect).
+//   - Below the floor it slides down linearly, reaching (1 - floorPenalty)
+//     when the balance hits $0. E.g. floor $2M / penalty 50%: at $1M the
+//     multiplier is 0.75, approaching 0.5 as the money runs out.
+//   - Above the ceiling it climbs linearly and WITHOUT any cap, adding
+//     ceilingBonus for every additional multiple of the ceiling. E.g. ceiling
+//     $5M / bonus 50%: at $10M the multiplier is 1.5, at $15M it is 2.0.
+//
+// A floor of 0 disables the down-ramp; a ceiling of 0/Infinity disables the
+// up-ramp. The result is clamped at 0 so spending can never flip into a deposit.
+export function balanceScaleMultiplier(balance, portfolio) {
+  const { floorBalance, floorPenalty, ceilingBalance, ceilingBonus } = portfolio;
+
+  if (floorBalance > 0 && floorPenalty > 0 && balance < floorBalance) {
+    const shortfallFraction = 1 - balance / floorBalance; // 0 at the floor, 1 at $0
+    return Math.max(0, 1 - floorPenalty * shortfallFraction);
   }
 
-  return adjAmount;
+  if (Number.isFinite(ceilingBalance) && ceilingBalance > 0 && ceilingBonus > 0 && balance > ceilingBalance) {
+    const surplusMultiples = balance / ceilingBalance - 1; // 0 at the ceiling, 1 at 2x ceiling
+    return 1 + ceilingBonus * surplusMultiples;
+  }
+
+  return 1;
 }

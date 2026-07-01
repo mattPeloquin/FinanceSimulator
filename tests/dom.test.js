@@ -57,6 +57,8 @@ const REQUIRED_IDS = [
   'successRate',
   'medianBalance',
   'medianWithdrawn',
+  'plannedWithdrawn',
+  'guardrailPreviewChart',
   'balanceChart',
   'withdrawalChart',
   'resultsChart',
@@ -65,7 +67,7 @@ const REQUIRED_IDS = [
 
 const PERCENTILE_CARD_IDS = [];
 for (const p of ['p10', 'p20', 'p30', 'p40', 'p50', 'p60']) {
-  PERCENTILE_CARD_IDS.push(`${p}Wd`, `${p}Bal`, `${p}Ret`);
+  PERCENTILE_CARD_IDS.push(`${p}Wd`, `${p}Delta`, `${p}Bal`, `${p}EndYear`, `${p}Ret`);
 }
 
 function hasId(id) {

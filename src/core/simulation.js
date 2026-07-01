@@ -2,7 +2,7 @@
 // and be unit-tested directly.
 
 import { createRng, deriveSeed } from './rng.js';
-import { resolveAdjustment } from './withdrawal.js';
+import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
 
 const DEPLETION_EPSILON = 1e-6;
 
@@ -135,7 +135,7 @@ export function simulatePath(params, rng, collectPath = false) {
     balance = balance * (1 + realReturn);
 
     const adjAmount = dynConfig.enabled 
-      ? resolveAdjustment(balance, portfolioReturn * 100, portfolio, dynConfig) 
+      ? resolveAdjustment(balance, portfolioReturn * 100, dynConfig) 
       : 0;
 
     let targetWithdrawal;
@@ -157,6 +157,14 @@ export function simulatePath(params, rng, collectPath = false) {
         targetWithdrawal += portfolio.goGoBonus;
         unadjustedTarget += portfolio.goGoBonus;
       }
+    }
+
+    // Balance-based spending scale: smoothly cut the whole withdrawal as the
+    // balance slides below the floor, or boost it as wealth grows past the
+    // ceiling. Deposits (negative targets) are never scaled, and the minimum
+    // withdrawal below still acts as the backstop after scaling.
+    if (dynConfig.enabled && targetWithdrawal > 0) {
+      targetWithdrawal *= balanceScaleMultiplier(balance, portfolio);
     }
 
     if (baseVal >= 0 && targetWithdrawal < 0) {

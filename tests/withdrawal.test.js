@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getDynamicAdjustment, resolveAdjustment } from '../src/core/withdrawal.js';
+import { getDynamicAdjustment, resolveAdjustment, balanceScaleMultiplier } from '../src/core/withdrawal.js';
 
 const dynConfig = {
   low: { ret: -15, bal: 1_000_000, adj: 0 },
@@ -52,6 +52,22 @@ describe('getDynamicAdjustment', () => {
 });
 
 describe('resolveAdjustment', () => {
+  it('forces low adj when balance is below the low balance override', () => {
+    expect(resolveAdjustment(500_000, 30, dynConfig)).toBe(0);
+  });
+
+  it('raises the adjustment via the med balance override', () => {
+    // balance 6M (> med.bal 5M): market 30% -> high.adj 200k, med override keeps max.
+    expect(resolveAdjustment(6_000_000, 30, dynConfig)).toBeCloseTo(200_000, 6);
+  });
+
+  it('raises the adjustment via the high balance override even in a crash', () => {
+    // balance 9M (> high.bal 8M): market -30% -> low.adj 0, override lifts to high.adj.
+    expect(resolveAdjustment(9_000_000, -30, dynConfig)).toBeCloseTo(200_000, 6);
+  });
+});
+
+describe('balanceScaleMultiplier', () => {
   const portfolio = {
     floorBalance: 2_000_000,
     floorPenalty: 0.5,
@@ -59,22 +75,33 @@ describe('resolveAdjustment', () => {
     ceilingBonus: 0.5,
   };
 
-  it('forces low adj when balance is below the low balance override', () => {
-    // balance below 1M -> forced to low.adj (0), guardrail floor also applies but |0| => 0.
-    expect(resolveAdjustment(500_000, 30, portfolio, dynConfig)).toBe(0);
+  it('is neutral (1x) between the floor and the ceiling', () => {
+    expect(balanceScaleMultiplier(2_000_000, portfolio)).toBe(1);
+    expect(balanceScaleMultiplier(3_500_000, portfolio)).toBe(1);
+    expect(balanceScaleMultiplier(5_000_000, portfolio)).toBe(1);
   });
 
-  it('applies the floor penalty between low-bal and floor', () => {
-    // balance 1.5M (above 1M override, below 2M floor), high market return.
-    // market 30% -> high.adj 200k; floor penalty cuts 50% -> 100k.
-    const adj = resolveAdjustment(1_500_000, 30, portfolio, dynConfig);
-    expect(adj).toBeCloseTo(100_000, 6);
+  it('ramps down smoothly below the floor, reaching the max cut at $0', () => {
+    // Halfway to broke -> half the penalty applied.
+    expect(balanceScaleMultiplier(1_000_000, portfolio)).toBeCloseTo(0.75, 9);
+    expect(balanceScaleMultiplier(0, portfolio)).toBeCloseTo(0.5, 9);
   });
 
-  it('applies the ceiling bonus above the ceiling balance', () => {
-    // balance 6M (> high.bal 8M? no; > med.bal 5M yes) market 30% -> base high.adj 200k,
-    // balance override med raises to max(200k,100k)=200k; ceiling (>5M) adds 50% -> 300k.
-    const adj = resolveAdjustment(6_000_000, 30, portfolio, dynConfig);
-    expect(adj).toBeCloseTo(300_000, 6);
+  it('ramps up above the ceiling without any cap', () => {
+    // One extra ceiling-multiple -> full bonus; keeps growing beyond that.
+    expect(balanceScaleMultiplier(10_000_000, portfolio)).toBeCloseTo(1.5, 9);
+    expect(balanceScaleMultiplier(20_000_000, portfolio)).toBeCloseTo(2.5, 9);
+  });
+
+  it('clamps at zero when the penalty exceeds 100%', () => {
+    const harsh = { ...portfolio, floorPenalty: 2 };
+    expect(balanceScaleMultiplier(0, harsh)).toBe(0);
+  });
+
+  it('disables each ramp when its threshold is unset', () => {
+    const noFloor = { ...portfolio, floorBalance: 0 };
+    expect(balanceScaleMultiplier(100_000, noFloor)).toBe(1);
+    const noCeiling = { ...portfolio, ceilingBalance: Infinity };
+    expect(balanceScaleMultiplier(50_000_000, noCeiling)).toBe(1);
   });
 });
