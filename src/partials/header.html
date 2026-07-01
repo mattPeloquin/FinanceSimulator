@@ -1,0 +1,18 @@
+<!-- Header Section -->
+<div class="flex items-start justify-between gap-4 flex-wrap">
+    <div class="flex-1 min-w-[260px]">
+        <h1 class="text-3xl font-bold text-slate-900 text-center">Sequence of Returns Simulator</h1>
+        <p class="text-slate-600 text-center mt-2">Monte Carlo analysis of returns, inflation, and dynamic withdrawals.</p>
+    </div>
+    <!-- Session controls -->
+    <div id="session-controls" class="flex items-center gap-2 text-sm">
+        <select id="sessionSelect" class="rounded-md border-slate-300 shadow-sm text-sm p-2 max-w-[180px]">
+            <option value="">Unsaved session</option>
+        </select>
+        <button id="saveSessionButton" class="bg-slate-600 text-white font-semibold rounded-lg shadow-sm hover:bg-slate-700 px-3 py-2 transition-all">Save</button>
+        <button id="deleteSessionButton" class="bg-white border border-slate-300 text-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-50 px-3 py-2 transition-all">Delete</button>
+        <button id="exportSessionButton" class="bg-white border border-slate-300 text-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-50 px-3 py-2 transition-all">Export</button>
+        <button id="importSessionButton" class="bg-white border border-slate-300 text-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-50 px-3 py-2 transition-all">Import</button>
+        <input type="file" id="importFileInput" accept="application/json" class="hidden">
+    </div>
+</div>

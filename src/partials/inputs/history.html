@@ -1,0 +1,16 @@
+<!-- Historical Data Section -->
+<div class="space-y-4 p-4 border rounded-lg bg-slate-50">
+    <h3 class="font-semibold text-slate-800">Historical Data Range</h3>
+    <p class="text-sm text-slate-600">Charts and profiles update automatically as you adjust the range.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+        <div>
+            <label for="startYear" class="block text-sm font-medium text-slate-700">Start Year</label>
+            <input type="number" id="startYear" value="1928" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+        </div>
+        <div>
+            <label for="endYear" class="block text-sm font-medium text-slate-700">End Year</label>
+            <input type="number" id="endYear" value="2025" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+        </div>
+    </div>
+    <p id="historical-range-msg" class="text-xs text-slate-500 text-center mt-2"></p>
+</div>

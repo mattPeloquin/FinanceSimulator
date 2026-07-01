@@ -1,0 +1,77 @@
+<!-- Allocation rows + mini charts (continues the Asset Allocation section) -->
+<div class="pt-4">
+    <div class="space-y-1 p-3 border rounded-lg bg-slate-50/50">
+        <!-- Asset Allocation (with historical data range) -->
+        <h3 class="text-lg font-semibold text-slate-700 mb-4"
+        >Asset Allocation</h3>
+
+        <!-- Year Labels Row -->
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2">
+            <div></div>
+            <div id="year-labels" class="flex justify-between text-xs text-slate-400 px-1"></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+            <div class="col-span-1">
+                <label for="usLgGrowthAllocation" class="block text-xs font-medium text-slate-700 leading-tight">US Lg Growth</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="usLgGrowthAllocation" value="35" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="us-lg-growth-mini-chart"></canvas></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+            <div class="col-span-1">
+                <label for="usLgValueAllocation" class="block text-xs font-medium text-slate-700 leading-tight">US Lg Value</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="usLgValueAllocation" value="25" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="us-lg-value-mini-chart"></canvas></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+            <div class="col-span-1">
+                <label for="usSmMidAllocation" class="block text-xs font-medium text-slate-700 leading-tight">US Sm/Mid</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="usSmMidAllocation" value="15" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="us-sm-mid-mini-chart"></canvas></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+            <div class="col-span-1">
+                <label for="exUsAllocation" class="block text-xs font-medium text-slate-700 leading-tight">ex-US Stocks</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="exUsAllocation" value="15" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="ex-us-mini-chart"></canvas></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+            <div class="col-span-1">
+                <label for="bondAllocation" class="block text-xs font-medium text-slate-700 leading-tight">Bonds</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="bondAllocation" value="0" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="bond-mini-chart"></canvas></div>
+        </div>
+        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
+           <div class="col-span-1">
+                <label for="cashAllocation" class="block text-xs font-medium text-slate-700 leading-tight">Cash</label>
+                <div class="input-adorned has-suffix mt-1">
+                    <input type="number" id="cashAllocation" value="10" class="allocation-input block w-16 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <span class="input-adorn-suffix">%</span>
+                </div>
+            </div>
+            <div class="h-16"><canvas id="cash-mini-chart"></canvas></div>
+        </div>
+        <div class="text-left pt-1">
+            <p class="text-xs font-semibold">Total: <span id="totalAllocation">100</span>%</p>
+        </div>
+    </div>
+</div>
