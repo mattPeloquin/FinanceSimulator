@@ -204,6 +204,7 @@ function extractWithdrawalSeries(col) {
   const labels = [];
   const actualData = [];
   const unadjustedData = [];
+  const balanceData = [];
   let totalUnadjusted = 0;
   for (const p of points) {
     const vals = pointValue(p);
@@ -211,6 +212,7 @@ function extractWithdrawalSeries(col) {
     labels.push(vals[1]);
     actualData.push(vals[5]);
     unadjustedData.push(vals[8]);
+    balanceData.push(vals[4]);
     totalUnadjusted += vals[8];
   }
 
@@ -219,6 +221,7 @@ function extractWithdrawalSeries(col) {
     labels,
     actualData,
     unadjustedData,
+    balanceData,
     totalUnadjusted,
     total: points[0] ? pointValue(points[0])[6] : 0,
     avg: points[0] ? pointValue(points[0])[7] : 0,
@@ -343,6 +346,46 @@ function showFloatWithdrawal(col) {
 }
 
 let largeChart = null;
+let largeBalanceChart = null;
+
+function balanceBarColors(series) {
+  const okBar = 'rgba(22, 163, 74, 0.72)';
+  const depletedBar = 'rgba(234, 88, 12, 0.72)';
+  const zeroBar = 'rgba(234, 88, 12, 0.35)';
+  const activeBar = series.depleted ? depletedBar : okBar;
+  return series.balanceData.map((balance) => (balance <= 0 ? zeroBar : activeBar));
+}
+
+function balanceBarOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: {
+        title: { display: true, text: 'Year' },
+        grid: { display: false },
+      },
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Balance ($)' },
+        ticks: { callback: (v) => formatK(v), maxTicksLimit: 4 },
+        grid: { color: 'rgba(148,163,184,0.2)' },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        displayColors: false,
+        callbacks: {
+          title: () => null,
+          label: (ctx) => `Balance: ${formatK(ctx.raw)}`,
+        },
+      },
+    },
+  };
+}
 
 function openLargeWithdrawalChart(col) {
   const dialog = document.getElementById('withdrawalChartDialog');
@@ -365,6 +408,7 @@ function openLargeWithdrawalChart(col) {
   if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${(series.avg * 100).toFixed(2)}%`;
 
   const canvas = document.getElementById('largeWithdrawalCanvas');
+  const balanceCanvas = document.getElementById('largeBalanceCanvas');
   const theme = series.depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
 
   if (largeChart) {
@@ -384,7 +428,8 @@ function openLargeWithdrawalChart(col) {
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: {
-            title: { display: true, text: 'Year' },
+            title: { display: false },
+            ticks: { display: false },
             grid: { display: false },
           },
           y: {
@@ -407,6 +452,28 @@ function openLargeWithdrawalChart(col) {
           },
         },
       },
+    });
+  }
+
+  if (largeBalanceChart) {
+    largeBalanceChart.data.labels = series.labels;
+    largeBalanceChart.data.datasets[0].data = series.balanceData;
+    largeBalanceChart.data.datasets[0].backgroundColor = balanceBarColors(series);
+    largeBalanceChart.update();
+  } else if (balanceCanvas) {
+    largeBalanceChart = new Chart(balanceCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: series.labels,
+        datasets: [{
+          label: 'Balance',
+          data: series.balanceData,
+          backgroundColor: balanceBarColors(series),
+          borderWidth: 0,
+          borderRadius: 2,
+        }],
+      },
+      options: balanceBarOptions(),
     });
   }
 
