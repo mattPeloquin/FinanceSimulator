@@ -8,10 +8,10 @@
 
     <!-- 3D Column Chart -->
     <div class="pt-4 border-t">
-        <h3 class="text-lg font-semibold text-slate-700 mb-2"
+        <h3 id="surfaceChartTitle" class="text-lg font-semibold text-slate-700 mb-2"
         >Explore specific paths</h3>
-        <p class="text-sm text-slate-500 mb-4"
-            >A 3D plot of representative paths from the 10th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release.</p>
+        <p id="surfaceChartDescription" class="text-sm text-slate-500 mb-4"
+            >A 3D plot of representative paths from the 10th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.</p>
         <div id="surfaceChart" class="h-[420px] w-full rounded-lg overflow-hidden border border-slate-200 bg-slate-100"></div>
     </div>
 

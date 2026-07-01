@@ -53,7 +53,7 @@ function setEndYear(id, balances, numYears) {
   }
 }
 
-export function renderResults(result) {
+export function renderResults(result, params) {
   setText('successRate', formatPercent(result.successRate, 1));
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianWithdrawn', formatK(result.medianWithdrawn));
@@ -71,7 +71,11 @@ export function renderResults(result) {
   drawTimelineCharts(result.percentiles, result.numYears);
   drawDistributionChart(result.histogram);
   // 3D chart loads its heavy libs lazily; don't block the rest of the render.
-  drawSurfaceChart(result.surfacePaths, result.numYears).catch((err) => {
+  drawSurfaceChart(result.surfacePaths, result.numYears, {
+    params,
+    seed: result.seed,
+    surfaceMeta: result.surfaceMeta,
+  }).catch((err) => {
     console.error('3D chart failed to render:', err);
   });
 }

@@ -127,6 +127,13 @@ self.onmessage = (e) => {
         plannedWithdrawn,
         percentiles,
         surfacePaths,
+        surfaceMeta: {
+          numSimulations: n,
+          rankW,
+          p10Rank: p10i,
+          p60Rank: p60i,
+          surfaceSamples: SURFACE_SAMPLES,
+        },
         histogram,
       },
     });

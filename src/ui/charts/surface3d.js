@@ -2,6 +2,11 @@
 // lazy-loaded (dynamic import) the first time this chart is drawn.
 import { formatK } from '../format.js';
 import { Chart } from './chartSetup.js';
+import {
+  rankForOverviewColumn,
+  buildDrilldownPaths,
+  percentileLabelForRank,
+} from '../../core/surfaceDrilldown.js';
 
 let echartsModule = null;
 let chartInstance = null;
@@ -41,6 +46,12 @@ const FLOAT_THEME = {
   depleted: { line: '#ea580c', fill: 'rgba(249,115,22,0.2)', point: '#f97316' },
 };
 
+const CLICK_WAIT_MS = 400; // window to distinguish single vs double click (ECharts GL bar3D has no reliable dblclick)
+
+const OVERVIEW_TITLE = 'Explore specific paths';
+const OVERVIEW_DESCRIPTION =
+  'A 3D plot of representative paths from the 10th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
+
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
   columns: [], // columns[x] = array of data points for that simulation
@@ -48,10 +59,19 @@ const surfaceState = {
   barWidth: 1,
   barDepth: 1,
   zCap: 0,
+  numYears: 0,
   pinnedCol: null,
   largeChartCol: null,
   columnClickHandled: false,
   eventsBound: false,
+  viewMode: 'overview',
+  overviewPaths: [],
+  simParams: null,
+  seed: 0,
+  surfaceMeta: null,
+  drilldownCenterRank: null,
+  drilldownLo: null,
+  drilldownHi: null,
 };
 
 async function loadEcharts() {
@@ -114,6 +134,62 @@ function pathDepleted(balances) {
 function percentileLabel(col, numCols) {
   const fraction = numCols > 1 ? col / (numCols - 1) : 0;
   return 'P' + Math.round(10 + fraction * 50);
+}
+
+const DRILLDOWN_PERCENTILE_DECIMALS = 2;
+
+function columnPercentileLabel(col, numCols) {
+  if (surfaceState.viewMode === 'drilldown' && surfaceState.surfaceMeta) {
+    const { drilldownLo, drilldownHi } = surfaceState;
+    const n = surfaceState.surfaceMeta.numSimulations;
+    const rank = numCols > 1
+      ? drilldownLo + (col / (numCols - 1)) * (drilldownHi - drilldownLo)
+      : drilldownLo;
+    return percentileLabelForRank(rank, n, DRILLDOWN_PERCENTILE_DECIMALS);
+  }
+  return percentileLabel(col, numCols);
+}
+
+function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
+  const titleEl = document.getElementById('surfaceChartTitle');
+  const descEl = document.getElementById('surfaceChartDescription');
+  if (!titleEl || !descEl) return;
+
+  if (mode === 'drilldown' && surfaceState.surfaceMeta) {
+    const centerLabel = percentileLabelForRank(centerRank, n);
+    const loLabel = percentileLabelForRank(lo, n, DRILLDOWN_PERCENTILE_DECIMALS);
+    const hiLabel = percentileLabelForRank(hi, n, DRILLDOWN_PERCENTILE_DECIMALS);
+    titleEl.textContent = `Explore paths near ${centerLabel}`;
+    descEl.innerHTML =
+      `Showing ~200 simulations with total-withdrawn ranks between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
+      'Column height represents portfolio balance; color reflects each year\'s market return. ' +
+      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P10–P60 overview.';
+    return;
+  }
+
+  titleEl.textContent = OVERVIEW_TITLE;
+  descEl.innerHTML = OVERVIEW_DESCRIPTION;
+}
+
+function buildXAxisConfig(numCols) {
+  const isDrilldown = surfaceState.viewMode === 'drilldown';
+  const n = surfaceState.surfaceMeta?.numSimulations;
+  const centerLabel = isDrilldown && n != null
+    ? percentileLabelForRank(surfaceState.drilldownCenterRank, n)
+    : null;
+
+  return axisConfig(isDrilldown ? `Percentile (near ${centerLabel})` : 'Percentile', {
+    min: 0,
+    max: numCols - 1,
+    splitNumber: 5,
+    axisLabel: {
+      show: true,
+      color: AXIS_LABEL_COLOR,
+      fontSize: 9,
+      margin: 4,
+      formatter: (v) => columnPercentileLabel(v, numCols),
+    },
+  });
 }
 
 function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, unadjusted) {
@@ -315,7 +391,7 @@ function showFloatWithdrawal(col) {
   const series = extractWithdrawalSeries(col);
   if (!floatPanel || !series) return;
 
-  const pLabel = percentileLabel(col, surfaceState.columns.length);
+  const pLabel = columnPercentileLabel(col, surfaceState.columns.length);
   const status = series.depleted ? 'Depleted' : 'Funded';
   floatTitle.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -396,7 +472,7 @@ function openLargeWithdrawalChart(col) {
   const series = extractWithdrawalSeries(col);
   if (!series) return;
 
-  const pLabel = percentileLabel(col, surfaceState.columns.length);
+  const pLabel = columnPercentileLabel(col, surfaceState.columns.length);
 
   const title = document.getElementById('withdrawalChartDialogTitle');
   if (title) title.textContent = `Withdrawal Analysis - ${pLabel}`;
@@ -547,17 +623,76 @@ function applyFocus() {
   showFloatWithdrawal(col);
 }
 
+function handleSurfaceSingleClick(col) {
+  surfaceState.pinnedCol = surfaceState.pinnedCol === col ? null : col;
+  surfaceState.columnClickHandled = true;
+  applyFocus();
+}
+
+function handleSurfaceDoubleClick(col) {
+  surfaceState.columnClickHandled = true;
+  surfaceState.pinnedCol = null;
+  hideFloatPanel();
+  if (surfaceState.viewMode === 'overview') {
+    enterDrilldown(col);
+  } else {
+    exitDrilldown();
+  }
+}
+
 function bindEvents() {
   if (surfaceState.eventsBound || !chartInstance) return;
 
-  // Single-click a column to pin it popped-up so you can mouse over each year
-  // to read its values; click the same column again to release.
+  let singleClickTimer = null;
+  let pendingClickCol = null;
+  let lastClickCol = null;
+  let lastDoubleClickAt = 0;
+
+  const cancelPendingSingleClick = () => {
+    if (singleClickTimer) {
+      clearTimeout(singleClickTimer);
+      singleClickTimer = null;
+    }
+  };
+
+  const isSameColumn = (a, b) => a != null && b != null && Math.abs(a - b) <= 1;
+
+  const runDoubleClick = (col) => {
+    const now = Date.now();
+    if (now - lastDoubleClickAt < 300) return;
+    lastDoubleClickAt = now;
+    cancelPendingSingleClick();
+    pendingClickCol = null;
+    surfaceState.columnClickHandled = true;
+    handleSurfaceDoubleClick(col);
+  };
+
   chartInstance.on('click', (params) => {
     if (!params || !params.value) return;
-    const col = pointValue(params.value)[0];
-    surfaceState.pinnedCol = surfaceState.pinnedCol === col ? null : col;
+    // Must be set before the zr click handler runs, or it clears our pending click.
     surfaceState.columnClickHandled = true;
-    applyFocus();
+    const col = Math.round(pointValue(params.value)[0]);
+    lastClickCol = col;
+
+    if (isSameColumn(pendingClickCol, col)) {
+      runDoubleClick(pendingClickCol);
+      return;
+    }
+
+    pendingClickCol = col;
+    cancelPendingSingleClick();
+    singleClickTimer = setTimeout(() => {
+      singleClickTimer = null;
+      pendingClickCol = null;
+      handleSurfaceSingleClick(col);
+    }, CLICK_WAIT_MS);
+  });
+
+  // Fallback when two series clicks do not land on the exact same column index.
+  chartInstance.getZr().on('dblclick', () => {
+    const col = pendingClickCol ?? lastClickCol;
+    if (col == null) return;
+    runDoubleClick(col);
   });
 
   // Any click that does NOT land on a column unpins. The series 'click' above
@@ -567,6 +702,9 @@ function bindEvents() {
       surfaceState.columnClickHandled = false;
       return;
     }
+    cancelPendingSingleClick();
+    pendingClickCol = null;
+    lastClickCol = null;
     if (surfaceState.pinnedCol != null) {
       surfaceState.pinnedCol = null;
       applyFocus();
@@ -576,27 +714,12 @@ function bindEvents() {
   surfaceState.eventsBound = true;
 }
 
-export async function drawSurfaceChart(surfacePaths, numYears) {
-  const echarts = await loadEcharts();
-  const dom = document.getElementById('surfaceChart');
-  if (!chartInstance) {
-    chartInstance = echarts.init(dom);
-    dom.oncontextmenu = (e) => e.preventDefault();
-    if (import.meta.env.DEV) {
-      // Exposed for quick camera-angle inspection from the console:
-      //   __SOR_SURFACE__.getOption().grid3D[0].viewControl
-      window.__SOR_SURFACE__ = chartInstance;
-    }
-  }
-
+function buildColumnsFromPaths(surfacePaths, numYears) {
   const numCols = surfacePaths.length;
   const numRows = numYears + 1;
-
-  // Every path starts from the same portfolio value; cap the Z axis at 2x it.
   const startBalance = surfacePaths[0] ? surfacePaths[0].balances[0] : 0;
   const zCap = startBalance * Z_CAP_MULTIPLE;
 
-  // Data dims: [x, y, cappedHeight, return, realBalance, withdrawal, totalWithdrawn, avgReturn]
   const data3D = [];
   const columns = [];
   const depletedCols = [];
@@ -620,11 +743,123 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
     columns.push(colPoints);
   }
 
-  // Size each column to exactly fill its cell so there is no gap between them.
   const barWidth = BOX_WIDTH / numCols;
   const barDepth = BOX_DEPTH / numRows;
 
-  // Reset interaction state for the new dataset.
+  return { data3D, columns, depletedCols, zCap, barWidth, barDepth, numCols };
+}
+
+function applySurfaceDataset(surfacePaths, numYears) {
+  if (!chartInstance) return;
+
+  const { data3D, columns, depletedCols, zCap, barWidth, barDepth, numCols } =
+    buildColumnsFromPaths(surfacePaths, numYears);
+
+  surfaceState.columns = columns;
+  surfaceState.depletedCols = depletedCols;
+  surfaceState.barWidth = barWidth;
+  surfaceState.barDepth = barDepth;
+  surfaceState.zCap = zCap;
+  surfaceState.numYears = numYears;
+  surfaceState.pinnedCol = null;
+  surfaceState.columnClickHandled = false;
+  hideFloatPanel();
+
+  chartInstance.setOption({
+    xAxis3D: buildXAxisConfig(numCols),
+    zAxis3D: {
+      min: 0,
+      max: zCap,
+      axisLabel: { show: true, color: AXIS_LABEL_COLOR, fontSize: 9, margin: 4, formatter: (v) => formatK(v) },
+    },
+    series: [
+      {
+        name: 'paths',
+        data: data3D,
+        barSize: [barWidth, barDepth],
+        itemStyle: { opacity: 1 },
+        silent: false,
+      },
+      {
+        name: 'focus',
+        data: [],
+        barSize: [barWidth, barDepth],
+        itemStyle: { opacity: 1 },
+        silent: false,
+      },
+    ],
+  });
+}
+
+function enterDrilldown(col) {
+  if (!surfaceState.surfaceMeta || !surfaceState.simParams) {
+    console.warn('3D drill-down unavailable: simulation metadata missing. Re-run the simulation.');
+    return;
+  }
+
+  const centerRank = rankForOverviewColumn(col, surfaceState.surfaceMeta);
+  const { paths, lo, hi, centerRank: resolvedCenter } = buildDrilldownPaths(
+    centerRank,
+    surfaceState.surfaceMeta,
+    surfaceState.simParams,
+    surfaceState.seed
+  );
+
+  surfaceState.viewMode = 'drilldown';
+  surfaceState.drilldownCenterRank = resolvedCenter;
+  surfaceState.drilldownLo = lo;
+  surfaceState.drilldownHi = hi;
+
+  applySurfaceDataset(paths, surfaceState.numYears);
+  updateSurfaceChrome({
+    mode: 'drilldown',
+    centerRank: resolvedCenter,
+    lo,
+    hi,
+    n: surfaceState.surfaceMeta.numSimulations,
+  });
+}
+
+function exitDrilldown() {
+  if (!surfaceState.overviewPaths.length) return;
+
+  surfaceState.viewMode = 'overview';
+  surfaceState.drilldownCenterRank = null;
+  surfaceState.drilldownLo = null;
+  surfaceState.drilldownHi = null;
+
+  applySurfaceDataset(surfaceState.overviewPaths, surfaceState.numYears);
+  updateSurfaceChrome({ mode: 'overview' });
+}
+
+export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
+  const echarts = await loadEcharts();
+  const dom = document.getElementById('surfaceChart');
+  if (!chartInstance) {
+    chartInstance = echarts.init(dom);
+    dom.oncontextmenu = (e) => e.preventDefault();
+    if (import.meta.env.DEV) {
+      // Exposed for quick camera-angle inspection from the console:
+      //   __SOR_SURFACE__.getOption().grid3D[0].viewControl
+      window.__SOR_SURFACE__ = chartInstance;
+    }
+  }
+
+  const { params = null, seed = 0, surfaceMeta = null } = context;
+
+  surfaceState.viewMode = 'overview';
+  surfaceState.overviewPaths = surfacePaths;
+  surfaceState.simParams = params;
+  surfaceState.seed = seed;
+  surfaceState.surfaceMeta = surfaceMeta;
+  surfaceState.drilldownCenterRank = null;
+  surfaceState.drilldownLo = null;
+  surfaceState.drilldownHi = null;
+  surfaceState.numYears = numYears;
+
+  const { data3D, columns, depletedCols, zCap, barWidth, barDepth, numCols } =
+    buildColumnsFromPaths(surfacePaths, numYears);
+
   surfaceState.columns = columns;
   surfaceState.depletedCols = depletedCols;
   surfaceState.barWidth = barWidth;
@@ -633,6 +868,7 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
   surfaceState.pinnedCol = null;
   surfaceState.columnClickHandled = false;
   hideFloatPanel();
+  updateSurfaceChrome({ mode: 'overview' });
 
   chartInstance.setOption(
     {
@@ -644,18 +880,7 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
         max: RETURN_MAX,
         inRange: { color: buildReturnColorRamp() },
       },
-      xAxis3D: axisConfig('Percentile', {
-        min: 0,
-        max: numCols - 1,
-        splitNumber: 5,
-        axisLabel: {
-          show: true,
-          color: AXIS_LABEL_COLOR,
-          fontSize: 9,
-          margin: 4,
-          formatter: (v) => percentileLabel(v, numCols),
-        },
-      }),
+      xAxis3D: buildXAxisConfig(numCols),
       yAxis3D: axisConfig('Year', { min: 0, max: numYears, splitNumber: 5, inverse: true }),
       zAxis3D: axisConfig('Balance', {
         min: 0,
@@ -679,8 +904,6 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
           panSensitivity: 1,
         },
         environment: SCENE_BG,
-        // Light from behind the opening camera view (matching its azimuth),
-        // lifted slightly above so the front faces are well lit.
         light: {
           main: { intensity: 1.2, shadow: false, alpha: 40, beta: 225 },
           ambient: { intensity: 0.35 },
@@ -700,7 +923,6 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
           emphasis: { label: { show: false } },
         },
         {
-          // Overlay used to highlight / blow up the focused simulation row.
           type: 'bar3D',
           name: 'focus',
           data: [],
@@ -719,10 +941,13 @@ export async function drawSurfaceChart(surfacePaths, numYears) {
 
   bindEvents();
 
-  if (import.meta.env.DEV) {
-    window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
-    window.__TEST_HOOKS__.surfaceChart = chartInstance;
-  }
+  window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+  window.__TEST_HOOKS__.surfaceChart = chartInstance;
+  window.__TEST_HOOKS__.surfaceViewMode = () => surfaceState.viewMode;
+  window.__TEST_HOOKS__.enterSurfaceDrilldown = (col) => enterDrilldown(col);
+  window.__TEST_HOOKS__.exitSurfaceDrilldown = () => exitDrilldown();
+  window.__TEST_HOOKS__.surfaceXAxisLabel = (col) =>
+    columnPercentileLabel(col, surfaceState.columns.length);
 
   if (!window.__sorSurfaceResizeBound) {
     window.addEventListener('resize', () => chartInstance && chartInstance.resize());

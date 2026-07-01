@@ -163,7 +163,7 @@ function runSimulation() {
     } else if (msg.type === 'done') {
       setLoading(false);
       document.getElementById('resultsSection').classList.remove('hidden');
-      renderResults(msg.result);
+      renderResults(msg.result, params);
       currentWorker.terminate();
       currentWorker = null;
     } else if (msg.type === 'error') {
