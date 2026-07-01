@@ -1,5 +1,7 @@
 # 📈 Personal Finance Simulator
 
+**[▶ Run the simulator now](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — open it in your browser, no install required.
+
 Welcome to the Sequence-of-Returns Finance Simulator! This is a powerful, interactive tool that helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market. 
 
 We built this project with two main goals: **keep it incredibly easy to use** and **keep it incredibly easy to deploy**.
