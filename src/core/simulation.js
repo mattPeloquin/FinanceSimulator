@@ -35,6 +35,7 @@ export function simulatePath(params, rng, collectPath = false) {
   const balances = collectPath ? [balance] : null;
   const withdrawals = collectPath ? [] : null;
   const returns = collectPath ? [] : null;
+  const unadjustedWithdrawals = collectPath ? [] : null;
 
   const sampleYears = samples ? samples.years : null;
   const sampleLen = sampleYears ? sampleYears.length : 0;
@@ -138,22 +139,35 @@ export function simulatePath(params, rng, collectPath = false) {
       : 0;
 
     let targetWithdrawal;
+    let unadjustedTarget;
     let baseVal;
     if (portfolio.strategy === 'specific') {
       const sp = portfolio.specificWithdrawals || [];
       baseVal = j < sp.length ? sp[j] : 0;
       targetWithdrawal = baseVal + adjAmount;
+      unadjustedTarget = baseVal;
     } else {
       baseVal = portfolio.base;
       // Front-loading: scale the whole target by an annual real-change factor (j=0 in
       // year one, so the first year is unscaled), then add a flat early-years bonus.
       const ageFactor = (1 + (portfolio.spendDrift || 0)) ** j;
       targetWithdrawal = (portfolio.base + adjAmount) * ageFactor;
-      if (j < portfolio.goGoYears) targetWithdrawal += portfolio.goGoBonus;
+      unadjustedTarget = portfolio.base * ageFactor;
+      if (j < portfolio.goGoYears) {
+        targetWithdrawal += portfolio.goGoBonus;
+        unadjustedTarget += portfolio.goGoBonus;
+      }
     }
 
     if (baseVal >= 0 && targetWithdrawal < 0) {
       targetWithdrawal = 0;
+    }
+    if (baseVal >= 0 && unadjustedTarget < 0) {
+      unadjustedTarget = 0;
+    }
+
+    if (unadjustedTarget >= 0 && portfolio.withdrawalFloor > 0) {
+      unadjustedTarget = Math.max(unadjustedTarget, portfolio.withdrawalFloor);
     }
 
     let actualWithdrawal;
@@ -177,6 +191,7 @@ export function simulatePath(params, rng, collectPath = false) {
 
     if (balances) balances.push(balance);
     if (withdrawals) withdrawals.push(actualWithdrawal);
+    if (unadjustedWithdrawals) unadjustedWithdrawals.push(unadjustedTarget);
   }
 
   const avgReturn = totalRealGrowthFactor ** (1 / numYears) - 1;
@@ -189,7 +204,7 @@ export function simulatePath(params, rng, collectPath = false) {
   };
 
   if (collectPath) {
-    summary.path = { balances, withdrawals, returns };
+    summary.path = { balances, withdrawals, returns, unadjustedWithdrawals };
   }
 
   return summary;

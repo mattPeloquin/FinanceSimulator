@@ -26,6 +26,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
   let balances = null;
   let withdrawals = null;
   let returns = null;
+  let unadjustedWithdrawals = null;
   let totalWithdrawn = 0;
   let finalBalance = 0;
   let avgReturn = 0;
@@ -40,6 +41,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
       balances = new Array(path.balances.length).fill(0);
       withdrawals = new Array(path.withdrawals.length).fill(0);
       returns = new Array(path.returns.length).fill(0);
+      unadjustedWithdrawals = path.unadjustedWithdrawals;
     }
     for (let t = 0; t < balances.length; t++) balances[t] += w * path.balances[t];
     for (let t = 0; t < withdrawals.length; t++) withdrawals[t] += w * path.withdrawals[t];
@@ -59,7 +61,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
     totalWithdrawn: totalWithdrawn / wSum,
     finalBalance: finalBalance / wSum,
     avgReturn: avgReturn / wSum,
-    path: { balances, withdrawals, returns },
+    path: { balances, withdrawals, returns, unadjustedWithdrawals },
     windowCount: hi - lo + 1,
   };
 }
@@ -101,6 +103,7 @@ self.onmessage = (e) => {
         balances: re.path.balances,
         returns: re.path.returns,
         withdrawals: re.path.withdrawals,
+        unadjustedWithdrawals: re.path.unadjustedWithdrawals,
         totalWithdrawn: result.totalWithdrawn[simIndex],
         avgReturn: result.avgReturn[simIndex],
       });
