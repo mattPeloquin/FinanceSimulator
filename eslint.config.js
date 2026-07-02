@@ -41,7 +41,8 @@ export default [
             "dist/", 
             "playwright-report/", 
             "test-results/", 
-            "node_modules/"
+            "node_modules/",
+            "scratch/"
         ]
     }
 ];
