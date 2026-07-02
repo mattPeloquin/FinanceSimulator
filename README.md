@@ -152,7 +152,8 @@ This is repeated for every year in your horizon, and the whole thing is repeated
 
 Once all simulations finish, the worker (`src/core/statistics.js`) computes:
 
-- **Success rate** — the share of futures where the money never ran out.
+- **Success Rate (not depleted)** — the share of futures where your portfolio never ran out of money.
+- **Success Rate (on plan)** — a separate metric shown next to it: the share of futures where you withdrew at least 95% of your planned schedule (or more).
 - **Median end balance** and **median total withdrawn** across all runs.
 - A **ranking of every simulation by total money withdrawn**, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
 - A **histogram** of average annual real returns across all simulations.

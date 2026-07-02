@@ -55,6 +55,10 @@ function setEndYear(id, balances, numYears) {
 
 export function renderResults(result, params) {
   setText('successRate', formatPercent(result.successRate, 1));
+  setText(
+    'withdrawalTargetSuccessRate',
+    result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 1),
+  );
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianWithdrawn', formatK(result.medianWithdrawn));
   setText('plannedWithdrawn', formatK(result.plannedWithdrawn));

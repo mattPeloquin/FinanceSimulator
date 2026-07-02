@@ -61,6 +61,7 @@ const REQUIRED_IDS = [
   'saveSessionDescription',
   'themeToggle',
   'successRate',
+  'withdrawalTargetSuccessRate',
   'medianBalance',
   'medianWithdrawn',
   'plannedWithdrawn',

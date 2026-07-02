@@ -36,6 +36,20 @@ export function successRate(depletionYear, numYears) {
   return survived / depletionYear.length;
 }
 
+// Fraction of simulations whose total withdrawn reached at least (1 - tolerance)
+// of the planned schedule total — i.e. within tolerance below target, or above it.
+export function withdrawalTargetSuccessRate(totalWithdrawn, plannedWithdrawn, tolerance = 0.05) {
+  const n = totalWithdrawn.length;
+  if (n === 0 || plannedWithdrawn <= 0) return null;
+
+  const minimumAcceptable = plannedWithdrawn * (1 - tolerance);
+  let metTarget = 0;
+  for (let i = 0; i < n; i++) {
+    if (totalWithdrawn[i] >= minimumAcceptable) metTarget++;
+  }
+  return metTarget / n;
+}
+
 export function mean(values) {
   let sum = 0;
   for (let i = 0; i < values.length; i++) sum += values[i];

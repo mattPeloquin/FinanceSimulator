@@ -4,6 +4,7 @@ import {
   rankByReturn,
   percentileIndex,
   successRate,
+  withdrawalTargetSuccessRate,
   mean,
   median,
   buildHistogram,
@@ -52,6 +53,19 @@ describe('successRate', () => {
   it('counts simulations not depleted within the horizon', () => {
     const depletion = Float64Array.from([41, 10, 41, 5]); // numYears = 40 -> 41 means survived
     expect(successRate(depletion, 40)).toBe(0.5);
+  });
+});
+
+describe('withdrawalTargetSuccessRate', () => {
+  it('counts runs within 5% of planned total or above it', () => {
+    const totalWithdrawn = Float64Array.from([950, 960, 1000, 800]); // planned = 1000 -> min 950
+    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000)).toBe(0.75);
+  });
+
+  it('returns null when the planned total is not positive', () => {
+    const totalWithdrawn = Float64Array.from([100, 200]);
+    expect(withdrawalTargetSuccessRate(totalWithdrawn, 0)).toBeNull();
+    expect(withdrawalTargetSuccessRate(totalWithdrawn, -100)).toBeNull();
   });
 });
 

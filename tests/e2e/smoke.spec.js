@@ -26,12 +26,16 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   // The charts inside <details> blocks render with 0 height until opened
   // Let's open the details block containing the charts
-  await page.click('summary:has-text("Dynamic Withdrawals Timeline")');
+  await page.click('summary:has-text("Average Timelines")');
 
   // Wait for specific text elements to populate
   const successRate = page.locator('#successRate');
   await expect(successRate).not.toBeEmpty();
   await expect(successRate).toContainText('%');
+
+  const withdrawalTargetSuccessRate = page.locator('#withdrawalTargetSuccessRate');
+  await expect(withdrawalTargetSuccessRate).not.toBeEmpty();
+  await expect(withdrawalTargetSuccessRate).toContainText('%');
 
   const medianBalance = page.locator('#medianBalance');
   await expect(medianBalance).not.toBeEmpty();

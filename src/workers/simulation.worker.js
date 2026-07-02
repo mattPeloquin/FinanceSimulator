@@ -7,6 +7,7 @@ import {
   rankByWithdrawn,
   percentileIndex,
   successRate,
+  withdrawalTargetSuccessRate,
   median,
   buildHistogram,
 } from '../core/statistics.js';
@@ -122,6 +123,7 @@ self.onmessage = (e) => {
         numYears,
         seed: result.baseSeed,
         successRate: successRate(result.depletionYear, numYears),
+        withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(result.totalWithdrawn, plannedWithdrawn),
         medianBalance: median(result.finalBalance),
         medianWithdrawn: median(result.totalWithdrawn),
         plannedWithdrawn,
