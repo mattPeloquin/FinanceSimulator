@@ -12,9 +12,12 @@ const EXPORT_TYPE = 'sor-scenario';
 
 // ---- Autosave (localStorage) ------------------------------------------------
 
-export function saveAutosave(scenario, name = '') {
+export function saveAutosave(scenario, name = '', description = '') {
   try {
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario, name }));
+    localStorage.setItem(
+      AUTOSAVE_KEY,
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario, name, description }),
+    );
   } catch {
     /* storage may be unavailable (private mode / quota) — non-fatal */
   }
@@ -28,7 +31,8 @@ export function loadAutosave() {
     if (!parsed || !parsed.scenario) return null;
     return {
       scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
-      name: parsed.name || ''
+      name: parsed.name || '',
+      description: parsed.description || '',
     };
   } catch {
     return null;
@@ -38,6 +42,40 @@ export function loadAutosave() {
 export function clearAutosave() {
   try {
     localStorage.removeItem(AUTOSAVE_KEY);
+  } catch {
+    /* non-fatal */
+  }
+}
+
+const UNSAVED_STASH_KEY = 'sor:unsaved-stash';
+
+/** Snapshot of the unsaved workbench, kept when switching to a named session. */
+export function saveUnsavedStash(scenario) {
+  try {
+    localStorage.setItem(
+      UNSAVED_STASH_KEY,
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario }),
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
+
+export function loadUnsavedStash() {
+  try {
+    const raw = localStorage.getItem(UNSAVED_STASH_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.scenario) return null;
+    return migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1);
+  } catch {
+    return null;
+  }
+}
+
+export function clearUnsavedStash() {
+  try {
+    localStorage.removeItem(UNSAVED_STASH_KEY);
   } catch {
     /* non-fatal */
   }
@@ -74,11 +112,17 @@ function requestToPromise(request) {
   });
 }
 
-export async function saveSession(name, scenario) {
+export async function saveSession(name, scenario, description = '') {
   const db = await openDb();
   try {
     await requestToPromise(
-      tx(db, 'readwrite').put({ name, scenario, schemaVersion: SCHEMA_VERSION, savedAt: Date.now() })
+      tx(db, 'readwrite').put({
+        name,
+        scenario,
+        description: description || '',
+        schemaVersion: SCHEMA_VERSION,
+        savedAt: Date.now(),
+      }),
     );
   } finally {
     db.close();
@@ -89,7 +133,11 @@ export async function loadSession(name) {
   const db = await openDb();
   try {
     const record = await requestToPromise(tx(db, 'readonly').get(name));
-    return record ? migrateScenario(record.scenario, record.schemaVersion ?? 1) : null;
+    if (!record) return null;
+    return {
+      scenario: migrateScenario(record.scenario, record.schemaVersion ?? 1),
+      description: record.description || '',
+    };
   } finally {
     db.close();
   }
@@ -118,12 +166,13 @@ export async function listSessions() {
 
 // ---- Export / Import (JSON file) --------------------------------------------
 
-export function exportScenario(scenario, name = 'scenario') {
+export function exportScenario(scenario, name = 'scenario', description = '') {
   const payload = {
     type: EXPORT_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     name,
+    description: description || '',
     scenario,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -147,5 +196,6 @@ export async function importScenarioFromFile(file) {
   return {
     scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
     name: parsed.name || '',
+    description: parsed.description || '',
   };
 }

@@ -27,7 +27,6 @@ export function simulatePath(params, rng, collectPath = false) {
 
   let totalRealGrowthFactor = 1.0;
   let currentYearIndex = -1;
-  let blockRemaining = 0;
 
   let balance = portfolio.start;
   let totalWithdrawn = 0;
@@ -105,15 +104,18 @@ export function simulatePath(params, rng, collectPath = false) {
       }
       inflation = rng.logNormalFromZ(lnAssets[6].mean, lnAssets[6].stdDev, z[6]);
     } else {
-      // Historical resampling with block bootstrapping.
-      if (blockRemaining === 0 || currentYearIndex >= sampleLen - 1) {
-        const maxStartIndex = Math.max(0, sampleLen - blockSize);
-        currentYearIndex = Math.floor(rng.uniform() * (maxStartIndex + 1));
-        blockRemaining = blockSize;
+      // Historical resampling via a stationary (circular) block bootstrap.
+      // Each year we either continue the current run of consecutive years or,
+      // with probability 1/blockSize, jump to a new random start year. This makes
+      // the run lengths random (geometric) with an *average* of blockSize years,
+      // so there are no rigid block boundaries. Wrapping past the final year back
+      // to the first keeps every year equally likely (removes end-of-range bias).
+      const restartProb = blockSize > 1 ? 1 / blockSize : 1;
+      if (currentYearIndex < 0 || rng.uniform() < restartProb) {
+        currentYearIndex = Math.floor(rng.uniform() * sampleLen);
       } else {
-        currentYearIndex++;
+        currentYearIndex = (currentYearIndex + 1) % sampleLen;
       }
-      blockRemaining--;
 
       const yearData = sampleYears[currentYearIndex];
       const usLgGrowthReturn = yearData.us_lg_growth / 100;

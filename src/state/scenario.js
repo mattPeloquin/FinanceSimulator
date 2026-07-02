@@ -6,6 +6,9 @@
 // and validation trivial.
 
 import { correlationCholesky } from '../core/history.js';
+import { SCENARIO_DEFAULTS } from './defaults.js';
+
+export { SCENARIO_DEFAULTS } from './defaults.js';
 
 export const SCHEMA_VERSION = 2;
 
@@ -17,66 +20,65 @@ export const MONEY_SCALE = 1000;
 //   float    -> float
 //   currency -> float in thousands ($000s), displayed with thousands separators
 //   string   -> raw string (e.g. optional seed)
+function field(key, dom, type) {
+  return { key, dom, type, def: SCENARIO_DEFAULTS[key] };
+}
+
 const FIELDS = [
-  { key: 'numYears', dom: 'numYears', type: 'int', def: 40 },
-  { key: 'numSimulations', dom: 'numSimulations', type: 'int', def: 10000 },
-  { key: 'randomSeed', dom: 'randomSeed', type: 'string', def: '' },
-  // Half-width (in % of all runs) of the band averaged around each percentile to
-  // smooth the representative path/cards. 0 = single run (no smoothing).
-  { key: 'smoothWindowPct', dom: 'smoothWindowPct', type: 'float', def: 1 },
+  field('numYears', 'numYears', 'int'),
+  field('numSimulations', 'numSimulations', 'int'),
+  field('randomSeed', 'randomSeed', 'string'),
+  field('smoothWindowPct', 'smoothWindowPct', 'float'),
 
-  { key: 'startYear', dom: 'startYear', type: 'int', def: 1970 },
-  { key: 'endYear', dom: 'endYear', type: 'int', def: 2025 },
-  { key: 'blockSize', dom: 'blockSize', type: 'int', def: 3 },
+  field('startYear', 'startYear', 'int'),
+  field('endYear', 'endYear', 'int'),
+  field('blockSize', 'blockSize', 'int'),
 
-  { key: 'usLgGrowthAllocation', dom: 'usLgGrowthAllocation', type: 'float', def: 35 },
-  { key: 'usLgValueAllocation', dom: 'usLgValueAllocation', type: 'float', def: 25 },
-  { key: 'usSmMidAllocation', dom: 'usSmMidAllocation', type: 'float', def: 15 },
-  { key: 'exUsAllocation', dom: 'exUsAllocation', type: 'float', def: 15 },
-  { key: 'bondAllocation', dom: 'bondAllocation', type: 'float', def: 0 },
-  { key: 'cashAllocation', dom: 'cashAllocation', type: 'float', def: 10 },
+  field('usLgGrowthAllocation', 'usLgGrowthAllocation', 'float'),
+  field('usLgValueAllocation', 'usLgValueAllocation', 'float'),
+  field('usSmMidAllocation', 'usSmMidAllocation', 'float'),
+  field('exUsAllocation', 'exUsAllocation', 'float'),
+  field('bondAllocation', 'bondAllocation', 'float'),
+  field('cashAllocation', 'cashAllocation', 'float'),
 
-  { key: 'startBalance', dom: 'startBalance', type: 'currency', def: 4000 },
-  { key: 'baseWithdrawal', dom: 'baseWithdrawal', type: 'currency', def: 80 },
-  { key: 'floorBalance', dom: 'floorBalance', type: 'currency', def: 2000 },
-  { key: 'floorPenalty', dom: 'floorPenalty', type: 'float', def: 50 },
-  { key: 'ceilingBalance', dom: 'ceilingBalance', type: 'currency', def: 5000 },
-  { key: 'ceilingBonus', dom: 'ceilingBonus', type: 'float', def: 50 },
-  // Minimum withdrawal each year in $000s (after adjustments), regardless of strategy.
-  { key: 'withdrawalFloor', dom: 'withdrawalFloor', type: 'currency', def: 0 },
+  field('startBalance', 'startBalance', 'currency'),
+  field('baseWithdrawal', 'baseWithdrawal', 'currency'),
+  field('floorBalance', 'floorBalance', 'currency'),
+  field('floorPenalty', 'floorPenalty', 'float'),
+  field('ceilingBalance', 'ceilingBalance', 'currency'),
+  field('ceilingBonus', 'ceilingBonus', 'float'),
+  field('withdrawalFloor', 'withdrawalFloor', 'currency'),
 
-  // Front-loading: annual real change applied to the whole target withdrawal, plus
-  // an optional flat bonus for the first goGoYears years. Defaults are neutral.
-  { key: 'spendChangePct', dom: 'spendChangePct', type: 'float', def: 0 },
-  { key: 'goGoBonus', dom: 'goGoBonus', type: 'currency', def: 0 },
-  { key: 'goGoYears', dom: 'goGoYears', type: 'int', def: 10 },
-  { key: 'specificWithdrawals', dom: 'specificWithdrawals', type: 'string', def: '' },
+  field('spendChangePct', 'spendChangePct', 'float'),
+  field('goGoBonus', 'goGoBonus', 'currency'),
+  field('goGoYears', 'goGoYears', 'int'),
+  field('specificWithdrawals', 'specificWithdrawals', 'string'),
 
-  { key: 'enableDynamicAdjustments', dom: 'enableDynamicAdjustments', type: 'boolean', def: true },
-  { key: 'dynLowRet', dom: 'dynLowRet', type: 'float', def: -15 },
-  { key: 'dynLowBal', dom: 'dynLowBal', type: 'currency', def: 1000 },
-  { key: 'dynLowAdj', dom: 'dynLowAdj', type: 'currency', def: 0 },
-  { key: 'dynMedRet', dom: 'dynMedRet', type: 'float', def: 5 },
-  { key: 'dynMedBal', dom: 'dynMedBal', type: 'currency', def: 5000 },
-  { key: 'dynMedAdj', dom: 'dynMedAdj', type: 'currency', def: 100 },
-  { key: 'dynHighRet', dom: 'dynHighRet', type: 'float', def: 20 },
-  { key: 'dynHighBal', dom: 'dynHighBal', type: 'currency', def: 8000 },
-  { key: 'dynHighAdj', dom: 'dynHighAdj', type: 'currency', def: 200 },
+  field('enableDynamicAdjustments', 'enableDynamicAdjustments', 'boolean'),
+  field('dynLowRet', 'dynLowRet', 'float'),
+  field('dynLowBal', 'dynLowBal', 'currency'),
+  field('dynLowAdj', 'dynLowAdj', 'currency'),
+  field('dynMedRet', 'dynMedRet', 'float'),
+  field('dynMedBal', 'dynMedBal', 'currency'),
+  field('dynMedAdj', 'dynMedAdj', 'currency'),
+  field('dynHighRet', 'dynHighRet', 'float'),
+  field('dynHighBal', 'dynHighBal', 'currency'),
+  field('dynHighAdj', 'dynHighAdj', 'currency'),
 
-  { key: 'usLgGrowthMean', dom: 'usLgGrowthMean', type: 'float', def: null },
-  { key: 'usLgGrowthStdDev', dom: 'usLgGrowthStdDev', type: 'float', def: null },
-  { key: 'usLgValueMean', dom: 'usLgValueMean', type: 'float', def: null },
-  { key: 'usLgValueStdDev', dom: 'usLgValueStdDev', type: 'float', def: null },
-  { key: 'usSmMidMean', dom: 'usSmMidMean', type: 'float', def: null },
-  { key: 'usSmMidStdDev', dom: 'usSmMidStdDev', type: 'float', def: null },
-  { key: 'exUsMean', dom: 'exUsMean', type: 'float', def: null },
-  { key: 'exUsStdDev', dom: 'exUsStdDev', type: 'float', def: null },
-  { key: 'bondReturnMean', dom: 'bondReturnMean', type: 'float', def: null },
-  { key: 'bondReturnStdDev', dom: 'bondReturnStdDev', type: 'float', def: null },
-  { key: 'cashReturnMean', dom: 'cashReturnMean', type: 'float', def: null },
-  { key: 'cashReturnStdDev', dom: 'cashReturnStdDev', type: 'float', def: null },
-  { key: 'inflationMean', dom: 'inflationMean', type: 'float', def: null },
-  { key: 'inflationStdDev', dom: 'inflationStdDev', type: 'float', def: null },
+  field('usLgGrowthMean', 'usLgGrowthMean', 'float'),
+  field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'float'),
+  field('usLgValueMean', 'usLgValueMean', 'float'),
+  field('usLgValueStdDev', 'usLgValueStdDev', 'float'),
+  field('usSmMidMean', 'usSmMidMean', 'float'),
+  field('usSmMidStdDev', 'usSmMidStdDev', 'float'),
+  field('exUsMean', 'exUsMean', 'float'),
+  field('exUsStdDev', 'exUsStdDev', 'float'),
+  field('bondReturnMean', 'bondReturnMean', 'float'),
+  field('bondReturnStdDev', 'bondReturnStdDev', 'float'),
+  field('cashReturnMean', 'cashReturnMean', 'float'),
+  field('cashReturnStdDev', 'cashReturnStdDev', 'float'),
+  field('inflationMean', 'inflationMean', 'float'),
+  field('inflationStdDev', 'inflationStdDev', 'float'),
 ];
 
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
@@ -120,9 +122,7 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
 }
 
 export function defaultScenario() {
-  const scenario = { distMethod: 'resampling', withdrawalStrategy: 'base' };
-  for (const f of FIELDS) scenario[f.key] = f.def;
-  return scenario;
+  return { ...SCENARIO_DEFAULTS };
 }
 
 // Read the current DOM input values into a scenario object.
@@ -141,10 +141,10 @@ export function readScenarioFromDom(doc = document) {
     }
   }
   const checked = doc.querySelector('input[name="distribution-method"]:checked');
-  scenario.distMethod = checked ? checked.value : 'resampling';
-  
+  scenario.distMethod = checked ? checked.value : SCENARIO_DEFAULTS.distMethod;
+
   const strat = doc.querySelector('input[name="withdrawal-strategy"]:checked');
-  scenario.withdrawalStrategy = strat ? strat.value : 'base';
+  scenario.withdrawalStrategy = strat ? strat.value : SCENARIO_DEFAULTS.withdrawalStrategy;
   
   return scenario;
 }
@@ -162,11 +162,11 @@ export function writeScenarioToDom(scenario, doc = document) {
     }
   }
 
-  const method = scenario.distMethod || 'resampling';
+  const method = scenario.distMethod || SCENARIO_DEFAULTS.distMethod;
   const radio = doc.querySelector(`input[name="distribution-method"][value="${method}"]`);
   if (radio) radio.checked = true;
 
-  const strat = scenario.withdrawalStrategy || 'base';
+  const strat = scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy;
   const stratRadio = doc.querySelector(`input[name="withdrawal-strategy"][value="${strat}"]`);
   if (stratRadio) stratRadio.checked = true;
 
@@ -252,7 +252,7 @@ export function buildSimParams(scenario, samples) {
       cash: (scenario.cashAllocation || 0) / 100,
     },
     portfolio: {
-      strategy: scenario.withdrawalStrategy || 'base',
+      strategy: scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy,
       specificWithdrawals: fitSpecificWithdrawalsToHorizon(
         parseSpecificWithdrawals(scenario.specificWithdrawals),
         scenario.numYears,

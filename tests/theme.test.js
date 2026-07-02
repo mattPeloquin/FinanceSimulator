@@ -56,7 +56,7 @@ describe('theme', () => {
     expect(light['--theme-p10']).toBe('220 38 38');
 
     const dark = themeCssVars('dark');
-    expect(dark['--theme-bg-page']).toBe('15 23 42');
+    expect(dark['--theme-bg-page']).toBe('0 0 0');
     expect(dark['--theme-p50']).toBe('74 222 128');
   });
 

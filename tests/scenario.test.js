@@ -9,6 +9,7 @@ import {
   fitSpecificWithdrawalsToHorizon,
   migrateScenario,
   MONEY_SCALE,
+  SCENARIO_DEFAULTS,
 } from '../src/state/scenario.js';
 import { getSampleYears, computeProfiles } from '../src/core/history.js';
 
@@ -37,16 +38,22 @@ describe('migrateScenario', () => {
   });
 });
 
+describe('defaultScenario', () => {
+  it('matches SCENARIO_DEFAULTS', () => {
+    expect(defaultScenario()).toEqual({ ...SCENARIO_DEFAULTS });
+  });
+});
+
 describe('buildSimParams', () => {
   it('converts percentages to decimals and shapes engine params', () => {
     const s = defaultScenario();
     s.randomSeed = '7';
     const p = buildSimParams(s, { years: [] });
     expect(p.seed).toBe(7);
-    expect(p.allocation.usLgGrowth).toBeCloseTo(0.35, 6);
-    expect(p.portfolio.start).toBe(4000 * MONEY_SCALE);
+    expect(p.allocation.usLgGrowth).toBeCloseTo(0.25, 6);
+    expect(p.portfolio.start).toBe(s.startBalance * MONEY_SCALE);
     expect(p.portfolio.floorPenalty).toBeCloseTo(0.5, 6);
-    expect(p.dynConfig.high.adj).toBe(200 * MONEY_SCALE);
+    expect(p.dynConfig.high.adj).toBe(s.dynHighAdj * MONEY_SCALE);
   });
 
   it('uses a random seed when none is provided', () => {
@@ -62,9 +69,9 @@ describe('buildSimParams', () => {
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '80\n85\n90';
     const p = buildSimParams(s, { years: [] });
-    expect(p.portfolio.specificWithdrawals).toHaveLength(40);
+    expect(p.portfolio.specificWithdrawals).toHaveLength(s.numYears);
     expect(p.portfolio.specificWithdrawals.slice(0, 3)).toEqual([80000, 85000, 90000]);
-    expect(p.portfolio.specificWithdrawals.slice(3)).toEqual(Array(37).fill(90000));
+    expect(p.portfolio.specificWithdrawals.slice(3)).toEqual(Array(s.numYears - 3).fill(90000));
   });
 });
 

@@ -7,10 +7,12 @@
     </div>
 </dialog>
 
-<dialog id="saveSessionDialog" class="p-6 rounded-xl shadow-2xl border border-theme-border bg-theme-surface backdrop:bg-theme-page/50 min-w-[320px]">
-    <h3 class="text-lg font-bold text-theme-heading mb-4">Save Session</h3>
+<dialog id="saveSessionDialog" class="p-6 rounded-xl shadow-2xl border border-theme-border bg-theme-surface backdrop:bg-theme-page/50 min-w-[320px] max-w-md">
+    <h3 id="saveSessionDialogTitle" class="text-lg font-bold text-theme-heading mb-4">Save Session</h3>
     <label for="saveSessionName" class="block text-sm font-medium text-theme-body mb-1">Session Name</label>
-    <input type="text" id="saveSessionName" class="w-full rounded-md input-theme sm:text-sm p-2 border mb-6" placeholder="My Scenario">
+    <input type="text" id="saveSessionName" class="w-full rounded-md input-theme sm:text-sm p-2 border mb-4" placeholder="My Scenario">
+    <label for="saveSessionDescription" class="block text-sm font-medium text-theme-body mb-1">Description (optional)</label>
+    <textarea id="saveSessionDescription" rows="3" class="w-full rounded-md input-theme sm:text-sm p-2 border mb-6 resize-y" placeholder="Optional notes about this scenario…"></textarea>
     <div class="flex justify-end gap-3">
         <button id="cancelSaveSession" class="px-4 py-2 bg-theme-surface border border-theme-input text-theme-body rounded-lg hover:bg-theme-muted text-sm font-medium transition-colors">Cancel</button>
         <button id="confirmSaveSession" class="px-4 py-2 bg-theme-accent text-theme-on-accent rounded-lg hover:bg-theme-accent-hover text-sm font-medium shadow-sm transition-colors">Save</button>

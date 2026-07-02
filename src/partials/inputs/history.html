@@ -5,12 +5,37 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
         <div>
             <label for="startYear" class="block text-sm font-medium text-theme-body">Start Year</label>
-            <input type="number" id="startYear" value="1928" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <input type="number" id="startYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
         </div>
         <div>
             <label for="endYear" class="block text-sm font-medium text-theme-body">End Year</label>
-            <input type="number" id="endYear" value="2025" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <input type="number" id="endYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
         </div>
     </div>
     <p id="historical-range-msg" class="text-xs text-theme-faint text-center mt-2"></p>
+
+    <!-- Distribution Method Selector -->
+    <fieldset>
+        <legend class="text-sm font-medium text-theme-body">Distribution Method</legend>
+        <div class="mt-3 grid grid-cols-1 gap-3">
+            <label for="dist-resampling" class="relative flex items-start p-3 border rounded-lg cursor-pointer has-[:checked]:bg-theme-accent-subtle has-[:checked]:border-theme-accent">
+                <div class="flex items-center h-5">
+                    <input id="dist-resampling" name="distribution-method" type="radio" value="resampling" class="focus:ring-theme-accent h-4 w-4 text-theme-accent border-theme-input">
+                </div>
+                <div class="ml-3 text-sm">
+                    <span class="block font-medium text-theme-body">Historical Resampling</span>
+                    <span class="block text-theme-faint">Directly sample from historical data, preserving asset correlations.</span>
+                </div>
+            </label>
+            <label for="dist-lognormal" class="relative flex items-start p-3 border rounded-lg cursor-pointer has-[:checked]:bg-theme-accent-subtle has-[:checked]:border-theme-accent">
+                <div class="flex items-center h-5">
+                    <input id="dist-lognormal" name="distribution-method" type="radio" value="lognormal" class="focus:ring-theme-accent h-4 w-4 text-theme-accent border-theme-input">
+                </div>
+                <div class="ml-3 text-sm">
+                    <span class="block font-medium text-theme-body">Log-Normal Distribution</span>
+                    <span class="block text-theme-faint">Simulate from each asset's Mean and Standard Deviation, correlated using the historical correlation matrix for the selected year range.</span>
+                </div>
+            </label>
+        </div>
+    </fieldset>
 </div>

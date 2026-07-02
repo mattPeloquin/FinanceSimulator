@@ -9,10 +9,14 @@ import {
   defaultScenario,
   buildSimParams,
   validateScenario,
+  SCENARIO_DEFAULTS,
 } from './state/scenario.js';
 import {
   saveAutosave,
   loadAutosave,
+  saveUnsavedStash,
+  loadUnsavedStash,
+  clearUnsavedStash,
   saveSession,
   loadSession,
   deleteSession,
@@ -43,6 +47,9 @@ const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 let historicalSamples = { years: [] };
 let currentWorker = null;
 let currentSessionName = '';
+let currentSessionDescription = '';
+let suppressSessionSelect = false;
+let lastSessionSelectValue = '';
 
 // True once the user hand-edits any log-normal profile field. While set, changing
 // the year range no longer silently overwrites their numbers (see applyHistoryProfiles).
@@ -195,9 +202,80 @@ function cancelSimulation() {
 // ---- Persistence: autosave + named sessions ---------------------------------
 
 let autosaveTimer = null;
+
+function stashUnsavedScenario() {
+  saveUnsavedStash(readScenarioFromDom());
+}
+
+async function restoreUnsavedScenario() {
+  const stashed = loadUnsavedStash();
+  suppressSessionSelect = true;
+  try {
+    currentSessionName = '';
+    currentSessionDescription = '';
+    await refreshSessionList('');
+    applyScenario(stashed || {});
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
+    lastSessionSelectValue = '';
+    flushAutosave();
+  } finally {
+    suppressSessionSelect = false;
+  }
+}
+
+async function resetUnsavedToDefaults() {
+  clearUnsavedStash();
+  suppressSessionSelect = true;
+  try {
+    currentSessionName = '';
+    currentSessionDescription = '';
+    await refreshSessionList('');
+    applyScenario({});
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
+    lastSessionSelectValue = '';
+    flushAutosave();
+  } finally {
+    suppressSessionSelect = false;
+  }
+}
+function flushAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  const scenario = readScenarioFromDom();
+  saveAutosave(scenario, currentSessionName, currentSessionDescription);
+  if (!currentSessionName) {
+    saveUnsavedStash(scenario);
+  }
+}
+
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(() => saveAutosave(readScenarioFromDom(), currentSessionName), 400);
+  autosaveTimer = setTimeout(flushAutosave, 400);
+}
+
+function updateSessionNoteDisplay() {
+  const note = document.getElementById('sessionNote');
+  if (!note) return;
+  const text = currentSessionName && currentSessionDescription.trim()
+    ? currentSessionDescription.trim()
+    : '';
+  if (text) {
+    note.textContent = text;
+    note.classList.remove('hidden');
+  } else {
+    note.textContent = '';
+    note.classList.add('hidden');
+  }
+}
+
+function updateSessionActionButtons() {
+  const hasNamedSession = Boolean(currentSessionName);
+  for (const id of ['copySessionButton', 'deleteSessionButton']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !hasNamedSession;
+  }
 }
 
 async function refreshSessionList(selectName = currentSessionName) {
@@ -212,8 +290,15 @@ async function refreshSessionList(selectName = currentSessionName) {
   for (const s of sessions) {
     options.push(`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`);
   }
-  select.innerHTML = options.join('');
-  select.value = selectName || '';
+  const wasSuppressed = suppressSessionSelect;
+  suppressSessionSelect = true;
+  try {
+    select.innerHTML = options.join('');
+    select.value = selectName || '';
+  } finally {
+    suppressSessionSelect = wasSuppressed;
+  }
+  updateSessionActionButtons();
 }
 
 function escapeHtml(str) {
@@ -222,37 +307,99 @@ function escapeHtml(str) {
   );
 }
 
-function handleSaveSession() {
-  const dialog = document.getElementById('saveSessionDialog');
-  const input = document.getElementById('saveSessionName');
-  input.value = currentSessionName || '';
+async function persistSession(name, description) {
+  const previousName = currentSessionName;
+  if (!previousName) {
+    stashUnsavedScenario();
+  }
+  await saveSession(name, readScenarioFromDom(), description);
+  if (previousName && previousName !== name) {
+    await deleteSession(previousName);
+  }
+  currentSessionName = name;
+  currentSessionDescription = description;
+  await refreshSessionList(name);
+  updateSessionNoteDisplay();
+  lastSessionSelectValue = name;
+  flushAutosave();
+}
 
-  const onSave = async () => {
-    const name = input.value.trim();
+async function persistCopySession(name, description) {
+  const existing = await loadSession(name);
+  if (existing) {
+    showAlert(`A session named "${name}" already exists. Choose a different name.`);
+    return;
+  }
+  await saveSession(name, readScenarioFromDom(), description);
+  currentSessionName = name;
+  currentSessionDescription = description;
+  await refreshSessionList(name);
+  updateSessionNoteDisplay();
+  lastSessionSelectValue = name;
+  flushAutosave();
+}
+
+function openSessionDialog(mode) {
+  const dialog = document.getElementById('saveSessionDialog');
+  const title = document.getElementById('saveSessionDialogTitle');
+  const nameInput = document.getElementById('saveSessionName');
+  const descInput = document.getElementById('saveSessionDescription');
+  const confirmBtn = document.getElementById('confirmSaveSession');
+  const isCopy = mode === 'copy';
+
+  title.textContent = isCopy ? 'Copy Session' : 'Save Session';
+  confirmBtn.textContent = isCopy ? 'Copy' : 'Save';
+  nameInput.value = isCopy ? `Copy of ${currentSessionName}` : (currentSessionName || '');
+  descInput.value = currentSessionDescription || '';
+
+  const onConfirm = async () => {
+    const name = nameInput.value.trim();
     if (!name) return;
+    const description = descInput.value.trim();
     dialog.close();
     try {
-      await saveSession(name, readScenarioFromDom());
-      currentSessionName = name;
-      await refreshSessionList(name);
-      scheduleAutosave();
+      if (isCopy) {
+        await persistCopySession(name, description);
+      } else {
+        await persistSession(name, description);
+      }
     } catch (err) {
-      showAlert(`Could not save session: ${err.message}`);
+      showAlert(`Could not ${isCopy ? 'copy' : 'save'} session: ${err.message}`);
     }
   };
 
   openDialog(dialog, [
-    { el: document.getElementById('confirmSaveSession'), event: 'click', fn: onSave },
+    { el: confirmBtn, event: 'click', fn: onConfirm },
     { el: document.getElementById('cancelSaveSession'), event: 'click', fn: () => dialog.close() },
-    { el: input, event: 'keydown', fn: (e) => { if (e.key === 'Enter') onSave(); } },
+    { el: nameInput, event: 'keydown', fn: (e) => { if (e.key === 'Enter' && !e.shiftKey) onConfirm(); } },
   ]);
-  input.focus();
-  input.select();
+  nameInput.focus();
+  nameInput.select();
+}
+
+function handleSaveSession() {
+  openSessionDialog('save');
+}
+
+function handleCopySession() {
+  if (!currentSessionName) return;
+  openSessionDialog('copy');
+}
+
+async function handleNewSession() {
+  if (currentSessionName) {
+    try {
+      await saveSession(currentSessionName, readScenarioFromDom(), currentSessionDescription);
+    } catch (err) {
+      showAlert(`Could not save session before starting new: ${err.message}`);
+      return;
+    }
+  }
+  await resetUnsavedToDefaults();
 }
 
 function handleDeleteSession() {
-  const select = document.getElementById('sessionSelect');
-  const name = select.value;
+  const name = currentSessionName || document.getElementById('sessionSelect').value;
   if (!name) return;
 
   const dialog = document.getElementById('confirmDeleteDialog');
@@ -264,9 +411,12 @@ function handleDeleteSession() {
       await deleteSession(name);
       if (currentSessionName === name) {
         currentSessionName = '';
-        scheduleAutosave();
+        currentSessionDescription = '';
+        updateSessionNoteDisplay();
+        flushAutosave();
       }
       await refreshSessionList('');
+      lastSessionSelectValue = '';
     } catch (err) {
       showAlert(`Could not delete session: ${err.message}`);
     }
@@ -279,35 +429,53 @@ function handleDeleteSession() {
 }
 
 async function handleSelectSession(e) {
+  if (suppressSessionSelect) return;
   const name = e.target.value;
   if (!name) {
-    currentSessionName = '';
-    applyScenario({});
+    await restoreUnsavedScenario();
     return;
   }
+  if (lastSessionSelectValue === '') {
+    stashUnsavedScenario();
+  }
   try {
-    const scenario = await loadSession(name);
-    if (!scenario) return;
+    const loaded = await loadSession(name);
+    if (!loaded) return;
     currentSessionName = name;
-    applyScenario(scenario);
+    currentSessionDescription = loaded.description || '';
+    applyScenario(loaded.scenario);
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
+    lastSessionSelectValue = name;
+    flushAutosave();
   } catch (err) {
     showAlert(`Could not load session: ${err.message}`);
   }
 }
 
 function handleExportSession() {
-  exportScenario(readScenarioFromDom(), currentSessionName || 'scenario');
+  exportScenario(
+    readScenarioFromDom(),
+    currentSessionName || 'scenario',
+    currentSessionDescription,
+  );
 }
 
 async function handleImportFile(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   try {
-    const { scenario, name } = await importScenarioFromFile(file);
+    const { scenario, name, description } = await importScenarioFromFile(file);
     currentSessionName = '';
+    currentSessionDescription = description || '';
     applyScenario(scenario);
+    saveUnsavedStash(scenario);
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
     if (name) document.getElementById('historical-range-msg').textContent = `Imported "${name}".`;
     await refreshSessionList('');
+    lastSessionSelectValue = '';
+    flushAutosave();
   } catch (err) {
     showAlert(`Could not import file: ${err.message}`);
   } finally {
@@ -323,7 +491,7 @@ function applyScenario(scenario) {
   profilesEdited = false;
   writeScenarioToDom(merged);
   toggleDistMethod(merged.distMethod);
-  toggleWithdrawalStrategy(merged.withdrawalStrategy || 'base');
+  toggleWithdrawalStrategy(merged.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
   updateAllocationTotal();
   // Refresh charts/samples for the range; keep the scenario's own profiles.
@@ -348,10 +516,11 @@ async function init() {
     const autosaved = loadAutosave() || {};
   const initial = { ...defaultScenario(), ...(autosaved.scenario || {}) };
     currentSessionName = autosaved.name || '';
+    currentSessionDescription = autosaved.description || '';
     
     writeScenarioToDom(initial);
     toggleDistMethod(initial.distMethod);
-    toggleWithdrawalStrategy(initial.withdrawalStrategy || 'base');
+    toggleWithdrawalStrategy(initial.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
     toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
 
     setupInputBehaviors({
@@ -373,7 +542,9 @@ async function init() {
       });
     });
 
+    document.getElementById('newSessionButton').addEventListener('click', handleNewSession);
     document.getElementById('saveSessionButton').addEventListener('click', handleSaveSession);
+    document.getElementById('copySessionButton').addEventListener('click', handleCopySession);
     document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);
     document.getElementById('exportSessionButton').addEventListener('click', handleExportSession);
     document.getElementById('importSessionButton').addEventListener('click', () =>
@@ -393,15 +564,22 @@ async function init() {
   }
 
   await refreshSessionList();
-  if (currentSessionName) {
-    document.getElementById('sessionSelect').value = currentSessionName;
-  } else {
-    document.getElementById('sessionSelect').value = '';
+  suppressSessionSelect = true;
+  try {
+    document.getElementById('sessionSelect').value = currentSessionName || '';
+    lastSessionSelectValue = currentSessionName || '';
+  } finally {
+    suppressSessionSelect = false;
   }
+  updateSessionNoteDisplay();
+
+  flushAutosave();
 
   if (import.meta.env.DEV) {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     window.__TEST_HOOKS__.initComplete = true;
+    window.__TEST_HOOKS__.loadUnsavedStash = loadUnsavedStash;
+    window.__TEST_HOOKS__.restoreUnsavedScenario = restoreUnsavedScenario;
   }
 } catch (err) {
     console.error('Failed to init:', err);

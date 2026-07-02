@@ -1,0 +1,14 @@
+---
+description: Prevents long-term thrashing by requiring the agent to ask the user for guidance after repeated failures.
+globs: *
+---
+# Anti-Thrashing Protocol
+
+- If you find yourself repeatedly failing to solve a problem (e.g., a test keeps failing despite multiple attempts, or a bug persists after several fixes), **STOP**.
+- Do not continue to blindly guess or try minor variations of the same failing approach.
+- Instead, step back and ask the user for guidance.
+- Clearly summarize:
+  1. What you have tried so far.
+  2. Why you think it is failing.
+  3. Propose 1-2 completely new ways to approach the problem, or ask the user if they have a preferred direction.
+- Use the `AskQuestion` tool or simply ask in your response to get the user's input before proceeding.

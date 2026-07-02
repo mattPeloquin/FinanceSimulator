@@ -111,6 +111,34 @@ describe('historical resampling', () => {
     expect(result.avgReturn.length).toBe(500);
     expect(Number.isFinite(result.finalBalance[0])).toBe(true);
   });
+
+  it('runs with stationary bootstrap when blockSize>1 and maps returns to sample years', () => {
+    const params = lognormalParams({
+      distMethod: 'resampling',
+      samples: sampleYears,
+      blockSize: 3,
+      numYears: 50,
+      numSimulations: 1,
+      seed: 42,
+    });
+    const rng = createRng(deriveSeed(params.seed, 0));
+    const path = simulatePath(params, rng, true);
+    expect(Number.isFinite(path.finalBalance)).toBe(true);
+    expect(path.path.returns.length).toBe(params.numYears);
+
+    const sampleReturns = sampleYears.years.map((y) =>
+      (y.us_lg_growth * baseAllocation.usLgGrowth +
+        y.us_lg_value * baseAllocation.usLgValue +
+        y.us_sm_mid * baseAllocation.usSmMid +
+        y.ex_us * baseAllocation.exUs +
+        y.bond * baseAllocation.bond +
+        y.cash * baseAllocation.cash) /
+      100
+    );
+    for (const r of path.path.returns) {
+      expect(sampleReturns.some((sr) => Math.abs(sr - r) < 1e-9)).toBe(true);
+    }
+  });
 });
 
 describe('success / depletion metric', () => {
