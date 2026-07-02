@@ -6,9 +6,9 @@ export const SURFACE_DRILLDOWN_SAMPLES = 200;
 
 // Total-withdrawn rank for an overview column index (matches simulation.worker.js).
 export function rankForOverviewColumn(col, meta) {
-  const { p10Rank, p60Rank, surfaceSamples } = meta;
-  const step = Math.max(1, Math.floor((p60Rank - p10Rank) / surfaceSamples));
-  return Math.min(p10Rank + col * step, p60Rank);
+  const { p5Rank, p60Rank, surfaceSamples } = meta;
+  const step = Math.max(1, Math.floor((p60Rank - p5Rank) / surfaceSamples));
+  return Math.min(p5Rank + col * step, p60Rank);
 }
 
 // Grow [centerRank] outward until at least targetCount ranks exist or bounds are hit.

@@ -61,6 +61,6 @@ export function chartJsCartesianScales(theme, yExtra = {}, xExtra = {}) {
 
 export function percentileColors(isDark = isDarkMode()) {
   const mode = isDark ? 'dark' : 'light';
-  const keys = ['p60', 'p50', 'p40', 'p30', 'p20', 'p10'];
+  const keys = ['p60', 'p50', 'p40', 'p30', 'p20', 'p10', 'p5'];
   return Object.fromEntries(keys.map((k) => [k, themeHex(`percentile.${k}`, mode)]));
 }

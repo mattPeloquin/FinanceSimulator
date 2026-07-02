@@ -112,7 +112,7 @@ test('3D surface drill-down updates title and axis, then returns to overview', a
 
   expect(restored.viewMode).toBe('overview');
   expect(restored.title).toBe('Explore specific paths');
-  expect(restored.firstLabel).toBe('P10');
+  expect(restored.firstLabel).toBe('P5');
   expect(restored.lastLabel).toBe('P60');
 });
 

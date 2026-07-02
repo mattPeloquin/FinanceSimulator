@@ -44,6 +44,7 @@ export default {
         'theme-success': rgb('--theme-success'),
         'theme-danger': rgb('--theme-danger'),
         'theme-info': rgb('--theme-info'),
+        'theme-p5': rgb('--theme-p5'),
         'theme-p10': rgb('--theme-p10'),
         'theme-p20': rgb('--theme-p20'),
         'theme-p30': rgb('--theme-p30'),

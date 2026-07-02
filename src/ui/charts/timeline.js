@@ -14,6 +14,7 @@ const SERIES = [
   { key: 'p30', label: '30th % (Below Avg)' },
   { key: 'p20', label: '20th % (Weak)' },
   { key: 'p10', label: '10th % (Cautionary)' },
+  { key: 'p5', label: '5th % (Stress)' },
 ];
 
 let balanceChart = null;

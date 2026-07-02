@@ -36,6 +36,7 @@ export const themeTokens = {
   },
 
   percentile: {
+    p5: { light: '153 27 27', dark: '239 68 68' },
     p10: { light: '220 38 38', dark: '248 113 113' },
     p20: { light: '249 115 22', dark: '251 146 60' },
     p30: { light: '202 138 4', dark: '250 204 21' },

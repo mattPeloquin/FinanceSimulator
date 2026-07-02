@@ -12,7 +12,7 @@ import {
   buildHistogram,
 } from '../core/statistics.js';
 
-const PERCENTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
 
@@ -91,13 +91,13 @@ self.onmessage = (e) => {
     }
 
     // 3D topography samples paths across the SAME total-withdrawn ranking used
-    // by the percentile cards, so the X axis P10..P60 is consistent.
-    const p10i = percentileIndex(n, 0.1);
+    // by the percentile cards, so the X axis P5..P60 is consistent.
+    const p5i = percentileIndex(n, 0.05);
     const p60i = percentileIndex(n, 0.6);
-    const step = Math.max(1, Math.floor((p60i - p10i) / SURFACE_SAMPLES));
+    const step = Math.max(1, Math.floor((p60i - p5i) / SURFACE_SAMPLES));
     const surfacePaths = [];
     for (let i = 0; i < SURFACE_SAMPLES; i++) {
-      const rankIndex = Math.min(p10i + i * step, p60i);
+      const rankIndex = Math.min(p5i + i * step, p60i);
       const simIndex = rankW[rankIndex];
       const re = regeneratePath(params, result.baseSeed, simIndex);
       surfacePaths.push({
@@ -132,7 +132,7 @@ self.onmessage = (e) => {
         surfaceMeta: {
           numSimulations: n,
           rankW,
-          p10Rank: p10i,
+          p5Rank: p5i,
           p60Rank: p60i,
           surfaceSamples: SURFACE_SAMPLES,
         },

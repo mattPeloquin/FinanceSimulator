@@ -46,7 +46,7 @@ const CLICK_WAIT_MS = 400; // window to distinguish single vs double click (ECha
 
 const OVERVIEW_TITLE = 'Explore specific paths';
 const OVERVIEW_DESCRIPTION =
-  'A 3D plot of representative paths from the 10th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
+  'A 3D plot of representative paths from the 5th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
 
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
@@ -126,11 +126,11 @@ function pathDepleted(balances) {
   return balances.some((b, i) => i > 0 && b <= 0);
 }
 
-// Columns are sampled evenly from the 10th to the 60th percentile, so the first
-// column is P10 and the LAST column is P60 (hence numCols - 1 in the divisor).
+// Columns are sampled evenly from the 5th to the 60th percentile, so the first
+// column is P5 and the LAST column is P60 (hence numCols - 1 in the divisor).
 function percentileLabel(col, numCols) {
   const fraction = numCols > 1 ? col / (numCols - 1) : 0;
-  return 'P' + Math.round(10 + fraction * 50);
+  return 'P' + Math.round(5 + fraction * 55);
 }
 
 const DRILLDOWN_PERCENTILE_DECIMALS = 2;
@@ -160,7 +160,7 @@ function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
     descEl.innerHTML =
       `Showing ~200 simulations with total-withdrawn ranks between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
       'Column height represents portfolio balance; color reflects each year\'s market return. ' +
-      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P10–P60 overview.';
+      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P5–P60 overview.';
     return;
   }
 
