@@ -1,20 +1,20 @@
 <!-- Allocation rows + mini charts (continues the Asset Allocation section) -->
 <div class="pt-4">
-    <div class="space-y-1 p-3 border rounded-lg bg-slate-50 dark:bg-slate-900/50/50 dark:bg-slate-900/50">
+    <div class="space-y-1 p-3 border rounded-lg bg-theme-muted">
         <!-- Asset Allocation (with historical data range) -->
-        <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4"
+        <h3 class="text-lg font-semibold text-theme-body mb-4"
         >Asset Allocation</h3>
 
         <!-- Year Labels Row -->
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2">
             <div></div>
-            <div id="year-labels" class="flex justify-between text-xs text-slate-400 dark:text-slate-500 px-1"></div>
+            <div id="year-labels" class="flex justify-between text-xs text-theme-faint px-1"></div>
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
             <div class="col-span-1">
-                <label for="usLgGrowthAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">US Lg Growth</label>
+                <label for="usLgGrowthAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Lg Growth</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usLgGrowthAllocation" value="35" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="usLgGrowthAllocation" value="35" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>
@@ -22,9 +22,9 @@
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
             <div class="col-span-1">
-                <label for="usLgValueAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">US Lg Value</label>
+                <label for="usLgValueAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Lg Value</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usLgValueAllocation" value="25" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="usLgValueAllocation" value="25" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>
@@ -32,9 +32,9 @@
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
             <div class="col-span-1">
-                <label for="usSmMidAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">US Sm/Mid</label>
+                <label for="usSmMidAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Sm/Mid</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usSmMidAllocation" value="15" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="usSmMidAllocation" value="15" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>
@@ -42,9 +42,9 @@
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
             <div class="col-span-1">
-                <label for="exUsAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">ex-US Stocks</label>
+                <label for="exUsAllocation" class="block text-xs font-medium text-theme-body leading-tight">ex-US Stocks</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="exUsAllocation" value="15" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="exUsAllocation" value="15" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>
@@ -52,9 +52,9 @@
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
             <div class="col-span-1">
-                <label for="bondAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">Bonds</label>
+                <label for="bondAllocation" class="block text-xs font-medium text-theme-body leading-tight">Bonds</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="bondAllocation" value="0" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="bondAllocation" value="0" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>
@@ -62,9 +62,9 @@
         </div>
         <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 items-center">
            <div class="col-span-1">
-                <label for="cashAllocation" class="block text-xs font-medium text-slate-700 dark:text-slate-300 leading-tight">Cash</label>
+                <label for="cashAllocation" class="block text-xs font-medium text-theme-body leading-tight">Cash</label>
                 <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="cashAllocation" value="10" class="allocation-input block w-16 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-1 text-center">
+                    <input type="number" id="cashAllocation" value="10" class="allocation-input block w-16 rounded-md input-theme text-xs p-1 text-center">
                     <span class="input-adorn-suffix">%</span>
                 </div>
             </div>

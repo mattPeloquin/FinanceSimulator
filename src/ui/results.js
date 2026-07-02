@@ -17,16 +17,16 @@ function setDelta(id, delta) {
   const el = document.getElementById(id);
   if (!el) return;
   const display = formatK(delta); // rounds to $000s; '0' means "no visible difference"
-  el.classList.remove('text-green-600', 'text-red-600', 'text-slate-400', 'dark:text-slate-500');
+  el.classList.remove('text-theme-success', 'text-theme-danger', 'text-theme-faint');
   if (display === '0') {
     el.textContent = 'on plan';
-    el.classList.add('text-slate-400', 'dark:text-slate-500');
+    el.classList.add('text-theme-faint');
   } else if (delta > 0) {
     el.textContent = `+${display} vs plan`;
-    el.classList.add('text-green-600');
+    el.classList.add('text-theme-success');
   } else {
     el.textContent = `${display} vs plan`;
-    el.classList.add('text-red-600');
+    el.classList.add('text-theme-danger');
   }
 }
 
@@ -43,13 +43,13 @@ function setEndYear(id, balances, numYears) {
       break;
     }
   }
-  el.classList.remove('text-red-500', 'text-slate-400', 'dark:text-slate-500');
+  el.classList.remove('text-theme-danger', 'text-theme-faint');
   if (depletedYear !== null) {
     el.textContent = `ran out year ${depletedYear}`;
-    el.classList.add('text-red-500');
+    el.classList.add('text-theme-danger');
   } else {
     el.textContent = `year ${numYears}`;
-    el.classList.add('text-slate-400', 'dark:text-slate-500');
+    el.classList.add('text-theme-faint');
   }
 }
 

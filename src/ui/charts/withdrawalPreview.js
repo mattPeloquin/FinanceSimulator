@@ -37,8 +37,8 @@ function buildChart(canvas, amounts) {
         {
           label: 'Withdrawal',
           data: amounts,
-          borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79, 70, 229, 0.12)',
+          borderColor: theme.accent,
+          backgroundColor: theme.accentFillSoft,
           borderWidth: 2,
           tension: 0.1,
           pointRadius: amounts.length <= 40 ? 3 : 0,

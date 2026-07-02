@@ -1,10 +1,12 @@
 // Balance and withdrawal timeline charts across the tracked percentiles.
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
+import { getChartTheme, chartJsTooltip, percentileColors } from './chartTheme.js';
+import { onThemeChange, isDarkMode } from '../theme.js';
 
-const COLORS = { p60: '#0d9488', p50: '#16a34a', p40: '#84cc16', p30: '#eab308', p20: '#f97316', p10: '#dc2626' };
+function getColors() {
+  return percentileColors(isDarkMode());
+}
 const SERIES = [
   { key: 'p60', label: '60th % (Above Avg)' },
   { key: 'p50', label: '50th % (Median)' },
@@ -127,6 +129,7 @@ export function drawTimelineCharts(percentiles, numYears) {
   const startBalance = percentiles.p50?.path?.balances?.[0] ?? 0;
   const logFloor = Math.max(1000, startBalance / 100);
   const theme = getChartTheme();
+  const COLORS = getColors();
 
   const balanceCtx = document.getElementById('balanceChart').getContext('2d');
   if (balanceChart) balanceChart.destroy();

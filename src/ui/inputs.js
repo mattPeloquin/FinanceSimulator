@@ -31,11 +31,11 @@ export function updateAllocationTotal() {
   const total = Array.from(inputs).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0);
   display.textContent = total.toFixed(1).replace(/\.0$/, '');
   if (Math.abs(total - 100) > 0.01) {
-    display.classList.add('text-red-600');
-    display.classList.remove('text-green-600');
+    display.classList.add('text-theme-danger');
+    display.classList.remove('text-theme-success');
   } else {
-    display.classList.remove('text-red-600');
-    display.classList.add('text-green-600');
+    display.classList.remove('text-theme-danger');
+    display.classList.add('text-theme-success');
   }
   return total;
 }

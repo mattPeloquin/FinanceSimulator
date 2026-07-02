@@ -51,6 +51,10 @@ You don't need to be a software engineer to modify this app! You just need a few
 
 You do not need to know how to code to add new features to this app. Instead, you can use **Vibe Coding**—where you use natural language to tell an AI what you want, and the AI handles the complex syntax and logic.
 
+### Changing the app's colors
+
+To tweak the look of the app (backgrounds, text, accent buttons, chart colors, and more), edit **`themeTokens`** at the top of `src/ui/theme.js`. Those values flow automatically into the page, charts, and dark mode — no need to hunt through dozens of files.
+
 ### How to Vibe Code with Cursor
 
 Cursor has a built-in AI assistant. You essentially act as the "Product Manager," and Cursor acts as your "Programmer."

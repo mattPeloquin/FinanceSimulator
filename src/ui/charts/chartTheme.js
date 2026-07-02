@@ -1,48 +1,39 @@
-import { isDarkMode } from '../theme.js';
+import { isDarkMode, themeHex, themeRgba } from '../theme.js';
 
-const LIGHT = {
-  canvasBg: 'transparent',
-  gridLine: 'rgba(148,163,184,0.2)',
-  zeroLine: 'rgba(203, 213, 225, 1)',
-  axisTitle: '#64748b',
-  axisTick: '#64748b',
-  legend: '#475569',
-  tooltipBg: 'rgba(255, 255, 255, 0.95)',
-  tooltipTitle: '#0f172a',
-  tooltipBody: '#475569',
-  sceneBg: '#f1f5f9',
-  axisName: '#475569',
-  axisLabel: '#64748b',
-  axisLine: '#cbd5e1',
-  floatPanelBg: 'rgba(255,255,255,0.94)',
-  floatPanelBorder: '#e2e8f0',
-  floatTitleText: '#334155',
-  floatMutedText: '#64748b',
-  planLine: '#94a3b8',
-  planFill: 'rgba(148, 163, 184, 0.2)',
-};
+function buildChartTheme(mode) {
+  const hex = (path) => themeHex(path, mode);
+  const rgba = (path, alpha) => themeRgba(path, mode, alpha);
 
-const DARK = {
-  canvasBg: 'transparent',
-  gridLine: 'rgba(148,163,184,0.12)',
-  zeroLine: 'rgba(100, 116, 139, 0.55)',
-  axisTitle: '#94a3b8',
-  axisTick: '#94a3b8',
-  legend: '#cbd5e1',
-  tooltipBg: 'rgba(51, 65, 85, 0.95)',
-  tooltipTitle: '#f1f5f9',
-  tooltipBody: '#e2e8f0',
-  sceneBg: '#0f172a',
-  axisName: '#94a3b8',
-  axisLabel: '#94a3b8',
-  axisLine: '#475569',
-  floatPanelBg: 'rgba(30, 41, 59, 0.94)',
-  floatPanelBorder: '#475569',
-  floatTitleText: '#e2e8f0',
-  floatMutedText: '#94a3b8',
-  planLine: '#64748b',
-  planFill: 'rgba(100, 116, 139, 0.25)',
-};
+  return {
+    canvasBg: 'transparent',
+    gridLine: rgba('chrome.text-faint', mode === 'dark' ? 0.12 : 0.2),
+    zeroLine: mode === 'dark' ? rgba('chrome.text-faint', 0.55) : hex('chrome.border-input'),
+    axisTitle: hex('chrome.text-muted'),
+    axisTick: hex('chrome.text-muted'),
+    legend: hex('chrome.text-body'),
+    tooltipBg: mode === 'dark' ? rgba('chrome.bg-input', 0.95) : rgba('chrome.bg-surface', 0.95),
+    tooltipTitle: hex('chrome.text-heading'),
+    tooltipBody: hex('chrome.text-body'),
+    sceneBg: hex('chrome.bg-page'),
+    axisName: hex('chrome.text-body'),
+    axisLabel: hex('chrome.text-muted'),
+    axisLine: hex('chrome.border-input'),
+    floatPanelBg: mode === 'dark' ? rgba('chrome.bg-surface', 0.94) : rgba('chrome.bg-surface', 0.94),
+    floatPanelBorder: hex('chrome.border-input'),
+    floatTitleText: hex('chrome.text-body'),
+    floatMutedText: hex('chrome.text-muted'),
+    planLine: hex('chrome.adorn'),
+    planFill: rgba('chrome.adorn', mode === 'dark' ? 0.25 : 0.2),
+    accent: hex('chrome.accent'),
+    accentFill: rgba('chrome.accent', 0.6),
+    accentStroke: rgba('chrome.accent', 1),
+    accentFillSoft: rgba('chrome.accent', 0.12),
+    accentFillSofter: rgba('chrome.accent', 0.1),
+  };
+}
+
+const LIGHT = buildChartTheme('light');
+const DARK = buildChartTheme('dark');
 
 export function getChartTheme(isDark = isDarkMode()) {
   return isDark ? DARK : LIGHT;
@@ -66,4 +57,10 @@ export function chartJsCartesianScales(theme, yExtra = {}, xExtra = {}) {
     x: { ...base, ...xExtra, ticks: { ...base.ticks, ...xExtra.ticks }, title: { ...base.title, ...xExtra.title }, grid: { ...base.grid, ...xExtra.grid } },
     y: { ...base, ...yExtra, ticks: { ...base.ticks, ...yExtra.ticks }, title: { ...base.title, ...yExtra.title }, grid: { ...base.grid, ...yExtra.grid } },
   };
+}
+
+export function percentileColors(isDark = isDarkMode()) {
+  const mode = isDark ? 'dark' : 'light';
+  const keys = ['p60', 'p50', 'p40', 'p30', 'p20', 'p10'];
+  return Object.fromEntries(keys.map((k) => [k, themeHex(`percentile.${k}`, mode)]));
 }

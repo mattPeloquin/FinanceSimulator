@@ -21,8 +21,8 @@ export function drawDistributionChart(histogram) {
         {
           label: 'Frequency of Outcomes',
           data: bins,
-          backgroundColor: 'rgba(79, 70, 229, 0.6)',
-          borderColor: 'rgba(79, 70, 229, 1)',
+          backgroundColor: theme.accentFill,
+          borderColor: theme.accentStroke,
           borderWidth: 1,
           barPercentage: 1.0,
           categoryPercentage: 1.0,

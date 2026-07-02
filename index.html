@@ -20,9 +20,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex items-center justify-center min-h-screen p-4 py-12 transition-colors">
+<body class="bg-theme-page text-theme-heading flex items-center justify-center min-h-screen p-4 py-12 transition-colors">
 
-    <div class="w-full max-w-[1400px] xl:max-w-[1600px] 2xl:max-w-[1800px] bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 space-y-8 transition-colors">
+    <div class="w-full max-w-[1400px] xl:max-w-[1600px] 2xl:max-w-[1800px] bg-theme-surface rounded-2xl shadow-lg p-6 md:p-8 space-y-8 transition-colors">
 
         {{> header }}
 
@@ -36,7 +36,7 @@
             </div>
 
             <!-- Right Column: Dynamic Parameters & Portfolio Setup -->
-            <div class="space-y-6 lg:pl-12 lg:border-l border-slate-200 dark:border-slate-700">
+            <div class="space-y-6 lg:pl-12 lg:border-l border-theme-border">
             {{> withdrawal }}
             {{> lognormal }}
             </div>
@@ -44,7 +44,7 @@
 
         <!-- Action Button -->
         <div class="text-center">
-            <button id="runButton" class="bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-800 px-10 py-4 transition-all duration-300 text-lg"
+            <button id="runButton" class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg"
             >Run Simulation</button>
         </div>
 

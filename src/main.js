@@ -91,7 +91,7 @@ function applyHistoryProfiles({ silent = false, force = false } = {}) {
     msg.textContent = 'Your edited profiles were kept. ';
     const overwrite = document.createElement('button');
     overwrite.type = 'button';
-    overwrite.className = 'text-indigo-600 underline hover:text-indigo-800';
+    overwrite.className = 'text-theme-accent underline hover:text-theme-accent-text';
     overwrite.textContent = 'Overwrite from history';
     overwrite.addEventListener('click', () => applyHistoryProfiles({ force: true }));
     msg.appendChild(overwrite);

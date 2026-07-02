@@ -2,15 +2,15 @@
 import { Chart } from './chartSetup.js';
 import { getMiniChartSeries } from '../../core/history.js';
 import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
+import { onThemeChange, isDarkMode, themeRgba, themeTokens } from '../theme.js';
 
 const MINI_CHARTS = [
-  { canvasId: 'us-lg-growth-mini-chart', key: 'us_lg_growth', color: '#4338ca', name: 'US Lg Growth' },
-  { canvasId: 'us-lg-value-mini-chart', key: 'us_lg_value', color: '#be123c', name: 'US Lg Value' },
-  { canvasId: 'us-sm-mid-mini-chart', key: 'us_sm_mid', color: '#0f766e', name: 'US Sm/Mid' },
-  { canvasId: 'ex-us-mini-chart', key: 'ex_us', color: '#c2410c', name: 'ex-US' },
-  { canvasId: 'bond-mini-chart', key: 'bond', color: '#16a34a', name: 'Bond' },
-  { canvasId: 'cash-mini-chart', key: 'cash', color: '#64748b', name: 'Cash' },
+  { canvasId: 'us-lg-growth-mini-chart', key: 'us_lg_growth', color: themeTokens.chartAssets.us_lg_growth, name: 'US Lg Growth' },
+  { canvasId: 'us-lg-value-mini-chart', key: 'us_lg_value', color: themeTokens.chartAssets.us_lg_value, name: 'US Lg Value' },
+  { canvasId: 'us-sm-mid-mini-chart', key: 'us_sm_mid', color: themeTokens.chartAssets.us_sm_mid, name: 'US Sm/Mid' },
+  { canvasId: 'ex-us-mini-chart', key: 'ex_us', color: themeTokens.chartAssets.ex_us, name: 'ex-US' },
+  { canvasId: 'bond-mini-chart', key: 'bond', color: themeTokens.chartAssets.bond, name: 'Bond' },
+  { canvasId: 'cash-mini-chart', key: 'cash', color: themeTokens.chartAssets.cash, name: 'Cash' },
 ];
 
 const instances = {};
@@ -29,7 +29,14 @@ function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetN
       labels,
       datasets: [
         { label: 'Zero Line', data: zeroLineData, borderColor: theme.zeroLine, borderWidth: 1, fill: false, pointRadius: 0 },
-        { label: 'Inflation', data: inflationData, borderColor: 'rgba(239, 68, 68, 0.5)', borderWidth: 1, fill: false, pointRadius: 0 },
+        {
+          label: 'Inflation',
+          data: inflationData,
+          borderColor: themeRgba('status.danger', isDarkMode() ? 'dark' : 'light', 0.5),
+          borderWidth: 1,
+          fill: false,
+          pointRadius: 0,
+        },
         { label: assetName, data: assetData, borderColor: color, borderWidth: 1.5, fill: false, tension: 0.1, pointRadius: 0 },
       ],
     },

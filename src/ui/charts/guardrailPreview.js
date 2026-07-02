@@ -56,8 +56,8 @@ function buildChart(canvas, points) {
         {
           label: 'Spending multiplier',
           data: points,
-          borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79, 70, 229, 0.10)',
+          borderColor: theme.accent,
+          backgroundColor: theme.accentFillSofter,
           borderWidth: 2,
           tension: 0,
           pointRadius: 0,
