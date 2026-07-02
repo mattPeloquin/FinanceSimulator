@@ -1,6 +1,8 @@
 // Allocation sparkline mini-charts showing each asset class vs inflation.
 import { Chart } from './chartSetup.js';
 import { getMiniChartSeries } from '../../core/history.js';
+import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { onThemeChange } from '../theme.js';
 
 const MINI_CHARTS = [
   { canvasId: 'us-lg-growth-mini-chart', key: 'us_lg_growth', color: '#4338ca', name: 'US Lg Growth' },
@@ -12,9 +14,12 @@ const MINI_CHARTS = [
 ];
 
 const instances = {};
+let lastStartYear = null;
+let lastEndYear = null;
 
 function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetName) {
   if (instances[canvasId]) instances[canvasId].destroy();
+  const theme = getChartTheme();
   const ctx = document.getElementById(canvasId).getContext('2d');
   const zeroLineData = labels.map(() => 0);
 
@@ -23,7 +28,7 @@ function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetN
     data: {
       labels,
       datasets: [
-        { label: 'Zero Line', data: zeroLineData, borderColor: 'rgba(203, 213, 225, 1)', borderWidth: 1, fill: false, pointRadius: 0 },
+        { label: 'Zero Line', data: zeroLineData, borderColor: theme.zeroLine, borderWidth: 1, fill: false, pointRadius: 0 },
         { label: 'Inflation', data: inflationData, borderColor: 'rgba(239, 68, 68, 0.5)', borderWidth: 1, fill: false, pointRadius: 0 },
         { label: assetName, data: assetData, borderColor: color, borderWidth: 1.5, fill: false, tension: 0.1, pointRadius: 0 },
       ],
@@ -36,6 +41,7 @@ function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetN
       plugins: {
         legend: { display: false },
         tooltip: {
+          ...chartJsTooltip(theme),
           intersect: false,
           mode: 'index',
           filter: (ti) => ti.datasetIndex !== 0,
@@ -53,11 +59,18 @@ function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetN
   });
 }
 
-// Returns the year array used (so the caller can render axis labels).
 export function updateMiniCharts(startYear, endYear) {
+  lastStartYear = startYear;
+  lastEndYear = endYear;
   const series = getMiniChartSeries(startYear, endYear);
   for (const cfg of MINI_CHARTS) {
     drawMiniChart(cfg.canvasId, series.years, series[cfg.key], series.inflation, cfg.color, cfg.name);
   }
   return series.years;
 }
+
+onThemeChange(() => {
+  if (lastStartYear != null && lastEndYear != null) {
+    updateMiniCharts(lastStartYear, lastEndYear);
+  }
+});

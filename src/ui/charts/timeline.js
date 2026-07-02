@@ -1,6 +1,8 @@
 // Balance and withdrawal timeline charts across the tracked percentiles.
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
+import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { onThemeChange } from '../theme.js';
 
 const COLORS = { p60: '#0d9488', p50: '#16a34a', p40: '#84cc16', p30: '#eab308', p20: '#f97316', p10: '#dc2626' };
 const SERIES = [
@@ -14,11 +16,9 @@ const SERIES = [
 
 let balanceChart = null;
 let withdrawalChart = null;
+let lastPercentiles = null;
+let lastNumYears = 0;
 
-// Build one line-chart dataset for a percentile path. `values` are the numbers
-// actually plotted; `returnOffset` maps a point index to the year's market
-// return that produced it (balances include a Year-0 point with no return, so
-// they use -1; withdrawals start at Year 1, so they use 0).
 function pathDataset(label, pathObj, color, values, returnOffset) {
   const returnAt = (dataIndex) => {
     if (!pathObj.returns || dataIndex + returnOffset < 0) return null;
@@ -35,8 +35,6 @@ function pathDataset(label, pathObj, color, values, returnOffset) {
     fill: false,
     pointBackgroundColor: color + '4D',
     pointBorderWidth: 0,
-    // Point markers encode that year's market: circle = up year, upside-down
-    // triangle = down year, sized by how large the move was.
     pointStyle: (ctx) => {
       const r = returnAt(ctx.dataIndex);
       return r == null || r >= 0 ? 'circle' : 'triangle';
@@ -52,15 +50,83 @@ function pathDataset(label, pathObj, color, values, returnOffset) {
   };
 }
 
+function axisScale(theme, extra = {}) {
+  return {
+    ticks: { color: theme.axisTick, ...extra.ticks },
+    title: { display: extra.title?.text != null, color: theme.axisTitle, ...extra.title },
+    grid: { color: theme.gridLine, ...extra.grid },
+    ...extra,
+  };
+}
+
+function buildBalanceOptions(logFloor, theme) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: axisScale(theme),
+      y: {
+        type: 'logarithmic',
+        min: logFloor,
+        ...axisScale(theme, { title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } }),
+      },
+    },
+    plugins: {
+      legend: { labels: { color: theme.legend } },
+      tooltip: {
+        ...chartJsTooltip(theme),
+        callbacks: {
+          label: (ctx) => {
+            const ds = ctx.dataset;
+            const actual = ds._pathObj.balances[ctx.dataIndex];
+            if (ctx.dataIndex === 0) return `${ds.label}: ${formatK(actual)}`;
+            const ret = ds._pathObj.returns[ctx.dataIndex - 1];
+            return `${ds.label}: ${formatK(actual)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
+          },
+        },
+      },
+    },
+  };
+}
+
+function buildWithdrawalOptions(theme) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: axisScale(theme),
+      y: axisScale(theme, {
+        beginAtZero: true,
+        title: { display: true, text: '$000s' },
+        ticks: { callback: (v) => formatK(v) },
+      }),
+    },
+    plugins: {
+      legend: { labels: { color: theme.legend } },
+      tooltip: {
+        ...chartJsTooltip(theme),
+        callbacks: {
+          label: (ctx) => {
+            const ds = ctx.dataset;
+            const ret = ds._pathObj.returns[ctx.dataIndex];
+            return `${ds.label}: ${formatK(ctx.raw)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
+          },
+        },
+      },
+    },
+  };
+}
+
 export function drawTimelineCharts(percentiles, numYears) {
+  lastPercentiles = percentiles;
+  lastNumYears = numYears;
+
   const balanceLabels = Array.from({ length: numYears + 1 }, (_, i) => `Year ${i}`);
   const withdrawalLabels = Array.from({ length: numYears }, (_, i) => `Year ${i + 1}`);
 
-  // A logarithmic axis cannot display zero, so depleted paths are clamped to a
-  // small floor. Derive it from the starting balance (1%, at least $1k) so the
-  // chart works for small portfolios instead of assuming ~$10M scale.
   const startBalance = percentiles.p50?.path?.balances?.[0] ?? 0;
   const logFloor = Math.max(1000, startBalance / 100);
+  const theme = getChartTheme();
 
   const balanceCtx = document.getElementById('balanceChart').getContext('2d');
   if (balanceChart) balanceChart.destroy();
@@ -73,24 +139,7 @@ export function drawTimelineCharts(percentiles, numYears) {
         return pathDataset(s.label, path, COLORS[s.key], path.balances.map((b) => Math.max(logFloor, b)), -1);
       }),
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: { y: { type: 'logarithmic', min: logFloor, title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } } },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const ds = ctx.dataset;
-              const actual = ds._pathObj.balances[ctx.dataIndex];
-              if (ctx.dataIndex === 0) return `${ds.label}: ${formatK(actual)}`;
-              const ret = ds._pathObj.returns[ctx.dataIndex - 1];
-              return `${ds.label}: ${formatK(actual)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
-            },
-          },
-        },
-      },
-    },
+    options: buildBalanceOptions(logFloor, theme),
   });
 
   const withdrawalCtx = document.getElementById('withdrawalChart').getContext('2d');
@@ -104,22 +153,7 @@ export function drawTimelineCharts(percentiles, numYears) {
         return pathDataset(s.label, path, COLORS[s.key], path.withdrawals, 0);
       }),
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } } },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const ds = ctx.dataset;
-              const ret = ds._pathObj.returns[ctx.dataIndex];
-              return `${ds.label}: ${formatK(ctx.raw)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
-            },
-          },
-        },
-      },
-    },
+    options: buildWithdrawalOptions(theme),
   });
 
   if (import.meta.env.DEV) {
@@ -127,3 +161,7 @@ export function drawTimelineCharts(percentiles, numYears) {
     window.__TEST_HOOKS__.withdrawalChart = withdrawalChart;
   }
 }
+
+onThemeChange(() => {
+  if (lastPercentiles) drawTimelineCharts(lastPercentiles, lastNumYears);
+});

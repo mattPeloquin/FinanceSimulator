@@ -1,4 +1,5 @@
 import './styles.css';
+import './ui/theme.js';
 
 import SimulationWorker from './workers/simulation.worker.js?worker&inline';
 

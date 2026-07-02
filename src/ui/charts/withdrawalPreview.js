@@ -2,9 +2,12 @@
 import { fitSpecificWithdrawalsToHorizon, parseSpecificWithdrawals } from '../../state/scenario.js';
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
+import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { onThemeChange } from '../theme.js';
 
 let previewChart = null;
 let pendingFrame = null;
+let lastAmounts = null;
 
 function isSectionVisible() {
   const section = document.getElementById('strategy-specific-section');
@@ -20,9 +23,11 @@ export function destroyWithdrawalPreviewChart() {
     previewChart.destroy();
     previewChart = null;
   }
+  lastAmounts = null;
 }
 
 function buildChart(canvas, amounts) {
+  const theme = getChartTheme();
   const labels = amounts.map((_, i) => String(i + 1));
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
@@ -48,17 +53,20 @@ function buildChart(canvas, amounts) {
       animation: false,
       scales: {
         x: {
-          title: { display: true, text: 'Year', font: { size: 10 } },
-          ticks: { maxTicksLimit: 12, font: { size: 9 } },
+          title: { display: true, text: 'Year', font: { size: 10 }, color: theme.axisTitle },
+          ticks: { maxTicksLimit: 12, font: { size: 9 }, color: theme.axisTick },
+          grid: { color: theme.gridLine },
         },
         y: {
           beginAtZero: true,
-          ticks: { callback: (v) => formatK(v), font: { size: 9 } },
+          ticks: { callback: (v) => formatK(v), font: { size: 9 }, color: theme.axisTick },
+          grid: { color: theme.gridLine },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
+          ...chartJsTooltip(theme),
           callbacks: {
             label: (ctx) => ` ${formatK(ctx.raw)}`,
           },
@@ -72,29 +80,24 @@ function renderPreview(amounts) {
   const canvas = document.getElementById('specificWithdrawalsChart');
   if (!canvas || !isSectionVisible()) return;
 
-  // Chart.js reads parent size at init — skip if layout hasn't run yet.
   if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
     pendingFrame = requestAnimationFrame(() => renderPreview(amounts));
     return;
   }
 
   if (previewChart) {
-    previewChart.data.labels = amounts.map((_, i) => String(i + 1));
-    previewChart.data.datasets[0].data = amounts;
-    previewChart.data.datasets[0].pointRadius = amounts.length <= 40 ? 3 : 0;
-    previewChart.update();
-    previewChart.resize();
-    return;
+    previewChart.destroy();
+    previewChart = null;
   }
 
   previewChart = buildChart(canvas, amounts);
 }
 
 export function updateWithdrawalPreviewChart(amounts) {
+  lastAmounts = amounts;
   if (!isSectionVisible()) return;
 
   if (pendingFrame) cancelAnimationFrame(pendingFrame);
-  // Wait for the section to finish laying out after becoming visible.
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = requestAnimationFrame(() => {
       pendingFrame = null;
@@ -114,3 +117,7 @@ export function resizeWithdrawalPreviewChart() {
   previewChart.resize();
   previewChart.update('none');
 }
+
+onThemeChange(() => {
+  if (lastAmounts && isSectionVisible()) renderPreview(lastAmounts);
+});

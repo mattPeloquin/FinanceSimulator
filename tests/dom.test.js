@@ -54,6 +54,7 @@ const REQUIRED_IDS = [
   'exportSessionButton',
   'importSessionButton',
   'importFileInput',
+  'themeToggle',
   'successRate',
   'medianBalance',
   'medianWithdrawn',

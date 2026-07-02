@@ -7,6 +7,8 @@ import {
   buildDrilldownPaths,
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
+import { getChartTheme } from './chartTheme.js';
+import { onThemeChange } from '../theme.js';
 
 let echartsModule = null;
 let chartInstance = null;
@@ -29,12 +31,6 @@ const RETURN_MAX = 0.5;
 
 // Z axis is capped at this multiple of the starting portfolio value.
 const Z_CAP_MULTIPLE = 2;
-
-// Background matches the app's page background so the plot is framed in its section.
-const SCENE_BG = '#f1f5f9'; // slate-100
-const AXIS_NAME_COLOR = '#475569'; // slate-600
-const AXIS_LABEL_COLOR = '#64748b'; // slate-500
-const AXIS_LINE_COLOR = '#cbd5e1'; // slate-300
 
 const DIM_OPACITY = 0.02; // opacity of non-focused columns
 const POP_FRACTION = 0; // how far the focused row floats up (fraction of zCap)
@@ -72,6 +68,7 @@ const surfaceState = {
   drilldownCenterRank: null,
   drilldownLo: null,
   drilldownHi: null,
+  lastContext: null,
 };
 
 async function loadEcharts() {
@@ -184,7 +181,6 @@ function buildXAxisConfig(numCols) {
     splitNumber: 5,
     axisLabel: {
       show: true,
-      color: AXIS_LABEL_COLOR,
       fontSize: 9,
       margin: 4,
       formatter: (v) => columnPercentileLabel(v, numCols),
@@ -204,14 +200,58 @@ function pointValue(p) {
   return Array.isArray(p) ? p : p.value;
 }
 
+function zAxisLabel(formatter) {
+  const theme = getChartTheme();
+  return { show: true, color: theme.axisLabel, fontSize: 9, margin: 4, formatter };
+}
+
+function applySurfaceTheme() {
+  if (!chartInstance || !surfaceState.columns.length) return;
+  const theme = getChartTheme();
+  const numCols = surfaceState.columns.length;
+  chartInstance.setOption({
+    xAxis3D: buildXAxisConfig(numCols),
+    yAxis3D: axisConfig('Year', { min: 0, max: surfaceState.numYears, splitNumber: 5, inverse: true }),
+    zAxis3D: {
+      min: 0,
+      max: surfaceState.zCap,
+      ...axisConfig('Balance'),
+      axisLabel: zAxisLabel((v) => formatK(v)),
+    },
+    grid3D: { environment: theme.sceneBg },
+  });
+  if (floatPanel) {
+    floatPanel.style.background = theme.floatPanelBg;
+    floatPanel.style.borderLeftColor = theme.floatPanelBorder;
+    floatPanel.style.borderBottomColor = theme.floatPanelBorder;
+  }
+  if (floatTitle) floatTitle.style.color = theme.floatTitleText;
+  if (floatChart) {
+    Object.assign(floatChart.options, floatChartOptions());
+    floatChart.update('none');
+  }
+  if (largeChart) {
+    Object.assign(largeChart.options.scales.x.ticks, { color: theme.axisTick });
+    Object.assign(largeChart.options.scales.y.ticks, { color: theme.axisTick, callback: (v) => formatK(v) });
+    Object.assign(largeChart.options.scales.y.title, { color: theme.axisTitle });
+    largeChart.update('none');
+  }
+  if (largeBalanceChart) {
+    Object.assign(largeBalanceChart.options, balanceBarOptions());
+    largeBalanceChart.update('none');
+  }
+  if (surfaceState.pinnedCol != null) showFloatWithdrawal(surfaceState.pinnedCol);
+}
+
 function axisConfig(name, extra = {}) {
+  const theme = getChartTheme();
   return {
     type: 'value',
     name,
-    nameTextStyle: { color: AXIS_NAME_COLOR, fontSize: 11 },
-    axisLabel: { show: true, color: AXIS_LABEL_COLOR, fontSize: 9, margin: 4 },
+    nameTextStyle: { color: theme.axisName, fontSize: 11 },
+    axisLabel: { show: true, color: theme.axisLabel, fontSize: 9, margin: 4, ...extra.axisLabel },
     axisTick: { show: false },
-    axisLine: { lineStyle: { color: AXIS_LINE_COLOR } },
+    axisLine: { lineStyle: { color: theme.axisLine } },
     splitLine: { show: false },
     ...extra,
   };
@@ -229,16 +269,17 @@ function ensureFloatPanel() {
   const container = document.getElementById('surfaceChart');
   if (!container) return;
   container.style.position = 'relative';
+  const theme = getChartTheme();
 
   floatPanel = document.createElement('div');
   floatPanel.style.cssText =
     `position:absolute;top:0;right:0;width:${FLOAT_PANEL_WIDTH}px;` +
-    'background:rgba(255,255,255,0.94);border-left:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;' +
+    `background:${theme.floatPanelBg};border-left:1px solid ${theme.floatPanelBorder};border-bottom:1px solid ${theme.floatPanelBorder};` +
     'border-radius:0 0 0 6px;box-shadow:0 2px 6px rgba(0,0,0,0.08);' +
     'padding:5px 6px;z-index:10;pointer-events:auto;display:none;';
 
   floatTitle = document.createElement('div');
-  floatTitle.style.cssText = 'font-size:10px;font-weight:600;color:#334155;margin-bottom:3px;line-height:1.2;';
+  floatTitle.style.cssText = `font-size:10px;font-weight:600;color:${theme.floatTitleText};margin-bottom:3px;line-height:1.2;`;
 
   const wrap = document.createElement('div');
   wrap.style.cssText = `height:${FLOAT_PANEL_CHART_HEIGHT}px;`;
@@ -308,24 +349,25 @@ function extractWithdrawalSeries(col) {
 // actually withdrawn. Shared by the small float panel and the large dialog;
 // `large` just scales line and point sizes up.
 function withdrawalComparisonDatasets(series, { large = false } = {}) {
-  const theme = series.depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
+  const theme = getChartTheme();
+  const floatTheme = series.depleted ? FLOAT_THEME.depleted : FLOAT_THEME.ok;
   return [
     {
       label: 'Original Plan',
       data: series.unadjustedData,
-      borderColor: '#94a3b8',
+      borderColor: theme.planLine,
       borderWidth: large ? 2 : 1.5,
       borderDash: large ? [5, 5] : [4, 4],
       tension: 0.1,
       fill: { target: 'origin' },
-      backgroundColor: 'rgba(148, 163, 184, 0.2)',
+      backgroundColor: theme.planFill,
       pointRadius: 0,
       pointHoverRadius: 0,
     },
     {
       label: 'Actual Withdrawal',
       data: series.actualData,
-      borderColor: theme.line,
+      borderColor: floatTheme.line,
       borderWidth: large ? 2 : 1.5,
       tension: 0.1,
       fill: {
@@ -335,7 +377,7 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
       },
       pointRadius: large ? 3 : 1.5,
       pointHoverRadius: large ? 5 : 2.5,
-      pointBackgroundColor: theme.point,
+      pointBackgroundColor: floatTheme.point,
       pointBorderColor: '#fff',
       pointBorderWidth: 1,
     },
@@ -343,6 +385,7 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
 }
 
 function floatChartOptions() {
+  const theme = getChartTheme();
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -351,13 +394,13 @@ function floatChartOptions() {
     scales: {
       x: {
         title: { display: false },
-        ticks: { maxTicksLimit: 5, font: { size: 8 }, padding: 0 },
+        ticks: { maxTicksLimit: 5, font: { size: 8 }, padding: 0, color: theme.axisTick },
         grid: { display: false },
       },
       y: {
         beginAtZero: true,
-        ticks: { maxTicksLimit: 4, callback: (v) => formatK(v), font: { size: 8 }, padding: 0 },
-        grid: { color: 'rgba(148,163,184,0.2)' },
+        ticks: { maxTicksLimit: 4, callback: (v) => formatK(v), font: { size: 8 }, padding: 0, color: theme.axisTick },
+        grid: { color: theme.gridLine },
       },
     },
     plugins: {
@@ -393,12 +436,13 @@ function showFloatWithdrawal(col) {
 
   const pLabel = columnPercentileLabel(col, surfaceState.columns.length);
   const status = series.depleted ? 'Depleted' : 'Funded';
+  const muted = getChartTheme().floatMutedText;
   floatTitle.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
       <div style="color:${series.depleted ? '#c2410c' : '#15803d'}">${pLabel} · ${status}</div>
-      <div style="font-weight:normal;color:#64748b;">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
+      <div style="font-weight:normal;color:${muted};">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
     </div>
-    <div style="font-weight:normal;color:#64748b;margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
+    <div style="font-weight:normal;color:${muted};margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
   `;
   floatTitle.style.color = '';
 
@@ -433,6 +477,7 @@ function balanceBarColors(series) {
 }
 
 function balanceBarOptions() {
+  const theme = getChartTheme();
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -440,14 +485,15 @@ function balanceBarOptions() {
     interaction: { mode: 'index', intersect: false },
     scales: {
       x: {
-        title: { display: true, text: 'Year' },
+        title: { display: true, text: 'Year', color: theme.axisTitle },
+        ticks: { color: theme.axisTick },
         grid: { display: false },
       },
       y: {
         beginAtZero: true,
-        title: { display: true, text: 'Balance ($)' },
-        ticks: { callback: (v) => formatK(v), maxTicksLimit: 4 },
-        grid: { color: 'rgba(148,163,184,0.2)' },
+        title: { display: true, text: 'Balance ($)', color: theme.axisTitle },
+        ticks: { callback: (v) => formatK(v), maxTicksLimit: 4, color: theme.axisTick },
+        grid: { color: theme.gridLine },
       },
     },
     plugins: {
@@ -495,6 +541,7 @@ function openLargeWithdrawalChart(col) {
     largeChart.data.datasets[1].pointBackgroundColor = theme.point;
     largeChart.update();
   } else {
+    const chartTheme = getChartTheme();
     largeChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       data: { labels: series.labels, datasets: withdrawalComparisonDatasets(series, { large: true }) },
@@ -505,17 +552,18 @@ function openLargeWithdrawalChart(col) {
         scales: {
           x: {
             title: { display: false },
-            ticks: { display: false },
+            ticks: { display: false, color: chartTheme.axisTick },
             grid: { display: false },
           },
           y: {
             beginAtZero: true,
-            title: { display: true, text: 'Withdrawal Amount ($)' },
-            ticks: { callback: (v) => formatK(v) },
+            title: { display: true, text: 'Withdrawal Amount ($)', color: chartTheme.axisTitle },
+            ticks: { callback: (v) => formatK(v), color: chartTheme.axisTick },
+            grid: { color: chartTheme.gridLine },
           },
         },
         plugins: {
-          legend: { position: 'top' },
+          legend: { position: 'top', labels: { color: chartTheme.legend } },
           tooltip: {
             displayColors: false,
             callbacks: {
@@ -770,7 +818,7 @@ function applySurfaceDataset(surfacePaths, numYears) {
     zAxis3D: {
       min: 0,
       max: zCap,
-      axisLabel: { show: true, color: AXIS_LABEL_COLOR, fontSize: 9, margin: 4, formatter: (v) => formatK(v) },
+      axisLabel: zAxisLabel((v) => formatK(v)),
     },
     series: [
       {
@@ -856,6 +904,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.drilldownLo = null;
   surfaceState.drilldownHi = null;
   surfaceState.numYears = numYears;
+  surfaceState.lastContext = { surfacePaths, numYears, context };
 
   const { data3D, columns, depletedCols, zCap, barWidth, barDepth, numCols } =
     buildColumnsFromPaths(surfacePaths, numYears);
@@ -869,6 +918,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.columnClickHandled = false;
   hideFloatPanel();
   updateSurfaceChrome({ mode: 'overview' });
+  const theme = getChartTheme();
 
   chartInstance.setOption(
     {
@@ -885,7 +935,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
       zAxis3D: axisConfig('Balance', {
         min: 0,
         max: zCap,
-        axisLabel: { show: true, color: AXIS_LABEL_COLOR, fontSize: 9, margin: 4, formatter: (v) => formatK(v) },
+        axisLabel: zAxisLabel((v) => formatK(v)),
       }),
       grid3D: {
         boxWidth: BOX_WIDTH,
@@ -903,7 +953,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
           zoomSensitivity: 1,
           panSensitivity: 1,
         },
-        environment: SCENE_BG,
+        environment: theme.sceneBg,
         light: {
           main: { intensity: 1.2, shadow: false, alpha: 40, beta: 225 },
           ambient: { intensity: 0.35 },
@@ -954,3 +1004,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     window.__sorSurfaceResizeBound = true;
   }
 }
+
+onThemeChange(() => {
+  applySurfaceTheme();
+});

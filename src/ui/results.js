@@ -17,10 +17,10 @@ function setDelta(id, delta) {
   const el = document.getElementById(id);
   if (!el) return;
   const display = formatK(delta); // rounds to $000s; '0' means "no visible difference"
-  el.classList.remove('text-green-600', 'text-red-600', 'text-slate-400');
+  el.classList.remove('text-green-600', 'text-red-600', 'text-slate-400', 'dark:text-slate-500');
   if (display === '0') {
     el.textContent = 'on plan';
-    el.classList.add('text-slate-400');
+    el.classList.add('text-slate-400', 'dark:text-slate-500');
   } else if (delta > 0) {
     el.textContent = `+${display} vs plan`;
     el.classList.add('text-green-600');
@@ -43,13 +43,13 @@ function setEndYear(id, balances, numYears) {
       break;
     }
   }
-  el.classList.remove('text-red-500', 'text-slate-400');
+  el.classList.remove('text-red-500', 'text-slate-400', 'dark:text-slate-500');
   if (depletedYear !== null) {
     el.textContent = `ran out year ${depletedYear}`;
     el.classList.add('text-red-500');
   } else {
     el.textContent = `year ${numYears}`;
-    el.classList.add('text-slate-400');
+    el.classList.add('text-slate-400', 'dark:text-slate-500');
   }
 }
 

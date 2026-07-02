@@ -5,6 +5,8 @@ import { Chart } from './chartSetup.js';
 import { balanceScaleMultiplier } from '../../core/withdrawal.js';
 import { parseCurrency, MONEY_SCALE } from '../../state/scenario.js';
 import { formatK } from '../format.js';
+import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { onThemeChange } from '../theme.js';
 
 const SAMPLE_POINTS = 80;
 
@@ -16,8 +18,6 @@ function isSectionVisible() {
   return wrapper && !wrapper.classList.contains('hidden');
 }
 
-// Read the guardrail inputs straight from the form, in dollars/decimals,
-// mirroring how buildSimParams prepares them for the engine.
 function readPortfolioFromForm() {
   const dollars = (id) => parseCurrency(document.getElementById(id)?.value) * MONEY_SCALE;
   const pct = (id) => (parseFloat(document.getElementById(id)?.value) || 0) / 100;
@@ -30,7 +30,6 @@ function readPortfolioFromForm() {
   };
 }
 
-// Pick an x-axis range wide enough to show both ramps in action.
 function chartMaxBalance(portfolio) {
   const anchors = [portfolio.startBalance, portfolio.floorBalance * 2];
   if (Number.isFinite(portfolio.ceilingBalance)) anchors.push(portfolio.ceilingBalance * 2);
@@ -49,6 +48,7 @@ function buildSeries(portfolio) {
 }
 
 function buildChart(canvas, points) {
+  const theme = getChartTheme();
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
@@ -74,19 +74,20 @@ function buildChart(canvas, points) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Portfolio Balance ($000s)', font: { size: 9 } },
-          ticks: { maxTicksLimit: 6, font: { size: 9 }, callback: (v) => formatK(v) },
+          title: { display: true, text: 'Portfolio Balance ($000s)', font: { size: 9 }, color: theme.axisTitle },
+          ticks: { maxTicksLimit: 6, font: { size: 9 }, callback: (v) => formatK(v), color: theme.axisTick },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: { maxTicksLimit: 5, font: { size: 9 }, callback: (v) => `${v}\u00d7` },
-          grid: { color: 'rgba(148,163,184,0.2)' },
+          ticks: { maxTicksLimit: 5, font: { size: 9 }, callback: (v) => `${v}\u00d7`, color: theme.axisTick },
+          grid: { color: theme.gridLine },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
+          ...chartJsTooltip(theme),
           displayColors: false,
           callbacks: {
             title: (items) => `Balance: ${formatK(items[0].parsed.x)}`,
@@ -102,7 +103,6 @@ function renderSparkline() {
   const canvas = document.getElementById('guardrailPreviewChart');
   if (!canvas || !isSectionVisible()) return;
 
-  // Chart.js reads parent size at init — skip if layout hasn't run yet.
   if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
     pendingFrame = requestAnimationFrame(renderSparkline);
     return;
@@ -110,9 +110,8 @@ function renderSparkline() {
 
   const points = buildSeries(readPortfolioFromForm());
   if (sparkChart) {
-    sparkChart.data.datasets[0].data = points;
-    sparkChart.update('none');
-    return;
+    sparkChart.destroy();
+    sparkChart = null;
   }
   sparkChart = buildChart(canvas, points);
 }
@@ -120,7 +119,6 @@ function renderSparkline() {
 export function syncGuardrailPreview() {
   if (!isSectionVisible()) return;
   if (pendingFrame) cancelAnimationFrame(pendingFrame);
-  // Wait for the section to finish laying out after becoming visible.
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = requestAnimationFrame(() => {
       pendingFrame = null;
@@ -128,3 +126,7 @@ export function syncGuardrailPreview() {
     });
   });
 }
+
+onThemeChange(() => {
+  if (isSectionVisible()) renderSparkline();
+});
