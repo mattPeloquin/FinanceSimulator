@@ -67,3 +67,26 @@ export function balanceScaleMultiplier(balance, portfolio) {
 
   return 1;
 }
+
+// Build a per-year minimum-withdrawal backstop from staged tiers ($000s in tiers).
+// Intermediate tiers run for their year count; the final tier fills the horizon.
+export function buildWithdrawalFloorSeries(tiers, numYears, toDollarsFn) {
+  if (numYears <= 0) return [];
+  const series = new Array(numYears).fill(0);
+  if (!tiers || tiers.length === 0) return series;
+
+  let yearIndex = 0;
+  for (let i = 0; i < tiers.length - 1; i++) {
+    const amount = toDollarsFn(tiers[i].amount);
+    const span = Math.max(0, parseInt(tiers[i].years, 10) || 0);
+    for (let k = 0; k < span && yearIndex < numYears; k++) {
+      series[yearIndex++] = amount;
+    }
+  }
+
+  const lastAmount = toDollarsFn(tiers[tiers.length - 1].amount);
+  while (yearIndex < numYears) {
+    series[yearIndex++] = lastAmount;
+  }
+  return series;
+}

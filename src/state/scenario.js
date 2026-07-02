@@ -6,11 +6,12 @@
 // and validation trivial.
 
 import { correlationCholesky } from '../core/history.js';
+import { buildWithdrawalFloorSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -47,7 +48,6 @@ const FIELDS = [
   field('floorPenalty', 'floorPenalty', 'float'),
   field('ceilingBalance', 'ceilingBalance', 'currency'),
   field('ceilingBonus', 'ceilingBonus', 'float'),
-  field('withdrawalFloor', 'withdrawalFloor', 'currency'),
 
   field('spendChangePct', 'spendChangePct', 'float'),
   field('goGoBonus', 'goGoBonus', 'currency'),
@@ -109,16 +109,118 @@ export function formatCurrency(val) {
   return n.toLocaleString('en-US');
 }
 
-/** Upgrade v1 scenarios that stored currency fields in full dollars. */
+/** Upgrade saved scenarios from older schema versions. */
 export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
-  if (!scenario || schemaVersion >= 2) return scenario;
-  const migrated = { ...scenario };
-  for (const f of FIELDS) {
-    if (f.type === 'currency' && migrated[f.key] != null && migrated[f.key] !== '') {
-      migrated[f.key] = migrated[f.key] / MONEY_SCALE;
+  if (!scenario) return scenario;
+  let migrated = { ...scenario };
+
+  if (schemaVersion < 2) {
+    for (const f of FIELDS) {
+      if (f.type === 'currency' && migrated[f.key] != null && migrated[f.key] !== '') {
+        migrated[f.key] = migrated[f.key] / MONEY_SCALE;
+      }
+    }
+    if (migrated.withdrawalFloor != null && migrated.withdrawalFloor !== '') {
+      migrated.withdrawalFloor = migrated.withdrawalFloor / MONEY_SCALE;
     }
   }
+
+  if (schemaVersion < 3) {
+    if (migrated.withdrawalFloors == null) {
+      const legacyFloor = parseCurrency(migrated.withdrawalFloor);
+      migrated.withdrawalFloors = legacyFloor > 0 ? [{ amount: legacyFloor }] : [{ amount: 0 }];
+    }
+    delete migrated.withdrawalFloor;
+  }
+
   return migrated;
+}
+
+/** Ensure withdrawal floor tiers are a non-empty array with numeric amounts. */
+export function normalizeWithdrawalFloors(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [{ amount: 0 }];
+  }
+  return tiers.map((tier, index, arr) => {
+    const amount = parseCurrency(tier?.amount);
+    const isLast = index === arr.length - 1;
+    if (isLast) return { amount };
+    const years = parseInt(tier?.years, 10);
+    return { amount, years: Number.isFinite(years) && years >= 1 ? years : 1 };
+  });
+}
+
+export function readWithdrawalFloorsFromDom(doc = document) {
+  const list = doc.getElementById('withdrawalFloorsList');
+  if (!list) return normalizeWithdrawalFloors(SCENARIO_DEFAULTS.withdrawalFloors);
+
+  const rows = list.querySelectorAll('[data-withdrawal-floor-row]');
+  if (rows.length === 0) return normalizeWithdrawalFloors(SCENARIO_DEFAULTS.withdrawalFloors);
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const amountInput = row.querySelector('[data-floor-amount]');
+    const yearsInput = row.querySelector('[data-floor-years]');
+    const amount = parseCurrency(amountInput?.value);
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push({ amount });
+    } else {
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({ amount, years: Number.isFinite(years) ? years : null });
+    }
+  });
+  return tiers;
+}
+
+export function writeWithdrawalFloorsToDom(tiers, doc = document) {
+  const list = doc.getElementById('withdrawalFloorsList');
+  if (!list) return;
+
+  const normalized = normalizeWithdrawalFloors(tiers);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'flex flex-wrap items-end gap-2 mb-2';
+    row.dataset.withdrawalFloorRow = String(index);
+
+    const amountWrap = doc.createElement('div');
+    amountWrap.className = 'flex-1 min-w-[7rem]';
+    amountWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Minimum</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" data-floor-amount class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.amount)}">
+        <span class="input-adorn-suffix">000s</span>
+      </div>`;
+
+    row.appendChild(amountWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-floor-years min="1" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 1}">`;
+      row.appendChild(yearsWrap);
+    } else if (normalized.length > 1) {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      row.appendChild(labelWrap);
+    }
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-withdrawal-floor-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
+    removeBtn.textContent = 'Remove';
+    removeBtn.disabled = normalized.length <= 1;
+    if (removeBtn.disabled) removeBtn.classList.add('opacity-40', 'cursor-not-allowed');
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
 }
 
 export function defaultScenario() {
@@ -145,7 +247,8 @@ export function readScenarioFromDom(doc = document) {
 
   const strat = doc.querySelector('input[name="withdrawal-strategy"]:checked');
   scenario.withdrawalStrategy = strat ? strat.value : SCENARIO_DEFAULTS.withdrawalStrategy;
-  
+  scenario.withdrawalFloors = readWithdrawalFloorsFromDom(doc);
+
   return scenario;
 }
 
@@ -173,6 +276,11 @@ export function writeScenarioToDom(scenario, doc = document) {
   // Keep the block-size slider in sync with its number input.
   const slider = doc.getElementById('blockSizeSlider');
   if (slider && scenario.blockSize != null) slider.value = scenario.blockSize;
+
+  writeWithdrawalFloorsToDom(
+    scenario.withdrawalFloors ?? SCENARIO_DEFAULTS.withdrawalFloors,
+    doc,
+  );
 }
 
 function parseField(raw, type) {
@@ -263,7 +371,11 @@ export function buildSimParams(scenario, samples) {
       floorPenalty: (scenario.floorPenalty || 0) / 100,
       ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
-      withdrawalFloor: toDollars(scenario.withdrawalFloor),
+      withdrawalFloorSeries: buildWithdrawalFloorSeries(
+        normalizeWithdrawalFloors(scenario.withdrawalFloors),
+        scenario.numYears,
+        toDollars,
+      ),
       // Front-loading controls. Same name as the scenario's spendChangePct field,
       // but converted from a percentage to a decimal rate.
       spendChangeRate: (scenario.spendChangePct || 0) / 100,
@@ -361,6 +473,22 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     scenario.endYear > maxYear
   ) {
     errors.push(`Year range must be valid and within ${minYear}-${maxYear}.`);
+  }
+
+  const tiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
+  if (Number.isFinite(scenario.numYears) && tiers.length > 1) {
+    let intermediateYears = 0;
+    for (let i = 0; i < tiers.length - 1; i++) {
+      const years = tiers[i].years;
+      if (!Number.isFinite(years) || years < 1) {
+        errors.push('Each minimum-withdrawal tier (except the last) must span at least 1 year.');
+        break;
+      }
+      intermediateYears += years;
+    }
+    if (intermediateYears >= scenario.numYears) {
+      errors.push('Minimum-withdrawal tiers must leave at least 1 year for the final tier.');
+    }
   }
 
   return errors;

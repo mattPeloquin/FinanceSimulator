@@ -237,9 +237,18 @@ describe('front-loaded spending', () => {
   it('enforces a minimum withdrawal floor regardless of adjustments', () => {
     const p = flatParams();
     p.portfolio.base = 50_000;
-    p.portfolio.withdrawalFloor = 80_000;
+    p.portfolio.withdrawalFloorSeries = Array(10).fill(80_000);
     const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
     expect(w[0]).toBeCloseTo(80_000, 3);
+  });
+
+  it('applies staged minimum withdrawal tiers by year index', () => {
+    const p = flatParams();
+    p.portfolio.base = 40_000;
+    p.portfolio.withdrawalFloorSeries = [80_000, 80_000, 80_000, 60_000, 60_000, 60_000, 60_000, 60_000, 60_000, 60_000];
+    const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
+    expect(w[2]).toBeCloseTo(80_000, 3);
+    expect(w[3]).toBeCloseTo(60_000, 3);
   });
 });
 
@@ -265,7 +274,7 @@ describe('balance-based spending scale', () => {
       portfolio: {
         start: 1_000_000, base: 100_000, floorBalance: 2_000_000, floorPenalty: 0.5,
         ceilingBalance: Infinity, ceilingBonus: 0,
-        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0, withdrawalFloor: 0,
+        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0, withdrawalFloorSeries: [0],
       },
       dynConfig: {
         enabled: true,
@@ -286,7 +295,7 @@ describe('balance-based spending scale', () => {
   it('never scales below the minimum withdrawal backstop', () => {
     const p = scaleParams();
     p.portfolio.floorPenalty = 1; // multiplier 0.5 -> 50k target...
-    p.portfolio.withdrawalFloor = 60_000; // ...but the backstop lifts it back.
+    p.portfolio.withdrawalFloorSeries = [60_000];
     const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
     expect(s.path.withdrawals[0]).toBeCloseTo(60_000, 3);
   });
@@ -336,7 +345,7 @@ describe('deposits from negative withdrawals', () => {
         spendChangeRate: 0,
         goGoBonus: 0,
         goGoYears: 0,
-        withdrawalFloor: 0,
+        withdrawalFloorSeries: [0, 0],
       },
       dynConfig: { enabled: false, low: { ret: 0, bal: 0, adj: 0 }, med: { ret: 0, bal: 0, adj: 0 }, high: { ret: 0, bal: 0, adj: 0 } },
       samples: null,
@@ -357,7 +366,7 @@ describe('deposits from negative withdrawals', () => {
     const p = flatParams();
     p.numYears = 1;
     p.portfolio.specificWithdrawals = [-100_000];
-    p.portfolio.withdrawalFloor = 80_000;
+    p.portfolio.withdrawalFloorSeries = [80_000];
     const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
     expect(s.path.withdrawals[0]).toBeCloseTo(-100_000, 3);
     expect(s.path.balances[1]).toBeCloseTo(1_100_000, 3);

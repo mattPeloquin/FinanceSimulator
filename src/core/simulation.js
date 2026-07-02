@@ -181,8 +181,9 @@ export function simulatePath(params, rng, collectPath = false) {
       unadjustedTarget = 0;
     }
 
-    if (unadjustedTarget >= 0 && portfolio.withdrawalFloor > 0) {
-      unadjustedTarget = Math.max(unadjustedTarget, portfolio.withdrawalFloor);
+    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
+    if (unadjustedTarget >= 0 && yearFloor > 0) {
+      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
     }
 
     let actualWithdrawal;
@@ -191,8 +192,8 @@ export function simulatePath(params, rng, collectPath = false) {
       actualWithdrawal = targetWithdrawal;
       balance -= actualWithdrawal;
     } else {
-      if (portfolio.withdrawalFloor > 0) {
-        targetWithdrawal = Math.max(targetWithdrawal, portfolio.withdrawalFloor);
+      if (yearFloor > 0) {
+        targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
       }
       actualWithdrawal = Math.min(balance, targetWithdrawal);
       balance -= actualWithdrawal;

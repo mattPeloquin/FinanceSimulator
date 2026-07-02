@@ -77,8 +77,9 @@ export const SCENARIO_DEFAULTS = {
   // Spending scale at/above ceilingBalance, as % bonus (e.g. 50 = +50%).
   ceilingBonus: 50,
 
-  // Minimum withdrawal each year after all adjustments ($000s). 0 = no floor.
-  withdrawalFloor: 100,
+  // Staged minimum withdrawals ($000s). Intermediate tiers need a year count;
+  // the last tier applies to all remaining years. Empty = no floor.
+  withdrawalFloors: [{ amount: 100 }],
 
   // Front-loading (only when withdrawalStrategy is 'base')
 

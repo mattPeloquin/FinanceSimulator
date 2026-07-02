@@ -1,6 +1,6 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency } from '../state/scenario.js';
+import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom } from '../state/scenario.js';
 import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
@@ -75,6 +75,50 @@ export function toggleDynamicAdjustments(enabled) {
   } else {
     wrapper.classList.add('hidden');
   }
+}
+
+function formatWithdrawalFloorCurrencyInput(input) {
+  const val = parseCurrency(input.value);
+  if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+}
+
+export function setupWithdrawalFloorList({ onChange }) {
+  const list = document.getElementById('withdrawalFloorsList');
+  const addBtn = document.getElementById('addWithdrawalFloorTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readWithdrawalFloorsFromDom();
+    if (tiers.length === 0) {
+      tiers.push({ amount: 0 });
+    }
+    const last = tiers.pop();
+    tiers.push({ amount: last.amount, years: 1 });
+    tiers.push(last);
+    writeWithdrawalFloorsToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-withdrawal-floor-tier');
+    if (!btn || btn.disabled) return;
+    const tiers = readWithdrawalFloorsFromDom();
+    if (tiers.length <= 1) return;
+    tiers.splice(Number(btn.closest('[data-withdrawal-floor-row]')?.dataset.withdrawalFloorRow), 1);
+    writeWithdrawalFloorsToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('change', notify);
+
+  list.addEventListener('blur', (e) => {
+    if (e.target.matches('[data-floor-amount]')) {
+      formatWithdrawalFloorCurrencyInput(e.target);
+      notify();
+    }
+  }, true);
 }
 
 export function renderYearLabels(years) {
@@ -193,6 +237,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     input.addEventListener('change', notify);
   });
 
+  setupWithdrawalFloorList({ onChange: notify });
   setupAccordionResize();
 }
 

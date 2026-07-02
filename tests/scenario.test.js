@@ -32,9 +32,15 @@ describe('migrateScenario', () => {
     expect(v2.baseWithdrawal).toBe(80);
     expect(v2.numYears).toBe(40);
   });
-  it('leaves v2 scenarios unchanged', () => {
-    const s = { startBalance: 4000, baseWithdrawal: 80 };
-    expect(migrateScenario(s, 2)).toEqual(s);
+  it('converts v2 withdrawalFloor to withdrawalFloors', () => {
+    const v2 = { startBalance: 4000, withdrawalFloor: 100 };
+    const v3 = migrateScenario(v2, 2);
+    expect(v3.withdrawalFloors).toEqual([{ amount: 100 }]);
+    expect(v3.withdrawalFloor).toBeUndefined();
+  });
+  it('leaves v3 scenarios unchanged', () => {
+    const s = { startBalance: 4000, withdrawalFloors: [{ amount: 80 }] };
+    expect(migrateScenario(s, 3)).toEqual(s);
   });
 });
 
@@ -72,6 +78,14 @@ describe('buildSimParams', () => {
     expect(p.portfolio.specificWithdrawals).toHaveLength(s.numYears);
     expect(p.portfolio.specificWithdrawals.slice(0, 3)).toEqual([80000, 85000, 90000]);
     expect(p.portfolio.specificWithdrawals.slice(3)).toEqual(Array(s.numYears - 3).fill(90000));
+  });
+
+  it('builds a per-year minimum withdrawal series from tiers', () => {
+    const s = defaultScenario();
+    s.numYears = 5;
+    s.withdrawalFloors = [{ amount: 120, years: 2 }, { amount: 80 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.withdrawalFloorSeries).toEqual([120_000, 120_000, 80_000, 80_000, 80_000]);
   });
 });
 
@@ -169,6 +183,14 @@ describe('validateScenario', () => {
     s.dynLowRet = 5;
     s.dynMedRet = 5;
     expect(validateScenario(s, range)).toEqual([]);
+  });
+
+  it('flags minimum-withdrawal tiers that leave no room for the final tier', () => {
+    const s = defaultScenario();
+    s.numYears = 10;
+    s.withdrawalFloors = [{ amount: 100, years: 10 }, { amount: 80 }];
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('final tier'))).toBe(true);
   });
 });
 
