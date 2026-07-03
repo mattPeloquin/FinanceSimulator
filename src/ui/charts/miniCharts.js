@@ -16,14 +16,13 @@ const MINI_CHARTS = [
 const instances = {};
 let lastStartYear = null;
 let lastEndYear = null;
+let resizeTimer = null;
 
-function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetName) {
-  if (instances[canvasId]) instances[canvasId].destroy();
+function buildMiniChart(canvas, labels, assetData, inflationData, color, assetName) {
   const theme = getChartTheme();
-  const ctx = document.getElementById(canvasId).getContext('2d');
   const zeroLineData = labels.map(() => 0);
 
-  instances[canvasId] = new Chart(ctx, {
+  return new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
       labels,
@@ -66,6 +65,43 @@ function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetN
   });
 }
 
+function drawMiniChart(canvasId, labels, assetData, inflationData, color, assetName) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
+    requestAnimationFrame(() => {
+      drawMiniChart(canvasId, labels, assetData, inflationData, color, assetName);
+    });
+    return;
+  }
+
+  if (instances[canvasId]) instances[canvasId].destroy();
+  instances[canvasId] = buildMiniChart(canvas, labels, assetData, inflationData, color, assetName);
+}
+
+export function resizeMiniCharts() {
+  for (const cfg of MINI_CHARTS) {
+    const canvas = document.getElementById(cfg.canvasId);
+    Chart.getChart(canvas)?.resize();
+  }
+}
+
+function scheduleResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resizeMiniCharts, 100);
+}
+
+function setupResizeHandling() {
+  window.addEventListener('resize', scheduleResize);
+
+  const allocationSection = document.getElementById('us-lg-growth-mini-chart')?.closest('.space-y-1');
+  if (allocationSection && typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(scheduleResize);
+    observer.observe(allocationSection);
+  }
+}
+
 export function updateMiniCharts(startYear, endYear) {
   lastStartYear = startYear;
   lastEndYear = endYear;
@@ -81,3 +117,11 @@ onThemeChange(() => {
     updateMiniCharts(lastStartYear, lastEndYear);
   }
 });
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupResizeHandling);
+  } else {
+    setupResizeHandling();
+  }
+}

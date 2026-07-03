@@ -22,7 +22,7 @@ function matVec(L, v) {
 // Run a single simulation deterministically from `rng`.
 // When `collectPath` is true the full per-year arrays are returned (used only
 // for the handful of paths we actually chart); otherwise only summary stats.
-export function simulatePath(params, rng, collectPath = false) {
+export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0) {
   const { numYears, distMethod, allocation, blockSize, portfolio, dynConfig, logNormal, samples } = params;
 
   let totalRealGrowthFactor = 1.0;
@@ -138,6 +138,7 @@ export function simulatePath(params, rng, collectPath = false) {
     if (returns) returns.push(portfolioReturn);
 
     const realReturn = (1 + portfolioReturn) / (1 + inflation) - 1;
+    if (outRealReturns) outRealReturns[outOffset + j] = realReturn;
     totalRealGrowthFactor *= 1 + realReturn;
 
     balance = balance * (1 + realReturn);
@@ -230,19 +231,20 @@ export function simulatePath(params, rng, collectPath = false) {
 // (memory-light) plus the baseSeed needed to regenerate any individual path.
 // `onProgress(fraction)` is called periodically (0..1).
 export function runMonteCarlo(params, { onProgress } = {}) {
-  const { numSimulations } = params;
+  const { numSimulations, numYears } = params;
   const baseSeed = params.seed >>> 0;
 
   const avgReturn = new Float64Array(numSimulations);
   const finalBalance = new Float64Array(numSimulations);
   const totalWithdrawn = new Float64Array(numSimulations);
   const depletionYear = new Float64Array(numSimulations);
+  const allYearsReturns = new Float64Array(numSimulations * numYears);
 
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
   for (let i = 0; i < numSimulations; i++) {
     const rng = createRng(deriveSeed(baseSeed, i));
-    const s = simulatePath(params, rng, false);
+    const s = simulatePath(params, rng, false, allYearsReturns, i * numYears);
     avgReturn[i] = s.avgReturn;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
@@ -255,7 +257,7 @@ export function runMonteCarlo(params, { onProgress } = {}) {
 
   if (onProgress) onProgress(1);
 
-  return { baseSeed, numSimulations, avgReturn, finalBalance, totalWithdrawn, depletionYear };
+  return { baseSeed, numSimulations, avgReturn, finalBalance, totalWithdrawn, depletionYear, allYearsReturns };
 }
 
 // Regenerate the full path for a specific simulation index (exact, thanks to

@@ -1,7 +1,7 @@
 // Renders the results section: headline metrics, percentile cards, and charts.
 import { formatK, formatPercent } from './format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
-import { drawDistributionChart } from './charts/distribution.js';
+import { drawDistributionChart, drawAllYearsDistributionChart } from './charts/distribution.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
@@ -73,7 +73,24 @@ export function renderResults(result, params) {
   }
 
   drawTimelineCharts(result.percentiles, result.numYears);
-  drawDistributionChart(result.histogram);
+
+  const rs = result.returnSummary;
+  setText('returnMean', formatPercent(rs.mean));
+  setText('returnMedian', formatPercent(rs.median));
+  setText('returnMin', formatPercent(rs.min));
+  setText('returnMax', formatPercent(rs.max));
+  setText('returnStdDev', formatPercent(rs.stdDev));
+
+  drawDistributionChart(result.histogram, result.returnSummary);
+
+  const ay = result.allYearsSummary;
+  setText('allYearsMean', formatPercent(ay.mean));
+  setText('allYearsMedian', formatPercent(ay.median));
+  setText('allYearsMin', formatPercent(ay.min));
+  setText('allYearsMax', formatPercent(ay.max));
+  setText('allYearsStdDev', formatPercent(ay.stdDev));
+  drawAllYearsDistributionChart(result.allYearsHistogram, result.allYearsSummary);
+
   // 3D chart loads its heavy libs lazily; don't block the rest of the render.
   drawSurfaceChart(result.surfacePaths, result.numYears, {
     params,

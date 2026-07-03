@@ -10,6 +10,7 @@ import {
   withdrawalTargetSuccessRate,
   median,
   buildHistogram,
+  summarizeReturns,
 } from '../core/statistics.js';
 
 const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
@@ -111,6 +112,9 @@ self.onmessage = (e) => {
     }
 
     const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
+    const returnSummary = summarizeReturns(result.avgReturn);
+    const allYearsHistogram = buildHistogram(result.allYearsReturns, HISTOGRAM_BINS);
+    const allYearsSummary = summarizeReturns(result.allYearsReturns);
 
     // The planned (unadjusted) withdrawal schedule ignores market returns, so it
     // is identical in every run — sum it once from the p50 path already in hand.
@@ -137,6 +141,9 @@ self.onmessage = (e) => {
           surfaceSamples: SURFACE_SAMPLES,
         },
         histogram,
+        returnSummary,
+        allYearsHistogram,
+        allYearsSummary,
       },
     });
   } catch (err) {

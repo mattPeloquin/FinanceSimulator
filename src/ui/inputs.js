@@ -59,6 +59,7 @@ export function toggleDistMethod(method) {
     lognormal.classList.remove('form-section-hidden');
   } else {
     lognormal.classList.add('form-section-hidden');
+    lognormal.open = false;
   }
 }
 

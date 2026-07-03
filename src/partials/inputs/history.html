@@ -27,6 +27,7 @@
                     <span class="block text-theme-faint">Directly sample from historical data, preserving asset correlations.</span>
                 </div>
             </label>
+            <div class="space-y-2">
             <label for="dist-lognormal" class="relative flex items-start p-3 border rounded-lg cursor-pointer has-[:checked]:bg-theme-accent-subtle has-[:checked]:border-theme-accent">
                 <div class="flex items-center h-5">
                     <input id="dist-lognormal" name="distribution-method" type="radio" value="lognormal" class="focus:ring-theme-accent h-4 w-4 text-theme-accent border-theme-input">
@@ -36,6 +37,8 @@
                     <span class="block text-theme-faint">Simulate from each asset's Mean and Standard Deviation, correlated using the historical correlation matrix for the selected year range.</span>
                 </div>
             </label>
+            {{> lognormal }}
+            </div>
         </div>
     </fieldset>
 </div>

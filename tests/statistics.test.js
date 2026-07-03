@@ -3,10 +3,14 @@ import {
   rankByWithdrawn,
   rankByReturn,
   percentileIndex,
+  percentileValue,
+  closestHistogramBin,
   successRate,
   withdrawalTargetSuccessRate,
   mean,
   median,
+  stdDev,
+  summarizeReturns,
   buildHistogram,
 } from '../src/core/statistics.js';
 
@@ -76,6 +80,64 @@ describe('mean / median', () => {
   it('computes median for odd and even lengths', () => {
     expect(median([3, 1, 2])).toBe(2);
     expect(median([4, 1, 3, 2])).toBe(2.5);
+  });
+});
+
+describe('stdDev', () => {
+  it('computes population standard deviation', () => {
+    expect(stdDev([2, 4, 4, 4, 5, 5, 7, 9])).toBeCloseTo(2);
+  });
+
+  it('returns 0 when all values are identical', () => {
+    expect(stdDev([0.05, 0.05, 0.05])).toBeCloseTo(0);
+  });
+});
+
+describe('percentileValue', () => {
+  it('returns the value at floor(n * p) in sorted order', () => {
+    const values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    expect(percentileValue(values, 0.05)).toBeCloseTo(0.1);
+    expect(percentileValue(values, 0.95)).toBeCloseTo(1.0);
+  });
+});
+
+describe('closestHistogramBin', () => {
+  it('picks the bin whose center is nearest the reference value', () => {
+    const labels = [0, 0.25, 0.5, 0.75];
+    const binSize = 0.25;
+    expect(closestHistogramBin(0.12, labels, binSize)).toBe(0);
+    expect(closestHistogramBin(0.38, labels, binSize)).toBe(1);
+    expect(closestHistogramBin(0.62, labels, binSize)).toBe(2);
+  });
+
+  it('returns 0 when binSize is zero', () => {
+    expect(closestHistogramBin(0.05, [0.05], 0)).toBe(0);
+  });
+});
+
+describe('summarizeReturns', () => {
+  it('returns mean, median, min, max, and stdDev', () => {
+    const values = Float64Array.from([0.02, 0.04, 0.06, 0.08, 0.1]);
+    const summary = summarizeReturns(values);
+    expect(summary.mean).toBeCloseTo(0.06);
+    expect(summary.median).toBeCloseTo(0.06);
+    expect(summary.min).toBeCloseTo(0.02);
+    expect(summary.max).toBeCloseTo(0.1);
+    expect(summary.stdDev).toBeCloseTo(stdDev(values));
+    expect(summary.p5).toBeCloseTo(percentileValue(values, 0.05));
+    expect(summary.p95).toBeCloseTo(percentileValue(values, 0.95));
+  });
+
+  it('returns zeros for an empty array', () => {
+    expect(summarizeReturns([])).toEqual({
+      mean: 0,
+      median: 0,
+      min: 0,
+      max: 0,
+      stdDev: 0,
+      p5: 0,
+      p95: 0,
+    });
   });
 });
 

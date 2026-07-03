@@ -156,7 +156,7 @@ Once all simulations finish, the worker (`src/core/statistics.js`) computes:
 - **Success Rate (on plan)** — a separate metric shown next to it: the share of futures where you withdrew at least 95% of your planned schedule (or more).
 - **Median end balance** and **median total withdrawn** across all runs.
 - A **ranking of every simulation by total money withdrawn**, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
-- A **histogram** of average annual real returns across all simulations.
+- A **histogram** of average annual real returns across all simulations, with summary cards above it (mean, median, worst, best, and spread) and colored reference bars for the median, P5, P95, and mean ± one standard deviation. A second histogram below it shows the same stats for every individual year real return used in the simulation.
 
 ### Step 5: Visualizing the results
 

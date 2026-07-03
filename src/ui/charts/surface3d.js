@@ -193,6 +193,10 @@ function columnPercentileLabel(col, numCols) {
   return percentileLabel(col, numCols);
 }
 
+function sampleRunTitle(col) {
+  return `${columnPercentileLabel(col, surfaceState.columns.length)} - Sample run`;
+}
+
 function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
   const titleEl = document.getElementById('surfaceChartTitle');
   const descEl = document.getElementById('surfaceChartDescription');
@@ -489,13 +493,13 @@ function showFloatWithdrawal(col) {
   const series = extractWithdrawalSeries(col);
   if (!floatPanel || !series) return;
 
-  const pLabel = columnPercentileLabel(col, surfaceState.columns.length);
   const status = pathStatusDisplay(series);
   const muted = getChartTheme().floatMutedText;
   floatTitle.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-      <div style="color:${status.color}">${pLabel} · ${status.text}</div>
-      <div style="font-weight:normal;color:${muted};">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
+    <div style="font-weight:700;margin-bottom:2px;">${sampleRunTitle(col)}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;font-weight:normal;">
+      <div style="color:${status.color}">${status.text}</div>
+      <div style="color:${muted};">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
     </div>
     <div style="font-weight:normal;color:${muted};margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
   `;
@@ -579,10 +583,8 @@ function openLargeWithdrawalChart(col) {
   syncBalanceBarHighlight(-1);
   balanceChartSeries = series;
 
-  const pLabel = columnPercentileLabel(col, surfaceState.columns.length);
-
   const title = document.getElementById('withdrawalChartDialogTitle');
-  if (title) title.textContent = `Withdrawal Analysis - ${pLabel}`;
+  if (title) title.textContent = sampleRunTitle(col);
   
   const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
   if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(series.total)} | Plan: ${formatK(series.totalUnadjusted)}`;
@@ -676,6 +678,7 @@ function hideFloatPanel() {
 
 function tooltipFormatter(params) {
   const vals = pointValue(params.value);
+  const col = Math.round(vals[0]);
   const y = vals[1];
   const ret = vals[3];
   const bal = vals[4];
@@ -686,7 +689,8 @@ function tooltipFormatter(params) {
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
   return (
-    `Total Withdrawn: <b>${formatK(total)}</b>` +
+    `<b>${sampleRunTitle(col)}</b>` +
+    `<br>Total Withdrawn: <b>${formatK(total)}</b>` +
     `<br>Avg Annual Return: <b>${(avg * 100).toFixed(2)}%</b>` +
     `<br>Year: ${y}` +
     `<br>Withdrawn: ${formatK(wd)}${deltaStr}` +

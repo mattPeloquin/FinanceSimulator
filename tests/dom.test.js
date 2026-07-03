@@ -70,6 +70,17 @@ const REQUIRED_IDS = [
   'balanceChart',
   'withdrawalChart',
   'resultsChart',
+  'returnMean',
+  'returnMedian',
+  'returnMin',
+  'returnMax',
+  'returnStdDev',
+  'allYearsMean',
+  'allYearsMedian',
+  'allYearsMin',
+  'allYearsMax',
+  'allYearsStdDev',
+  'allYearsChart',
   'surfaceChart',
 ];
 

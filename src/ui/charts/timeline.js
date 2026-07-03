@@ -54,9 +54,15 @@ function pathDataset(label, pathObj, color, values, returnOffset) {
 }
 
 function axisScale(theme, extra = {}) {
+  const titleFont = { weight: 'bold', size: 12, ...extra.title?.font };
   return {
     ticks: { color: theme.axisTick, ...extra.ticks },
-    title: { display: extra.title?.text != null, color: theme.axisTitle, ...extra.title },
+    title: {
+      display: extra.title?.display ?? extra.title?.text != null,
+      color: theme.axisTitle,
+      ...extra.title,
+      font: titleFont,
+    },
     grid: { color: theme.gridLine, ...extra.grid },
     ...extra,
   };
@@ -67,15 +73,26 @@ function buildBalanceOptions(logFloor, theme) {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: axisScale(theme),
+      x: axisScale(theme, {
+        ticks: { display: false },
+        grid: { display: false },
+        title: { display: false },
+      }),
       y: {
         type: 'logarithmic',
         min: logFloor,
-        ...axisScale(theme, { title: { display: true, text: '$000s' }, ticks: { callback: (v) => formatK(v) } }),
+        ...axisScale(theme, {
+          title: {
+            display: true,
+            text: 'Portfolio balance ($000s)',
+            color: theme.axisName,
+          },
+          ticks: { callback: (v) => formatK(v) },
+        }),
       },
     },
     plugins: {
-      legend: { labels: { color: theme.legend } },
+      legend: { position: 'top', labels: { color: theme.legend } },
       tooltip: {
         ...chartJsTooltip(theme),
         callbacks: {
@@ -100,12 +117,12 @@ function buildWithdrawalOptions(theme) {
       x: axisScale(theme),
       y: axisScale(theme, {
         beginAtZero: true,
-        title: { display: true, text: '$000s' },
+        title: { display: true, text: 'Withdrawals ($000s)', color: theme.axisName },
         ticks: { callback: (v) => formatK(v) },
       }),
     },
     plugins: {
-      legend: { labels: { color: theme.legend } },
+      legend: { display: false },
       tooltip: {
         ...chartJsTooltip(theme),
         callbacks: {

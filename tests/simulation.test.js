@@ -66,6 +66,7 @@ describe('runMonteCarlo determinism', () => {
     expect(Array.from(a.avgReturn)).toEqual(Array.from(b.avgReturn));
     expect(Array.from(a.finalBalance)).toEqual(Array.from(b.finalBalance));
     expect(Array.from(a.totalWithdrawn)).toEqual(Array.from(b.totalWithdrawn));
+    expect(Array.from(a.allYearsReturns)).toEqual(Array.from(b.allYearsReturns));
   });
 
   it('produces different results for different seeds', () => {
@@ -109,6 +110,7 @@ describe('historical resampling', () => {
     });
     const result = runMonteCarlo(params);
     expect(result.avgReturn.length).toBe(500);
+    expect(result.allYearsReturns.length).toBe(500 * params.numYears);
     expect(Number.isFinite(result.finalBalance[0])).toBe(true);
   });
 
@@ -401,5 +403,13 @@ describe('simulatePath path mode', () => {
     const s = simulatePath(lognormalParams(), createRng(deriveSeed(123, 0)), false);
     expect(s.path).toBeUndefined();
     expect(typeof s.finalBalance).toBe('number');
+  });
+
+  it('writes per-year real returns into an output buffer when provided', () => {
+    const params = lognormalParams({ numYears: 5 });
+    const out = new Float64Array(5);
+    simulatePath(params, createRng(deriveSeed(123, 0)), false, out, 0);
+    expect(out.length).toBe(5);
+    expect(out.every((r) => Number.isFinite(r))).toBe(true);
   });
 });
