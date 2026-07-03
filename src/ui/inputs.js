@@ -4,6 +4,7 @@ import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithd
 import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
+import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
 // accordion is opened so they fill the now-visible container.
@@ -18,10 +19,20 @@ export function setupAccordionResize() {
   });
 }
 
+const OPTIONAL_BALANCE_OVERRIDE_IDS = new Set(['dynLowBal', 'dynMedBal', 'dynHighBal']);
+
+function formatCurrencyInputValue(input) {
+  const val = parseCurrency(input.value);
+  if (OPTIONAL_BALANCE_OVERRIDE_IDS.has(input.id) && val === 0) {
+    input.value = '';
+    return;
+  }
+  if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+}
+
 export function formatAllCurrencyInputs() {
   document.querySelectorAll('.currency-input').forEach((input) => {
-    const val = parseCurrency(input.value);
-    if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+    formatCurrencyInputValue(input);
   });
 }
 
@@ -72,6 +83,7 @@ export function toggleDynamicAdjustments(enabled) {
     wrapper.classList.remove('hidden');
     // The sparkline can't render while the section is hidden; draw it now.
     syncGuardrailPreview();
+    syncWithdrawalAdjPreview();
   } else {
     wrapper.classList.add('hidden');
   }
@@ -92,7 +104,9 @@ export function setupWithdrawalFloorList({ onChange }) {
   addBtn.addEventListener('click', () => {
     const tiers = readWithdrawalFloorsFromDom();
     if (tiers.length === 0) {
-      tiers.push({ amount: 0 });
+      writeWithdrawalFloorsToDom([{ amount: 0 }]);
+      notify();
+      return;
     }
     const last = tiers.pop();
     tiers.push({ amount: last.amount, years: 1 });
@@ -103,9 +117,8 @@ export function setupWithdrawalFloorList({ onChange }) {
 
   list.addEventListener('click', (e) => {
     const btn = e.target.closest('.remove-withdrawal-floor-tier');
-    if (!btn || btn.disabled) return;
+    if (!btn) return;
     const tiers = readWithdrawalFloorsFromDom();
-    if (tiers.length <= 1) return;
     tiers.splice(Number(btn.closest('[data-withdrawal-floor-row]')?.dataset.withdrawalFloorRow), 1);
     writeWithdrawalFloorsToDom(tiers);
     notify();
@@ -155,8 +168,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
 
   document.querySelectorAll('.currency-input').forEach((input) => {
     input.addEventListener('blur', () => {
-      const val = parseCurrency(input.value);
-      if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+      formatCurrencyInputValue(input);
       notify();
     });
   });
@@ -209,6 +221,12 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     if (input) input.addEventListener('input', syncGuardrailPreview);
   }
   syncGuardrailPreview();
+
+  for (const id of ['dynLowRet', 'dynMedRet', 'dynHighRet', 'dynLowAdj', 'dynMedAdj', 'dynHighAdj']) {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener('input', syncWithdrawalAdjPreview);
+  }
+  syncWithdrawalAdjPreview();
 
   const specificWithdrawals = document.getElementById('specificWithdrawals');
   if (specificWithdrawals) {

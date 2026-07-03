@@ -23,16 +23,18 @@ export function getDynamicAdjustment(nominalReturnPercent, dynConfig) {
 }
 
 // Resolve the final additional withdrawal adjustment for a given year, applying
-// (1) the market-return curve and (2) absolute balance overrides.
+// (1) the market-return curve and (2) balance-based floors.
 export function resolveAdjustment(balance, nominalReturnPercent, dynConfig) {
   let adjAmount = getDynamicAdjustment(nominalReturnPercent, dynConfig);
 
-  // Balance triggers override the annual market trigger.
-  if (balance < dynConfig.low.bal) {
+  // Low balance always replaces the market amount. Expected/High balances only
+  // raise the adjustment on bad market years — they never cap a good year.
+  // Blank/zero override thresholds are disabled (bal is null).
+  if (dynConfig.low.bal != null && balance < dynConfig.low.bal) {
     adjAmount = dynConfig.low.adj;
-  } else if (balance > dynConfig.high.bal) {
+  } else if (dynConfig.high.bal != null && balance > dynConfig.high.bal) {
     adjAmount = Math.max(adjAmount, dynConfig.high.adj);
-  } else if (balance > dynConfig.med.bal) {
+  } else if (dynConfig.med.bal != null && balance > dynConfig.med.bal) {
     adjAmount = Math.max(adjAmount, dynConfig.med.adj);
   }
 

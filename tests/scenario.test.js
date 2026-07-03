@@ -5,6 +5,7 @@ import {
   validateScenario,
   parseCurrency,
   formatCurrency,
+  optionalBalanceThreshold,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
   migrateScenario,
@@ -21,6 +22,11 @@ describe('currency helpers', () => {
   });
   it('formats numbers with separators', () => {
     expect(formatCurrency(4000)).toBe('4,000');
+  });
+  it('treats blank or zero balance overrides as disabled', () => {
+    expect(optionalBalanceThreshold('')).toBeNull();
+    expect(optionalBalanceThreshold(0)).toBeNull();
+    expect(optionalBalanceThreshold('3,000')).toBe(3_000_000);
   });
 });
 
@@ -86,6 +92,24 @@ describe('buildSimParams', () => {
     s.withdrawalFloors = [{ amount: 120, years: 2 }, { amount: 80 }];
     const p = buildSimParams(s, { years: [] });
     expect(p.portfolio.withdrawalFloorSeries).toEqual([120_000, 120_000, 80_000, 80_000, 80_000]);
+  });
+
+  it('disables balance overrides when threshold is blank or zero', () => {
+    const s = defaultScenario();
+    s.dynLowBal = 0;
+    s.dynMedBal = '';
+    s.dynHighBal = 0;
+    const p = buildSimParams(s, { years: [] });
+    expect(p.dynConfig.low.bal).toBeNull();
+    expect(p.dynConfig.med.bal).toBeNull();
+    expect(p.dynConfig.high.bal).toBeNull();
+  });
+
+  it('applies no minimum withdrawal when all tiers are removed', () => {
+    const s = defaultScenario();
+    s.withdrawalFloors = [];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.withdrawalFloorSeries.every((v) => v === 0)).toBe(true);
   });
 });
 

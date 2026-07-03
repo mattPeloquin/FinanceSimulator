@@ -56,13 +56,13 @@ const FIELDS = [
 
   field('enableDynamicAdjustments', 'enableDynamicAdjustments', 'boolean'),
   field('dynLowRet', 'dynLowRet', 'float'),
-  field('dynLowBal', 'dynLowBal', 'currency'),
+  field('dynLowBal', 'dynLowBal', 'optionalCurrency'),
   field('dynLowAdj', 'dynLowAdj', 'currency'),
   field('dynMedRet', 'dynMedRet', 'float'),
-  field('dynMedBal', 'dynMedBal', 'currency'),
+  field('dynMedBal', 'dynMedBal', 'optionalCurrency'),
   field('dynMedAdj', 'dynMedAdj', 'currency'),
   field('dynHighRet', 'dynHighRet', 'float'),
-  field('dynHighBal', 'dynHighBal', 'currency'),
+  field('dynHighBal', 'dynHighBal', 'optionalCurrency'),
   field('dynHighAdj', 'dynHighAdj', 'currency'),
 
   field('usLgGrowthMean', 'usLgGrowthMean', 'float'),
@@ -103,6 +103,12 @@ export function toDollars(thousands) {
   return parseCurrency(thousands) * MONEY_SCALE;
 }
 
+/** Balance override threshold in dollars, or null when blank/zero (disabled). */
+export function optionalBalanceThreshold(thousands) {
+  const k = parseCurrency(thousands);
+  return k > 0 ? k * MONEY_SCALE : null;
+}
+
 export function formatCurrency(val) {
   const n = parseCurrency(val);
   if (Number.isNaN(n)) return '';
@@ -128,7 +134,7 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
   if (schemaVersion < 3) {
     if (migrated.withdrawalFloors == null) {
       const legacyFloor = parseCurrency(migrated.withdrawalFloor);
-      migrated.withdrawalFloors = legacyFloor > 0 ? [{ amount: legacyFloor }] : [{ amount: 0 }];
+      migrated.withdrawalFloors = legacyFloor > 0 ? [{ amount: legacyFloor }] : [];
     }
     delete migrated.withdrawalFloor;
   }
@@ -136,10 +142,10 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
   return migrated;
 }
 
-/** Ensure withdrawal floor tiers are a non-empty array with numeric amounts. */
+/** Normalize withdrawal floor tiers; empty array means no minimum withdrawal. */
 export function normalizeWithdrawalFloors(tiers) {
   if (!Array.isArray(tiers) || tiers.length === 0) {
-    return [{ amount: 0 }];
+    return [];
   }
   return tiers.map((tier, index, arr) => {
     const amount = parseCurrency(tier?.amount);
@@ -155,7 +161,7 @@ export function readWithdrawalFloorsFromDom(doc = document) {
   if (!list) return normalizeWithdrawalFloors(SCENARIO_DEFAULTS.withdrawalFloors);
 
   const rows = list.querySelectorAll('[data-withdrawal-floor-row]');
-  if (rows.length === 0) return normalizeWithdrawalFloors(SCENARIO_DEFAULTS.withdrawalFloors);
+  if (rows.length === 0) return [];
 
   const tiers = [];
   rows.forEach((row, index) => {
@@ -215,8 +221,6 @@ export function writeWithdrawalFloorsToDom(tiers, doc = document) {
     removeBtn.type = 'button';
     removeBtn.className = 'remove-withdrawal-floor-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
     removeBtn.textContent = 'Remove';
-    removeBtn.disabled = normalized.length <= 1;
-    if (removeBtn.disabled) removeBtn.classList.add('opacity-40', 'cursor-not-allowed');
     row.appendChild(removeBtn);
 
     list.appendChild(row);
@@ -295,6 +299,8 @@ function parseField(raw, type) {
     }
     case 'currency':
       return parseCurrency(raw);
+    case 'optionalCurrency':
+      return parseCurrency(raw);
     case 'string':
     default:
       return raw == null ? '' : String(raw);
@@ -303,7 +309,8 @@ function parseField(raw, type) {
 
 function formatField(value, type) {
   if (value == null || value === '') return '';
-  if (type === 'currency') return formatCurrency(value);
+  if (type === 'optionalCurrency' && parseCurrency(value) === 0) return '';
+  if (type === 'currency' || type === 'optionalCurrency') return formatCurrency(value);
   return String(value);
 }
 
@@ -384,9 +391,9 @@ export function buildSimParams(scenario, samples) {
     },
     dynConfig: {
       enabled: scenario.enableDynamicAdjustments ?? true,
-      low: { ret: scenario.dynLowRet, bal: toDollars(scenario.dynLowBal), adj: toDollars(scenario.dynLowAdj) },
-      med: { ret: scenario.dynMedRet, bal: toDollars(scenario.dynMedBal), adj: toDollars(scenario.dynMedAdj) },
-      high: { ret: scenario.dynHighRet, bal: toDollars(scenario.dynHighBal), adj: toDollars(scenario.dynHighAdj) },
+      low: { ret: scenario.dynLowRet, bal: optionalBalanceThreshold(scenario.dynLowBal), adj: toDollars(scenario.dynLowAdj) },
+      med: { ret: scenario.dynMedRet, bal: optionalBalanceThreshold(scenario.dynMedBal), adj: toDollars(scenario.dynMedAdj) },
+      high: { ret: scenario.dynHighRet, bal: optionalBalanceThreshold(scenario.dynHighBal), adj: toDollars(scenario.dynHighAdj) },
     },
     logNormal: {
       usLgGrowth: { mean: num(scenario.usLgGrowthMean) / 100, stdDev: num(scenario.usLgGrowthStdDev) / 100 },

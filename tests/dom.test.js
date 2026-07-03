@@ -66,6 +66,7 @@ const REQUIRED_IDS = [
   'medianWithdrawn',
   'plannedWithdrawn',
   'guardrailPreviewChart',
+  'withdrawalAdjPreviewChart',
   'balanceChart',
   'withdrawalChart',
   'resultsChart',
