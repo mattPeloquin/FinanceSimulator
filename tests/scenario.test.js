@@ -134,10 +134,12 @@ describe('buildGoalSeekConfig', () => {
     const s = defaultScenario();
     s.goalSeekTargetEndingBalance = 500;
     s.goalSeekDesiredSuccessPct = 85;
+    s.goalSeekRiskTolerancePct = 20;
     s.goalSeekIncludeGoGoYears = true;
     const config = buildGoalSeekConfig(s);
     expect(config.targetEndingBalance).toBe(500 * MONEY_SCALE);
     expect(config.desiredSuccessRate).toBeCloseTo(0.85, 6);
+    expect(config.shortfallTolerance).toBeCloseTo(0.2, 6);
     expect(config.includeGoGoYears).toBe(true);
     expect(config.includeMarketAdjustments).toBe(false);
     expect(config.includeBalanceOverrides).toBe(false);
@@ -149,6 +151,21 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(1);
     s.goalSeekDesiredSuccessPct = -10;
     expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(0);
+  });
+
+  it('clamps risk tolerance to 0-1', () => {
+    const s = defaultScenario();
+    s.goalSeekRiskTolerancePct = 150;
+    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(1);
+    s.goalSeekRiskTolerancePct = -10;
+    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(0);
+  });
+
+  it('maps include base withdrawal to pinBaseWithdrawal (inverted)', () => {
+    const s = defaultScenario();
+    expect(buildGoalSeekConfig(s).pinBaseWithdrawal).toBe(false);
+    s.goalSeekIncludeBaseWithdrawal = false;
+    expect(buildGoalSeekConfig(s).pinBaseWithdrawal).toBe(true);
   });
 });
 
@@ -284,6 +301,33 @@ describe('validateScenario', () => {
     s.goalSeekDesiredSuccessPct = 150;
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('desired success'))).toBe(true);
+  });
+
+  it('flags an out-of-range risk tolerance when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekRiskTolerancePct = 150;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('risk tolerance'))).toBe(true);
+  });
+
+  it('requires at least one other lever when base is not included in the search', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekIncludeBaseWithdrawal = false;
+    s.baseWithdrawal = 150;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('at least one other lever'))).toBe(true);
+  });
+
+  it('requires a positive base when base is not included in the search', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekIncludeBaseWithdrawal = false;
+    s.goalSeekIncludeBalanceOverrides = true;
+    s.baseWithdrawal = 0;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('positive amount'))).toBe(true);
   });
 
   it('flags the specific-withdrawal strategy when Goal Seek is on', () => {

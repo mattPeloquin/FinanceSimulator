@@ -88,4 +88,13 @@
   .input-adorned.has-suffix > input {
     padding-right: 1.125rem;
   }
+
+  /* Balance-adjustment rate fields: wider box with a bit more room before the % suffix. */
+  .input-adorned.guardrail-rate-input.has-suffix > input {
+    padding-right: 1.625rem;
+  }
+
+  .input-adorned.guardrail-rate-input .input-adorn-suffix {
+    right: 0.5rem;
+  }
 }

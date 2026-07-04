@@ -38,7 +38,9 @@ self.onmessage = (e) => {
       });
       self.postMessage({
         type: 'done',
-        result: buildRunResult(finalParams, confirmation),
+        result: buildRunResult(finalParams, confirmation, {
+          shortfallTolerance: goalSeekConfig.shortfallTolerance ?? 0.05,
+        }),
         goalSeekSummary: summary,
       });
     } catch (err) {

@@ -205,9 +205,8 @@ function applyGoalSeekSummaryToDom(summary) {
 
   setCurrencyField('baseWithdrawal', summary.baseWithdrawal);
 
-  if (summary.goGoYears !== undefined) {
-    const el = document.getElementById('goGoYears');
-    if (el) el.value = summary.goGoYears;
+  if (summary.goGoBonus !== undefined) {
+    setCurrencyField('goGoBonus', summary.goGoBonus);
   }
 
   if (summary.marketAdjustments) {

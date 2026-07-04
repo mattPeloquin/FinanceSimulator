@@ -79,9 +79,30 @@ describe('goalSuccessRate', () => {
     const depletionYear = Float64Array.from([41, 41]);
     expect(goalSuccessRate(finalBalance, depletionYear, 40, 0)).toBe(1);
   });
+
+  it('requires on-plan spending when planned total and tolerance are provided', () => {
+    const finalBalance = Float64Array.from([2000, 2000, 2000]);
+    const depletionYear = Float64Array.from([41, 41, 41]);
+    const totalWithdrawn = Float64Array.from([900, 850, 1000]); // planned = 1000, tolerance 0.2 -> min 800
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 1000, totalWithdrawn, 1000, 0.2)).toBe(1);
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 1000, totalWithdrawn, 1000, 0.05)).toBe(1 / 3);
+  });
+
+  it('skips the on-plan check when planned total is not positive', () => {
+    const finalBalance = Float64Array.from([2000]);
+    const depletionYear = Float64Array.from([41]);
+    const totalWithdrawn = Float64Array.from([0]);
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 0, totalWithdrawn, 0, 0.2)).toBe(1);
+  });
 });
 
 describe('withdrawalTargetSuccessRate', () => {
+  it('counts runs within a custom tolerance of planned total or above it', () => {
+    const totalWithdrawn = Float64Array.from([800, 850, 1000]); // planned = 1000, tolerance 0.2 -> min 800
+    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000, 0.2)).toBe(1);
+    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000, 0.05)).toBe(1 / 3);
+  });
+
   it('counts runs within 5% of planned total or above it', () => {
     const totalWithdrawn = Float64Array.from([950, 960, 1000, 800]); // planned = 1000 -> min 950
     expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000)).toBe(0.75);

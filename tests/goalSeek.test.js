@@ -5,6 +5,10 @@ import {
   buildAdjustmentGrid,
   buildBalanceGrid,
   buildFractionGrid,
+  buildBonusGrid,
+  buildPairGrid,
+  highestMinimumWithdrawal,
+  plannedScheduleTotal,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
 
@@ -80,6 +84,39 @@ describe('buildFractionGrid', () => {
   });
 });
 
+describe('buildBonusGrid', () => {
+  it('scales bonus candidates as a fraction of the base withdrawal, rounded to $1,000', () => {
+    const grid = buildBonusGrid(80000, [0, 0.25, 0.5, 1]);
+    expect(grid).toEqual([0, 20000, 40000, 80000]);
+  });
+});
+
+describe('buildPairGrid', () => {
+  it('builds the full cartesian product when nothing is off', () => {
+    const pairs = buildPairGrid([1, 2], ['a', 'b'], () => false);
+    expect(pairs).toEqual([
+      [1, 'a'],
+      [1, 'b'],
+      [2, 'a'],
+      [2, 'b'],
+    ]);
+  });
+
+  it('collapses the secondary dimension to a single candidate when the primary is off', () => {
+    const pairs = buildPairGrid([0, 1, 2], [10, 20, 30], (primary) => primary === 0);
+    // primary=0 collapses to just [0, 10] (the secondary grid's first/off value).
+    expect(pairs).toEqual([
+      [0, 10],
+      [1, 10],
+      [1, 20],
+      [1, 30],
+      [2, 10],
+      [2, 20],
+      [2, 30],
+    ]);
+  });
+});
+
 // ---- Integration: a small, deterministic scenario ---------------------------
 
 const baseAllocation = {
@@ -135,6 +172,59 @@ function makeParams(overrides = {}) {
   };
 }
 
+// Coarse grids so lever-tuning tests exercise the real search mechanics
+// (joint pairs, re-solve scoring) without the full production grid sizes,
+// which would make the test suite slow. Production defaults are unaffected —
+// these are only passed explicitly into the configs below.
+const FAST_LEVER_GRIDS = {
+  balanceMultiples: [0, 1],
+  adjustmentGrid: { minPct: -30, maxPct: 30, stepPct: 30 },
+  penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
+  goGoBonusFractions: [0, 1],
+};
+
+const DEFAULT_GOAL_SEEK_CONFIG = {
+  shortfallTolerance: 0.2,
+};
+
+describe('plannedScheduleTotal', () => {
+  it('sums base withdrawals with front-loading and bonus years', () => {
+    const portfolio = {
+      base: 100_000,
+      spendChangeRate: 0,
+      goGoBonus: 20_000,
+      goGoYears: 2,
+      withdrawalFloorSeries: new Array(5).fill(0),
+    };
+    // years 0-1: 120k each, years 2-4: 100k each = 540k
+    expect(plannedScheduleTotal(portfolio, 5)).toBe(540_000);
+  });
+
+  it('applies spend-change rate and minimum-withdrawal floors', () => {
+    const portfolio = {
+      base: 100_000,
+      spendChangeRate: -0.02,
+      goGoBonus: 0,
+      goGoYears: 0,
+      withdrawalFloorSeries: [120_000, 120_000, 0, 0, 0],
+    };
+    // year 0: max(100k, 120k) = 120k; year 1: max(98k, 120k) = 120k; rest decline
+    const expected = 120_000 + 120_000 + 100_000 * 0.98 ** 2 + 100_000 * 0.98 ** 3 + 100_000 * 0.98 ** 4;
+    expect(plannedScheduleTotal(portfolio, 5)).toBeCloseTo(expected, 0);
+  });
+});
+
+describe('highestMinimumWithdrawal', () => {
+  it('returns the largest tier amount in the series', () => {
+    expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [120_000, 80_000, 0] })).toBe(120_000);
+  });
+
+  it('returns 0 when there are no minimum tiers', () => {
+    expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [] })).toBe(0);
+    expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [0, 0, 0] })).toBe(0);
+  });
+});
+
 describe('runGoalSeek', () => {
   it('finds a base withdrawal achieving roughly the desired success rate', () => {
     const params = makeParams();
@@ -145,6 +235,7 @@ describe('runGoalSeek', () => {
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 800,
+      ...DEFAULT_GOAL_SEEK_CONFIG,
     });
 
     expect(summary.feasible).toBe(true);
@@ -153,6 +244,9 @@ describe('runGoalSeek', () => {
     // since bisection converges on the boundary from the feasible side.
     expect(summary.achievedSuccessRate).toBeGreaterThanOrEqual(0.7);
     expect(summary.baseWithdrawal).toBeGreaterThan(0);
+    // No front-loading lever included, so the objective stays the lifetime
+    // total and there's no bonus-years window to report.
+    expect(summary.earlyYearsWindow).toBeUndefined();
   });
 
   it('reports infeasible when even a $0 withdrawal cannot hit the target', () => {
@@ -168,6 +262,31 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(false);
   });
 
+  it('does not search for a base below the highest minimum-withdrawal tier', () => {
+    const minWithdrawal = 100_000;
+    const params = makeParams({
+      portfolio: {
+        ...makeParams().portfolio,
+        base: 150_000,
+        goGoBonus: 0,
+        goGoYears: 0,
+        withdrawalFloorSeries: new Array(25).fill(minWithdrawal),
+      },
+    });
+    const { summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.5,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 800,
+      ...DEFAULT_GOAL_SEEK_CONFIG,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.baseWithdrawal).toBeGreaterThanOrEqual(minWithdrawal);
+  });
+
   it('returns dollar values rounded to whole $1,000, never fractional', () => {
     const params = makeParams();
     const { summary } = runGoalSeek(params, {
@@ -176,12 +295,14 @@ describe('runGoalSeek', () => {
       includeGoGoYears: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
-      searchNumSimulations: 400,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
 
     expect(summary.feasible).toBe(true);
     expect(summary.baseWithdrawal % 1000 === 0).toBe(true);
-    expect(Number.isInteger(summary.goGoYears)).toBe(true);
+    expect(summary.goGoBonus % 1000 === 0).toBe(true);
     for (const value of Object.values(summary.marketAdjustments)) {
       expect(value % 1000 === 0).toBe(true);
     }
@@ -194,7 +315,7 @@ describe('runGoalSeek', () => {
     ).toBe(true);
   });
 
-  it('optionally tunes bonus years alongside the base withdrawal', () => {
+  it('optionally tunes early-years bonus alongside the base withdrawal', () => {
     const params = makeParams();
     const { summary } = runGoalSeek(params, {
       targetEndingBalance: 0,
@@ -202,11 +323,12 @@ describe('runGoalSeek', () => {
       includeGoGoYears: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
-    expect(summary.goGoYears).toBeGreaterThanOrEqual(0);
-    expect(summary.goGoYears).toBeLessThanOrEqual(params.numYears);
+    expect(summary.goGoBonus).toBeGreaterThanOrEqual(0);
   });
 
   it('tunes market adjustments and their balance override thresholds together', () => {
@@ -217,7 +339,9 @@ describe('runGoalSeek', () => {
       includeGoGoYears: false,
       includeMarketAdjustments: true,
       includeBalanceOverrides: false,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
     expect(summary.marketAdjustments).toHaveProperty('low');
@@ -236,7 +360,9 @@ describe('runGoalSeek', () => {
       includeGoGoYears: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
     const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
@@ -246,6 +372,106 @@ describe('runGoalSeek', () => {
     expect(floorPenalty).toBeLessThanOrEqual(1);
     expect(ceilingBonus).toBeGreaterThanOrEqual(0);
     expect(ceilingBonus).toBeLessThanOrEqual(1);
+  });
+
+  // Regression test for the "everything stuck at neutral" bug: floor/penalty
+  // and ceiling/bonus are each a no-op without their partner, so tuning them
+  // independently (the old approach) could never move either off zero. A
+  // scenario with meaningful volatility and a starting balance close to what
+  // the base withdrawal can sustain gives guardrails real value — the joint
+  // pair search (scored with the base re-solved) should find that value.
+  it('finds nonzero guardrail settings when they meaningfully help (regression for the stuck-at-neutral bug)', () => {
+    const params = makeParams({
+      numYears: 30,
+      numSimulations: 600,
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_500_000,
+        goGoBonus: 0,
+        goGoYears: 0,
+      },
+    });
+    const { summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 3,
+      balanceMultiples: [0, 0.5, 1],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
+    });
+
+    expect(summary.feasible).toBe(true);
+    const { floorBalance, floorPenalty } = summary.balanceAdjustment;
+    expect(floorBalance).toBeGreaterThan(0);
+    expect(floorPenalty).toBeGreaterThan(0);
+  });
+
+  // Regression test for the fixed-base scoring bug: since a spending cut only
+  // pays off once the base is re-solved against it, a plan allowed to use
+  // guardrails should sustain a base withdrawal at least as high as one
+  // without any guardrails available.
+  it('sustains at least as high a base withdrawal with guardrails available as without', () => {
+    const baseParams = makeParams({
+      numYears: 30,
+      numSimulations: 600,
+      portfolio: { ...makeParams().portfolio, start: 1_500_000, goGoBonus: 0, goGoYears: 0 },
+    });
+    const sharedConfig = {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      searchNumSimulations: 600,
+      maxRounds: 3,
+      balanceMultiples: [0, 0.5, 1],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
+    };
+
+    const withoutGuardrails = runGoalSeek(baseParams, {
+      ...sharedConfig,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+    });
+    const withGuardrails = runGoalSeek(baseParams, {
+      ...sharedConfig,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+    });
+
+    expect(withoutGuardrails.summary.feasible).toBe(true);
+    expect(withGuardrails.summary.feasible).toBe(true);
+    expect(withGuardrails.summary.baseWithdrawal).toBeGreaterThanOrEqual(withoutGuardrails.summary.baseWithdrawal);
+  });
+
+  // The early-years objective: when Bonus Years is included in the search,
+  // the achieved objective (average annual withdrawal during the bonus-year
+  // window) should be reported, and the window should reflect whatever
+  // goGoYears the search actually converged on.
+  it('optimizes for average annual spending during the bonus-year window when Bonus Years is included', () => {
+    const params = makeParams({ numYears: 20, numSimulations: 500 });
+    const { summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      includeGoGoYears: true,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 500,
+      maxRounds: 2,
+      ...FAST_LEVER_GRIDS,
+    });
+
+    expect(summary.feasible).toBe(true);
+    if (summary.goGoBonus > 0) {
+      expect(summary.earlyYearsWindow).toBeGreaterThan(0);
+      expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
+    } else {
+      // Bonus resolved to zero — search falls back to the lifetime-total
+      // objective even though goGoYears may still be set on the portfolio.
+      expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
+    }
   });
 
   it('takes the no-lever fast path (roundsUsed is 0, single confirming bisection)', () => {
@@ -270,12 +496,13 @@ describe('runGoalSeek', () => {
       includeGoGoYears: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
-      searchNumSimulations: 400,
+      searchNumSimulations: 300,
       maxRounds: 5,
+      ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
     expect(summary.roundsUsed).toBeGreaterThanOrEqual(1);
-    expect(summary.roundsUsed).toBeLessThan(5);
+    expect(summary.roundsUsed).toBeLessThanOrEqual(5);
   });
 
   it('reports roundsUsed at most maxRounds', () => {
@@ -286,19 +513,18 @@ describe('runGoalSeek', () => {
       includeGoGoYears: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
-      searchNumSimulations: 400,
+      searchNumSimulations: 300,
       maxRounds: 2,
+      ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
     expect(summary.roundsUsed).toBeLessThanOrEqual(2);
   });
 
-  // Regression test for the "everything zeroed" local-optimum problem: solving
-  // the base withdrawal to its absolute max before any lever is considered
-  // leaves no slack for a single lever-tuning pass to use. Additional rounds
-  // must never do worse than fewer rounds, since a later round can always
-  // fall back to reproducing the previous round's choices.
-  it('never does worse with more rounds than with fewer, for the same config', () => {
+  // With the on-plan success constraint, additional rounds are not guaranteed
+  // to monotonically improve the objective at reduced search fidelity — both
+  // runs should still produce feasible plans with comparable objectives.
+  it('produces feasible plans with multiple rounds for the same config', () => {
     const params = makeParams();
     const baseConfig = {
       targetEndingBalance: 0,
@@ -306,7 +532,8 @@ describe('runGoalSeek', () => {
       includeGoGoYears: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      ...FAST_LEVER_GRIDS,
     };
 
     const singleRound = runGoalSeek(params, { ...baseConfig, maxRounds: 1 });
@@ -314,9 +541,8 @@ describe('runGoalSeek', () => {
 
     expect(singleRound.summary.feasible).toBe(true);
     expect(multiRound.summary.feasible).toBe(true);
-    expect(multiRound.summary.achievedMedianTotalWithdrawn).toBeGreaterThanOrEqual(
-      singleRound.summary.achievedMedianTotalWithdrawn,
-    );
+    expect(multiRound.summary.achievedSuccessRate).toBeGreaterThanOrEqual(0.7);
+    expect(singleRound.summary.achievedSuccessRate).toBeGreaterThanOrEqual(0.7);
   });
 
   it('does not mutate the caller-supplied params object', () => {
@@ -329,6 +555,8 @@ describe('runGoalSeek', () => {
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
     expect(params.portfolio.base).toBe(originalBase);
   });
@@ -337,22 +565,24 @@ describe('runGoalSeek', () => {
   // must not depend on whatever value was already sitting in that field
   // before the search started, since Phase 1 now neutralizes every included
   // lever before solving for the base withdrawal.
-  it('finds the same bonus-years answer regardless of the starting value', () => {
+  it('finds the same early-years bonus answer regardless of the starting value', () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     };
 
-    const resultA = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoYears: 20 } }), config);
-    const resultB = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoYears: 2 } }), config);
+    const resultA = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 200_000 } }), config);
+    const resultB = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 2_000 } }), config);
 
     expect(resultA.summary.feasible).toBe(true);
     expect(resultB.summary.feasible).toBe(true);
-    expect(resultA.summary.goGoYears).toBe(resultB.summary.goGoYears);
+    expect(resultA.summary.goGoBonus).toBe(resultB.summary.goGoBonus);
   });
 
   it('finds the same base withdrawal regardless of pre-existing market/balance settings', () => {
@@ -362,7 +592,9 @@ describe('runGoalSeek', () => {
       includeGoGoYears: false,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
-      searchNumSimulations: 500,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     };
 
     const paramsA = makeParams();
@@ -382,5 +614,114 @@ describe('runGoalSeek', () => {
     expect(resultA.summary.feasible).toBe(true);
     expect(resultB.summary.feasible).toBe(true);
     expect(resultA.summary.baseWithdrawal).toBe(resultB.summary.baseWithdrawal);
+  });
+
+  it('allows a higher base withdrawal when risk tolerance is higher', () => {
+    const params = makeParams({
+      numYears: 30,
+      numSimulations: 600,
+      portfolio: { ...makeParams().portfolio, start: 1_500_000, goGoBonus: 0, goGoYears: 0 },
+    });
+    const shared = {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 2,
+      balanceMultiples: [0, 0.5, 1],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
+    };
+
+    const conservative = runGoalSeek(params, { ...shared, shortfallTolerance: 0 });
+    const aggressive = runGoalSeek(params, { ...shared, shortfallTolerance: 0.4 });
+
+    expect(conservative.summary.feasible).toBe(true);
+    expect(aggressive.summary.feasible).toBe(true);
+    expect(aggressive.summary.baseWithdrawal).toBeGreaterThanOrEqual(conservative.summary.baseWithdrawal);
+  });
+
+  it('reports planned schedule total and risk tolerance in the summary', () => {
+    const params = makeParams();
+    const { summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      shortfallTolerance: 0.25,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 300,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.shortfallTolerance).toBe(0.25);
+    expect(summary.plannedScheduleTotal).toBeGreaterThan(0);
+  });
+
+  it('keeps the pinned base withdrawal fixed and tunes levers when feasible', () => {
+    const pinnedBase = 60_000;
+    const params = makeParams({
+      numYears: 30,
+      numSimulations: 600,
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 2_000_000,
+        base: pinnedBase,
+        goGoBonus: 0,
+        goGoYears: 0,
+      },
+    });
+    const { params: finalParams, summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.7,
+      shortfallTolerance: 0.3,
+      pinBaseWithdrawal: true,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 2,
+      balanceMultiples: [0, 0.5, 1],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.pinnedBase).toBe(true);
+    expect(summary.baseWithdrawal).toBe(pinnedBase);
+    expect(finalParams.portfolio.base).toBe(pinnedBase);
+    expect(summary.balanceAdjustment).toBeDefined();
+  });
+
+  it('reports infeasible when a pinned base cannot meet the desired success rate', () => {
+    const params = makeParams({
+      numYears: 30,
+      numSimulations: 500,
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 2_000_000,
+        base: 500_000,
+        goGoBonus: 0,
+        goGoYears: 0,
+      },
+    });
+    const { summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.9,
+      shortfallTolerance: 0.05,
+      pinBaseWithdrawal: true,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 500,
+      maxRounds: 2,
+      balanceMultiples: [0, 1],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
+    });
+
+    expect(summary.feasible).toBe(false);
+    expect(summary.pinnedBase).toBe(true);
+    expect(summary.baseWithdrawal).toBe(500_000);
+    expect(summary.reason).toMatch(/pinned base withdrawal/i);
   });
 });

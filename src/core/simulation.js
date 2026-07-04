@@ -44,15 +44,21 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     samples,
     scaledHistoricalShocks,
     scaledHistoricalSmoothing,
+    earlyYearsWindow,
   } = params;
 
   const smoothing = scaledHistoricalSmoothing ?? 0;
+  // Goal Seek's early-years objective (see core/goalSeek.js): how much was
+  // withdrawn during just the first `earlyYearsWindow` years, so a search can
+  // maximize early-retirement spending instead of the lifetime total.
+  const earlyWindow = earlyYearsWindow || 0;
 
   let totalRealGrowthFactor = 1.0;
   let currentYearIndex = -1;
 
   let balance = portfolio.start;
   let totalWithdrawn = 0;
+  let earlyWithdrawn = 0;
   let depletionYear = Infinity;
 
   const balances = collectPath ? [balance] : null;
@@ -254,6 +260,9 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     }
 
     totalWithdrawn += actualWithdrawal;
+    if (earlyWindow > 0 && j < earlyWindow) {
+      earlyWithdrawn += actualWithdrawal;
+    }
 
     if (depletionYear === Infinity && balance <= DEPLETION_EPSILON) {
       depletionYear = j + 1;
@@ -270,6 +279,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     avgReturn,
     finalBalance: balance,
     totalWithdrawn,
+    earlyWithdrawn,
     depletionYear,
   };
 
@@ -290,6 +300,7 @@ export function runMonteCarlo(params, { onProgress } = {}) {
   const avgReturn = new Float64Array(numSimulations);
   const finalBalance = new Float64Array(numSimulations);
   const totalWithdrawn = new Float64Array(numSimulations);
+  const earlyWithdrawn = new Float64Array(numSimulations);
   const depletionYear = new Float64Array(numSimulations);
   const allYearsReturns = new Float64Array(numSimulations * numYears);
 
@@ -301,6 +312,7 @@ export function runMonteCarlo(params, { onProgress } = {}) {
     avgReturn[i] = s.avgReturn;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
+    earlyWithdrawn[i] = s.earlyWithdrawn;
     depletionYear[i] = s.depletionYear === Infinity ? params.numYears + 1 : s.depletionYear;
 
     if (onProgress && i % progressEvery === 0) {
@@ -310,7 +322,7 @@ export function runMonteCarlo(params, { onProgress } = {}) {
 
   if (onProgress) onProgress(1);
 
-  return { baseSeed, numSimulations, avgReturn, finalBalance, totalWithdrawn, depletionYear, allYearsReturns };
+  return { baseSeed, numSimulations, avgReturn, finalBalance, totalWithdrawn, earlyWithdrawn, depletionYear, allYearsReturns };
 }
 
 // Regenerate the full path for a specific simulation index (exact, thanks to

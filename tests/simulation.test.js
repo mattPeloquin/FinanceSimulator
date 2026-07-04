@@ -398,6 +398,69 @@ describe('front-loaded spending', () => {
   });
 });
 
+describe('early-years withdrawal window (Goal Seek objective)', () => {
+  // Deterministic engine: zero-variance, zero-return assets, so each year's
+  // withdrawal is purely base * ageFactor (+bonus), same as 'front-loaded
+  // spending' above.
+  function flatParams(overrides = {}) {
+    return {
+      numYears: 10,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1e9, base: 100_000, floorBalance: 0, floorPenalty: 0,
+        ceilingBalance: Infinity, ceilingBonus: 0,
+        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0,
+      },
+      dynConfig: {
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  it('sums only the withdrawals within the window when earlyYearsWindow is set', () => {
+    const s = simulatePath(flatParams({ earlyYearsWindow: 3 }), createRng(deriveSeed(1, 0)), false);
+    expect(s.earlyWithdrawn).toBeCloseTo(300_000, 3);
+    expect(s.totalWithdrawn).toBeCloseTo(1_000_000, 3);
+  });
+
+  it('counts a flat bonus toward the early window when it falls inside it', () => {
+    const p = flatParams({ earlyYearsWindow: 3 });
+    p.portfolio.goGoBonus = 50_000;
+    p.portfolio.goGoYears = 3;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), false);
+    expect(s.earlyWithdrawn).toBeCloseTo(450_000, 3);
+  });
+
+  it('defaults to zero early-withdrawn when no window is given', () => {
+    const s = simulatePath(flatParams(), createRng(deriveSeed(1, 0)), false);
+    expect(s.earlyWithdrawn).toBe(0);
+  });
+
+  it('runMonteCarlo packs earlyWithdrawn per simulation', () => {
+    const result = runMonteCarlo(flatParams({ earlyYearsWindow: 5, numSimulations: 10 }));
+    expect(result.earlyWithdrawn.length).toBe(10);
+    for (const value of result.earlyWithdrawn) {
+      expect(value).toBeCloseTo(500_000, 3);
+    }
+  });
+});
+
 describe('balance-based spending scale', () => {
   // Deterministic engine (zero-variance, zero-return assets) with dynamic
   // adjustments enabled but neutral anchors, so only the scale acts.

@@ -171,21 +171,28 @@ The worker then sends this compact, chart-ready package back to the page for dis
 
 ### Goal Seek: let the simulator find your plan for you
 
-Instead of guessing at a withdrawal amount and checking whether it works, **Goal Seek** flips the process around: tell it what you want (a target amount left over at the end, and how confident you want to be), and it searches for the highest sustainable spending plan that gets you there.
+Instead of guessing at a withdrawal amount and checking whether it works, **Goal Seek** flips the process around: tell it what you want (a target amount left over at the end, how confident you want to be, and how much belt-tightening you're willing to accept), and it searches for the highest sustainable spending plan that gets you there.
 
 To use it:
 
 1. Turn on the **Goal Seek** switch near the bottom of the form (above the Run button).
-2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out) and a **Desired Success %** (how sure you want to be that the plan works).
-3. Optionally, check any of the **"Include in search"** boxes if you'd like the search to fine-tune those settings too — instead of using whatever you last typed, they'll gray out while the search decides on their values for you:
-   - **Bonus Years** — how many early "go-go" years get the spending bonus.
+2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out), a **Desired Success %** (how sure you want to be that the plan works), and a **Risk Tolerance** (how much of your planned lifetime spending you're willing to give up in bad markets — 0% means stay on plan; higher values allow a bigger headline plan with more guardrail belt-tightening when markets are rough).
+3. Under **Base Annual Withdrawal**, leave **Include in search** checked (default) to let Goal Seek find the best base amount, or uncheck it to keep your typed base fixed and search only the other levers — you'll need at least one other "Include in search" lever checked. If the goal isn't reachable at your fixed base, the simulator will say so.
+4. Optionally, check **Include in search** on any other settings you'd like Goal Seek to tune:
+   - **Spending Over Time** — the early-years bonus. When this is checked, Goal Seek switches its goal: instead of maximizing your lifetime total, it maximizes how much you can spend **per year during the bonus years**, so it favors more aggressive front-loading.
    - **Market adjustment** — the market-triggered spending adjustments (Low/Expected/High) *and* the balance thresholds that override them.
-   - **Balance adjustment** — the Floor/Ceiling Balance thresholds *and* their Max Cut / Boost Rate.
-4. Click **Find Best Plan** (the Run button relabels itself while Goal Seek is on). The simulator will try many combinations behind the scenes and, when it finishes, fill in the winning numbers for you and show the full results — along with a "Goal Seek Result" summary card explaining what it chose.
+   - **Balance adjustment** — the Floor/Ceiling Balance thresholds *and* their Max Cut / Boost Rate. The search can trade guardrail cuts for a higher sustainable withdrawal when your risk tolerance allows it, and use boosts to spend more when markets are good.
+5. Click **Find Best Plan** (the Run button relabels itself while Goal Seek is on). The simulator will try many combinations behind the scenes and, when it finishes, fill in the winning numbers directly into your inputs and show the full results for that plan.
+
+**All withdrawal amounts are in today's dollars:** the base annual withdrawal and every other spending field represent constant purchasing power — the simulator adjusts for inflation automatically, so you don't need to build raises into your numbers.
+
+**Minimum withdrawals still protect essentials:** staged minimum-withdrawal tiers are a hard per-year floor — Goal Seek's risk tolerance only governs how far below the *full planned schedule* lifetime spending is allowed to fall in bad markets, not how low any single year can go.
 
 If your target is impossible to reach (e.g. the ending balance is unrealistically high for your starting balance and horizon), the simulator will tell you so instead of showing a misleading answer — try lowering the target or the desired success percentage.
 
 Turn the switch back off any time to return to typing in your own numbers and running a normal simulation — the values Goal Seek found stay right where you'd expect.
+
+**Heads up on run time:** checking any of the "Include in search" boxes makes Goal Seek try substantially more combinations than a plain search (each candidate setting is tested by temporarily re-solving your withdrawal amount around it, so it can see the true payoff of a guardrail or a bonus before deciding whether it's worth it). Expect a full search with everything checked to take noticeably longer than Run Simulation — the progress bar will keep you posted.
 
 ### Where to look when vibe-coding
 

@@ -1,12 +1,12 @@
 <!-- Goal Seek: search for spending settings instead of just simulating what's typed in -->
 <div class="border-t pt-6">
     <div class="space-y-4 p-4 border rounded-lg bg-theme-accent-subtle/30">
-        <div class="flex items-center justify-between">
-            <div>
+        <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0 flex-1">
                 <h3 class="text-lg font-semibold text-theme-body">Goal Seek</h3>
-                <p class="text-xs text-theme-faint mt-0.5">Instead of simulating your current numbers, search for the highest sustainable spending plan that still meets your goal.</p>
+                <p class="text-xs text-theme-faint mt-0.5">Search for the highest sustainable spending plan instead of simulating fixed numbers. Check <strong>Include in search</strong> on settings below to choose what Goal Seek can tune.</p>
             </div>
-            <label class="inline-flex items-center cursor-pointer">
+            <label class="inline-flex items-center shrink-0 cursor-pointer">
                 <input type="checkbox" id="goalSeekMode" class="sr-only peer">
                 <div class="relative w-9 h-5 bg-theme-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-theme-accent/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-theme-surface after:border-theme-input after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-theme-accent"></div>
                 <span class="ms-2 text-xs font-medium text-theme-muted">Enable</span>
@@ -14,31 +14,33 @@
         </div>
 
         <div id="goal-seek-wrapper" class="hidden space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                    <label for="goalSeekTargetEndingBalance" class="block text-sm font-medium text-theme-body">Target Ending Balance</label>
-                    <div class="input-adorned has-suffix mt-1">
-                        <input type="text" id="goalSeekTargetEndingBalance" class="currency-input block w-full rounded-md input-theme sm:text-sm p-2">
-                        <span class="input-adorn-suffix">000s</span>
-                    </div>
-                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Balance to leave behind at the end of the horizon, on top of never running out.</p>
-                </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                     <label for="goalSeekDesiredSuccessPct" class="block text-sm font-medium text-theme-body">Desired Success %</label>
-                    <div class="input-adorned has-suffix mt-1">
-                        <input type="number" id="goalSeekDesiredSuccessPct" min="0" max="100" step="1" class="block w-full rounded-md input-theme sm:text-sm p-2">
-                        <span class="input-adorn-suffix">%</span>
+                    <div class="flex items-center gap-3 mt-1">
+                        <input type="range" id="goalSeekDesiredSuccessPctSlider" min="0" max="100" step="1" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                        <input type="number" id="goalSeekDesiredSuccessPct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                     </div>
-                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Minimum acceptable chance the plan hits the goal above.</p>
+                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Minimum acceptable chance the plan hits both targets below.</p>
+                </div>
+                <div>
+                    <label for="goalSeekRiskTolerancePct" class="block text-sm font-medium text-theme-body">Risk Tolerance</label>
+                    <div class="flex items-center gap-3 mt-1">
+                        <input type="range" id="goalSeekRiskTolerancePctSlider" min="0" max="100" step="1" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                        <input type="number" id="goalSeekRiskTolerancePct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                    </div>
+                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Max lifetime spending shortfall vs. plan in bad markets. 0% = stay on plan; higher = bigger plan, more belt-tightening allowed. Minimum withdrawals still protect essentials.</p>
                 </div>
             </div>
 
-            <p class="text-xs text-theme-faint">The base withdrawal is always searched. Optionally let the search also tune these — check any you'd like it to adjust (their fields will gray out below):</p>
-            <ul class="text-xs text-theme-faint list-disc list-inside space-y-0.5">
-                <li>Bonus Years — checkbox next to "Bonus Years" in Spending Over Time.</li>
-                <li>Market adjustment amounts — checkbox in the "Market adjustment" section.</li>
-                <li>Balance override thresholds — checkbox in the "Balance adjustment" section.</li>
-            </ul>
+            <div>
+                <label for="goalSeekTargetEndingBalance" class="block text-sm font-medium text-theme-body">Target Ending Balance</label>
+                <div class="input-adorned has-suffix mt-1 max-w-xs">
+                    <input type="text" id="goalSeekTargetEndingBalance" class="currency-input block w-full rounded-md input-theme sm:text-sm p-2">
+                    <span class="input-adorn-suffix">000s</span>
+                </div>
+                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Balance to leave behind at the end of the horizon, on top of never running out.</p>
+            </div>
         </div>
     </div>
 </div>

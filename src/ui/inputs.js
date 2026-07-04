@@ -93,7 +93,8 @@ export function toggleWithdrawalStrategy(strategy) {
 // override thresholds; Balance adjustment includes the floor/ceiling balance
 // thresholds AND their cut/boost rates.
 const GOAL_SEEK_LEVER_FIELDS = {
-  goalSeekIncludeGoGoYears: ['goGoYears'],
+  goalSeekIncludeBaseWithdrawal: ['baseWithdrawal'],
+  goalSeekIncludeGoGoYears: ['goGoBonus'],
   goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynMedAdj', 'dynHighAdj', 'dynLowBal', 'dynMedBal', 'dynHighBal'],
   goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
 };
@@ -105,6 +106,26 @@ export function toggleFieldSearchable(fieldIds, included) {
   for (const id of fieldIds) {
     const input = document.getElementById(id);
     if (input) input.disabled = included;
+  }
+}
+
+// When Goal Seek is on, expand the withdrawal accordions the user needs to see:
+// minimum withdrawal always; market/balance sections only when marked for search.
+function syncGoalSeekSectionExpansion() {
+  const goalSeekEnabled = !!document.getElementById('goalSeekMode')?.checked;
+  if (!goalSeekEnabled) return;
+
+  const minDetails = document.getElementById('details-min-withdrawal');
+  if (minDetails) minDetails.open = true;
+
+  if (document.getElementById('goalSeekIncludeMarketAdjustments')?.checked) {
+    const marketDetails = document.getElementById('details-market-adjustment');
+    if (marketDetails) marketDetails.open = true;
+  }
+
+  if (document.getElementById('goalSeekIncludeBalanceOverrides')?.checked) {
+    const balanceDetails = document.getElementById('details-balance-adjustment');
+    if (balanceDetails) balanceDetails.open = true;
   }
 }
 
@@ -126,6 +147,8 @@ export function toggleGoalSeekMode(enabled) {
 
   const runButton = document.getElementById('runButton');
   if (runButton) runButton.textContent = enabled ? 'Find Best Plan' : 'Run Simulation';
+
+  syncGoalSeekSectionExpansion();
 }
 
 export function toggleDynamicAdjustments(enabled) {
@@ -255,6 +278,32 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const goalSeekDesiredSuccessPct = document.getElementById('goalSeekDesiredSuccessPct');
+  const goalSeekDesiredSuccessPctSlider = document.getElementById('goalSeekDesiredSuccessPctSlider');
+  if (goalSeekDesiredSuccessPct && goalSeekDesiredSuccessPctSlider) {
+    goalSeekDesiredSuccessPctSlider.addEventListener('input', (e) => {
+      goalSeekDesiredSuccessPct.value = e.target.value;
+      notify();
+    });
+    goalSeekDesiredSuccessPct.addEventListener('input', (e) => {
+      goalSeekDesiredSuccessPctSlider.value = e.target.value;
+      notify();
+    });
+  }
+
+  const goalSeekRiskTolerancePct = document.getElementById('goalSeekRiskTolerancePct');
+  const goalSeekRiskTolerancePctSlider = document.getElementById('goalSeekRiskTolerancePctSlider');
+  if (goalSeekRiskTolerancePct && goalSeekRiskTolerancePctSlider) {
+    goalSeekRiskTolerancePctSlider.addEventListener('input', (e) => {
+      goalSeekRiskTolerancePct.value = e.target.value;
+      notify();
+    });
+    goalSeekRiskTolerancePct.addEventListener('input', (e) => {
+      goalSeekRiskTolerancePctSlider.value = e.target.value;
+      notify();
+    });
+  }
+
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
       toggleDistMethod(e.target.value);
@@ -291,6 +340,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     if (!checkbox) continue;
     checkbox.addEventListener('change', (e) => {
       toggleFieldSearchable(fieldIds, e.target.checked);
+      if (checkboxId === 'goalSeekIncludeMarketAdjustments' || checkboxId === 'goalSeekIncludeBalanceOverrides') {
+        syncGoalSeekSectionExpansion();
+      }
       notify();
     });
   }
@@ -335,7 +387,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     if (input.id === 'goalSeekMode' || input.id in GOAL_SEEK_LEVER_FIELDS) return;
     if (
       input.id === 'scaledHistoricalSmoothing' ||
-      input.id === 'scaledHistoricalSmoothingSlider'
+      input.id === 'scaledHistoricalSmoothingSlider' ||
+      input.id === 'goalSeekDesiredSuccessPctSlider' ||
+      input.id === 'goalSeekRiskTolerancePctSlider'
     ) return;
     if (input.id === 'specificWithdrawals') return;
     input.addEventListener('change', notify);

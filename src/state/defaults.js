@@ -154,8 +154,16 @@ export const SCENARIO_DEFAULTS = {
   // Minimum acceptable success rate (%) for the searched plan.
   goalSeekDesiredSuccessPct: 90,
 
+  // Max lifetime spending shortfall vs. plan (%) the search allows in bad
+  // markets. 0 = guardrail cuts effectively off; higher = bigger plan, more
+  // belt-tightening allowed. Minimum-withdrawal tiers still protect essentials.
+  goalSeekRiskTolerancePct: 20,
+
+  // When false, Goal Seek keeps the typed base withdrawal fixed and searches
+  // only the other included levers. Default true = base is searched like before.
+  goalSeekIncludeBaseWithdrawal: true,
+
   // Which additional levers the search is allowed to tune (checkboxes).
-  // The base withdrawal itself is always searched.
   goalSeekIncludeGoGoYears: false,
   goalSeekIncludeMarketAdjustments: false,
   goalSeekIncludeBalanceOverrides: false,

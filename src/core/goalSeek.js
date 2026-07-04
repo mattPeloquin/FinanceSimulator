@@ -1,8 +1,8 @@
 // Goal Seek: given a target ending balance and a desired success percentage,
 // search for the base withdrawal (and, optionally, a few other spending
-// levers) that maximizes the median amount withdrawn across simulations while
-// still hitting the target. Pure and DOM-free, like the rest of `core/`, so it
-// can run inside the worker and be unit-tested directly.
+// levers) that maximizes withdrawals while still hitting the target. Pure
+// and DOM-free, like the rest of `core/`, so it can run inside the worker
+// and be unit-tested directly.
 
 import { runMonteCarlo } from './simulation.js';
 import { goalSuccessRate, median } from './statistics.js';
@@ -10,9 +10,24 @@ import { goalSuccessRate, median } from './statistics.js';
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 2000;
 const DEFAULT_ADJUSTMENT_GRID = { minPct: -50, maxPct: 50, stepPct: 5 };
 const DEFAULT_BALANCE_MULTIPLES = [0, 0.5, 1, 1.5, 2];
+// Used by the exported buildFractionGrid()'s own default (unit-tested directly) —
+// keep this fine-grained; the coarser PAIR grid below is what the search actually
+// uses internally, since joint pairs already multiply out two dimensions.
 const DEFAULT_PENALTY_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
+// Coarser than DEFAULT_PENALTY_BONUS_GRID: the floor/ceiling search tunes balance
+// threshold AND cut/boost rate together (see buildPairGrid), so a finer grid here
+// would multiply out too many candidate evaluations.
+const DEFAULT_PAIR_FRACTION_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
 const BASE_BISECTION_MAX_ITERATIONS = 30;
-const GOGO_MAX_UPPER_BOUND_DOUBLINGS = 10;
+
+// Bonus-amount candidates, as fractions of the currently-solved base withdrawal.
+const DEFAULT_GOGO_BONUS_FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
+
+// Each candidate scored via the re-solve scorer costs one inner bisection
+// (this many predicate evaluations at reduced fidelity) plus one confirming
+// evaluation at full search fidelity.
+const RESOLVE_INNER_MAX_ITERATIONS = 10;
+const RESOLVE_INNER_NUM_SIMULATIONS = 1000;
 
 // Solving the base withdrawal first uses up the entire "risk budget" before
 // any lever is considered, so a single lever-tuning pass often finds every
@@ -25,6 +40,7 @@ const DEFAULT_MAX_ROUNDS = 3;
 // produces is snapped to the nearest $1,000 — otherwise the form would show
 // fractional thousands (e.g. "84.532") instead of a clean whole number.
 const DOLLAR_ROUNDING = 1000;
+const DEFAULT_SHORTFALL_TOLERANCE = 0.2;
 
 function roundToThousand(value) {
   return Math.round(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
@@ -35,6 +51,42 @@ function roundToThousand(value) {
 // the feasible range the bisection already verified.
 function roundDownToThousand(value) {
   return Math.floor(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
+}
+
+// Sum the unadjusted withdrawal schedule (base × age factor + bonus, with
+// minimum-withdrawal floors). Deterministic — mirrors simulatePath's
+// unadjustedTarget logic without running a simulation.
+export function plannedScheduleTotal(portfolio, numYears) {
+  let total = 0;
+  for (let j = 0; j < numYears; j++) {
+    const baseVal = portfolio.base;
+    const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
+    let unadjustedTarget = portfolio.base * ageFactor;
+    if (j < (portfolio.goGoYears || 0)) {
+      unadjustedTarget += portfolio.goGoBonus || 0;
+    }
+    if (baseVal >= 0 && unadjustedTarget < 0) {
+      unadjustedTarget = 0;
+    }
+    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
+    if (unadjustedTarget >= 0 && yearFloor > 0) {
+      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
+    }
+    total += unadjustedTarget;
+  }
+  return total;
+}
+
+// Highest per-year minimum-withdrawal backstop in the staged tier series.
+// Goal Seek must not search for a base below this — the floor always applies.
+export function highestMinimumWithdrawal(portfolio) {
+  const series = portfolio.withdrawalFloorSeries;
+  if (!series || series.length === 0) return 0;
+  let max = 0;
+  for (let i = 0; i < series.length; i++) {
+    if (series[i] > max) max = series[i];
+  }
+  return max;
 }
 
 // ---- Generic numeric search primitives -------------------------------------
@@ -94,6 +146,31 @@ export function buildFractionGrid({ minPct, maxPct, stepPct } = DEFAULT_PENALTY_
   return candidates;
 }
 
+// Bonus-amount candidates as round dollars, expressed as a fraction of the
+// currently-solved base withdrawal so the grid rescales with the plan.
+export function buildBonusGrid(baseWithdrawal, fractions = DEFAULT_GOGO_BONUS_FRACTIONS) {
+  return fractions.map((f) => roundToThousand(baseWithdrawal * f));
+}
+
+// Cartesian product of two coupled grids (e.g. floor balance x max cut, where
+// each is a no-op without the other). `isPrimaryOff(primary)` collapses the
+// secondary dimension to a single "off" candidate whenever the primary value
+// disables the pair, avoiding redundant identical evaluations.
+export function buildPairGrid(primaryGrid, secondaryGrid, isPrimaryOff) {
+  const pairs = [];
+  const seen = new Set();
+  for (const primary of primaryGrid) {
+    const secondaries = isPrimaryOff(primary) ? [secondaryGrid[0]] : secondaryGrid;
+    for (const secondary of secondaries) {
+      const key = `${primary}|${secondary}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push([primary, secondary]);
+    }
+  }
+  return pairs;
+}
+
 // ---- Param cloning (never mutate the caller's params) -----------------------
 
 function cloneParams(params) {
@@ -113,15 +190,37 @@ function hasIncludedLevers(config) {
   return !!(config.includeGoGoYears || config.includeMarketAdjustments || config.includeBalanceOverrides);
 }
 
+// Cost (in evaluations) of scoring one candidate via the re-solve scorer: an
+// inner bisection of the base at reduced fidelity, plus one confirming
+// evaluation at full search fidelity. Pinned-base mode skips the inner bisection.
+const PER_CANDIDATE_COST = RESOLVE_INNER_MAX_ITERATIONS + 1;
+const PINNED_PER_CANDIDATE_COST = 1;
+
+function perCandidateCost(config) {
+  return config.pinBaseWithdrawal ? PINNED_PER_CANDIDATE_COST : PER_CANDIDATE_COST;
+}
+
 function estimateEvalBudget(params, config) {
   const balanceGridLen = (config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES).length;
-  const penaltyBonusGridLen = gridLength(config.penaltyBonusGrid || DEFAULT_PENALTY_BONUS_GRID);
+  const pairFractionGridLen = gridLength(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
+  const adjustmentGridLen = gridLength(config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID);
+  const bonusGridLen = (config.goGoBonusFractions || DEFAULT_GOGO_BONUS_FRACTIONS).length;
+  const candidateCost = perCandidateCost(config);
+
   const perRoundLeverCost =
-    (config.includeGoGoYears ? Math.ceil(Math.log2(Math.max(params.numYears, 1) + 1)) + 1 : 0) +
+    (config.includeGoGoYears ? bonusGridLen * candidateCost : 0) +
     (config.includeMarketAdjustments
-      ? 3 * gridLength(config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID) + 3 * balanceGridLen
+      ? (3 * adjustmentGridLen + 3 * balanceGridLen) * candidateCost
       : 0) +
-    (config.includeBalanceOverrides ? 2 * balanceGridLen + 2 * penaltyBonusGridLen : 0);
+    (config.includeBalanceOverrides
+      ? 2 * balanceGridLen * pairFractionGridLen * candidateCost
+      : 0);
+
+  if (config.pinBaseWithdrawal) {
+    if (!hasIncludedLevers(config)) return 1;
+    const maxRounds = config.maxRounds || DEFAULT_MAX_ROUNDS;
+    return maxRounds * perRoundLeverCost + 1;
+  }
 
   // Fast path (no levers): initial anchor bisection + one confirming
   // re-bisection, same cost as before this feature existed.
@@ -138,7 +237,9 @@ function estimateEvalBudget(params, config) {
 // `config` shape (see state/scenario.js buildGoalSeekConfig):
 //   targetEndingBalance      dollars
 //   desiredSuccessRate       fraction 0..1
-//   includeGoGoYears           bool
+//   shortfallTolerance       fraction 0..1 — max lifetime spending shortfall vs plan
+//   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
+//   includeGoGoYears           bool — covers goGoBonus
 //   includeMarketAdjustments   bool — covers dynLow/Med/HighAdj AND dynLow/Med/HighBal
 //   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
 //   searchNumSimulations       optional override of the reduced sim count
@@ -147,28 +248,61 @@ function estimateEvalBudget(params, config) {
 //   penaltyBonusGrid           optional { minPct, maxPct, stepPct }
 export function runGoalSeek(params, config, { onProgress } = {}) {
   const notify = typeof onProgress === 'function' ? onProgress : () => {};
+  const pinBase = !!config.pinBaseWithdrawal;
   const working = cloneParams(params);
   const searchNumSimulations = Math.min(
     params.numSimulations,
     config.searchNumSimulations || DEFAULT_SEARCH_NUM_SIMULATIONS,
   );
+  const resolveNumSimulations = Math.min(searchNumSimulations, RESOLVE_INNER_NUM_SIMULATIONS);
 
   let evalCount = 0;
   // Rough total, just for a smoothly-advancing progress bar (not exact).
   const estimatedEvalBudget = estimateEvalBudget(params, config);
 
-  function evaluate(stage) {
+  // While Bonus Years is included in the search, the plan is scored by how
+  // much can be spent PER YEAR during those bonus years (not the lifetime
+  // total) — that's what makes the search actually front-load spending
+  // instead of staying indifferent between an early dollar and a late one.
+  // Outside that lever, or once it's resolved back to 0 bonus years, the
+  // objective falls back to the familiar median lifetime total.
+  function currentEarlyWindow() {
+    return config.includeGoGoYears ? working.portfolio.goGoYears : 0;
+  }
+
+  function computeObjective(result, window) {
+    if (window > 0) {
+      return median(result.earlyWithdrawn) / window;
+    }
+    return median(result.totalWithdrawn);
+  }
+
+  function evaluateWith(numSimulations, stage) {
     evalCount++;
     notify(stage, Math.min(evalCount / estimatedEvalBudget, 0.99));
-    const searchParams = { ...working, numSimulations: searchNumSimulations };
+    const window = currentEarlyWindow();
+    const searchParams = { ...working, numSimulations, earlyYearsWindow: window };
     const result = runMonteCarlo(searchParams);
+    const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
+    const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,
       result.depletionYear,
       params.numYears,
       config.targetEndingBalance,
+      result.totalWithdrawn,
+      plannedTotal,
+      shortfallTolerance,
     );
-    return { successRateAchieved, medianTotalWithdrawn: median(result.totalWithdrawn) };
+    return {
+      successRateAchieved,
+      medianTotalWithdrawn: median(result.totalWithdrawn),
+      objectiveValue: computeObjective(result, window),
+    };
+  }
+
+  function evaluate(stage) {
+    return evaluateWith(searchNumSimulations, stage);
   }
 
   function meetsTarget(stage) {
@@ -181,7 +315,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   // that same lever would just rediscover the boundary Phase 1 just used —
   // i.e. it would always "converge" back to the value that was already there.
   if (config.includeGoGoYears) {
-    working.portfolio.goGoYears = 0;
+    working.portfolio.goGoBonus = 0;
   }
   if (config.includeMarketAdjustments) {
     working.dynConfig.low.adj = 0;
@@ -198,49 +332,75 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     working.portfolio.ceilingBonus = 0;
   }
 
-  // ---- Phase 1: bisect the base withdrawal -----------------------------------
-  const feasibleAtZero = (() => {
-    working.portfolio.base = 0;
-    return meetsTarget('Checking feasibility');
-  })();
-
-  if (!feasibleAtZero) {
+  if (pinBase && !hasIncludedLevers(config)) {
     return {
       params: { ...params },
       summary: {
         feasible: false,
-        reason: 'Even a $0 base withdrawal cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.',
+        reason: 'Pinning the base withdrawal requires including at least one lever in the search.',
         evaluationCount: evalCount,
       },
     };
   }
 
-  const initialUpperBound = Math.max(params.portfolio.base * 4, (params.portfolio.start / Math.max(params.numYears, 1)) * 4, 1000);
+  let initialUpperBound = 0;
+  let baseTolerance = 50;
+  let solvedBase = working.portfolio.base;
+  const baseLowerBound = roundDownToThousand(highestMinimumWithdrawal(working.portfolio));
+
+  if (!pinBase) {
+  // ---- Phase 1: bisect the base withdrawal -----------------------------------
+  const feasibleAtMinBase = (() => {
+    working.portfolio.base = baseLowerBound;
+    return meetsTarget('Checking feasibility');
+  })();
+
+  if (!feasibleAtMinBase) {
+    return {
+      params: { ...params },
+      summary: {
+        feasible: false,
+        reason: baseLowerBound > 0
+          ? 'Even a base withdrawal at the highest minimum-withdrawal tier cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.'
+          : 'Even a $0 base withdrawal cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.',
+        evaluationCount: evalCount,
+      },
+    };
+  }
+
+  initialUpperBound = Math.max(params.portfolio.base * 4, (params.portfolio.start / Math.max(params.numYears, 1)) * 4, 1000);
   let hi = initialUpperBound;
+  const GOGO_MAX_UPPER_BOUND_DOUBLINGS = 10;
   for (let i = 0; i < GOGO_MAX_UPPER_BOUND_DOUBLINGS; i++) {
     working.portfolio.base = hi;
     if (!meetsTarget('Bracketing base withdrawal')) break;
     hi *= 2;
   }
 
-  const baseTolerance = Math.max(50, hi * 0.001);
-  let solvedBase = roundDownToThousand(
+  baseTolerance = Math.max(50, hi * 0.001);
+  solvedBase = roundDownToThousand(
     bisectMaxSatisfying(
       (x) => {
         working.portfolio.base = x;
         return meetsTarget('Tuning base withdrawal');
       },
-      0,
+      baseLowerBound,
       hi,
       { tolerance: baseTolerance },
     ),
   );
   working.portfolio.base = solvedBase;
+  } else {
+    working.portfolio.base = params.portfolio.base;
+    solvedBase = params.portfolio.base;
+  }
 
   // ---- Rebisect the base withdrawal against whatever the levers currently
-  // hold. Used both for the no-lever fast path (a single confirming pass,
-  // same cost as before this feature existed) and once per round below. ----
+  // hold, at full search fidelity. Used both for the no-lever fast path (a
+  // single confirming pass, same cost as before this feature existed) and
+  // once per round below. ----
   function rebisectBase(stageLabel) {
+    if (pinBase) return solvedBase;
     const rebisectHi = Math.max(solvedBase * 2, initialUpperBound);
     return roundDownToThousand(
       bisectMaxSatisfying(
@@ -248,51 +408,168 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
           working.portfolio.base = x;
           return meetsTarget(stageLabel);
         },
-        0,
+        baseLowerBound,
         rebisectHi,
         { tolerance: baseTolerance },
       ),
     );
   }
 
-  // One pass over every included lever, in a fixed order, holding the base
-  // (whatever it currently is) fixed.
+  // Cheap inner bisection of the base at reduced fidelity — used to re-solve
+  // the base for EVERY lever candidate, not just once per round. Without
+  // this, a candidate that costs some base headroom (e.g. a spending cut
+  // below a guardrail) always looks strictly worse than doing nothing, since
+  // its entire payoff — a higher feasible base — would otherwise be invisible
+  // until the next round's full rebisection.
+  function innerResolveBase(stageLabel) {
+    if (pinBase) return solvedBase;
+    const innerHi = Math.max(solvedBase * 2, initialUpperBound);
+    return roundDownToThousand(
+      bisectMaxSatisfying(
+        (x) => {
+          working.portfolio.base = x;
+          return evaluateWith(resolveNumSimulations, stageLabel).successRateAchieved >= config.desiredSuccessRate;
+        },
+        baseLowerBound,
+        innerHi,
+        { tolerance: baseTolerance, maxIterations: RESOLVE_INNER_MAX_ITERATIONS },
+      ),
+    );
+  }
+
+  // Score whatever lever values are currently applied to `working`: re-solve
+  // the base against them, then confirm at full search fidelity.
+  function scoreCurrentLeversWithResolve(stageLabel) {
+    const resolvedBase = innerResolveBase(stageLabel);
+    working.portfolio.base = resolvedBase;
+    const metrics = evaluate(stageLabel);
+    return { resolvedBase, ...metrics };
+  }
+
+  // Try every single-field candidate, re-solving the base for each one, and
+  // keep whichever satisfies the success target with the highest objective
+  // value. Applies the winner (or the current value, if none qualified) to
+  // `working` before returning, including the base it was solved against.
+  function pickBestCandidateWithResolve(candidates, applyCandidate, stageLabel, currentValue) {
+    let best = currentValue;
+    let bestObjective = -Infinity;
+    let bestSuccessRate = -Infinity;
+    let bestBase = solvedBase;
+    let foundTarget = false;
+    for (const candidate of candidates) {
+      applyCandidate(candidate);
+      const { resolvedBase, successRateAchieved, objectiveValue } = scoreCurrentLeversWithResolve(stageLabel);
+      if (successRateAchieved >= config.desiredSuccessRate) {
+        if (!foundTarget || objectiveValue > bestObjective) {
+          foundTarget = true;
+          best = candidate;
+          bestObjective = objectiveValue;
+          bestBase = resolvedBase;
+        }
+      } else if (pinBase && !foundTarget) {
+        if (
+          successRateAchieved > bestSuccessRate
+          || (successRateAchieved === bestSuccessRate && objectiveValue > bestObjective)
+        ) {
+          best = candidate;
+          bestSuccessRate = successRateAchieved;
+          bestObjective = objectiveValue;
+          bestBase = resolvedBase;
+        }
+      }
+    }
+    if (pinBase) {
+      applyCandidate(best);
+      working.portfolio.base = bestBase;
+      solvedBase = working.portfolio.base;
+      return best;
+    }
+    applyCandidate(foundTarget ? best : currentValue);
+    working.portfolio.base = foundTarget ? bestBase : solvedBase;
+    solvedBase = working.portfolio.base;
+    return foundTarget ? best : currentValue;
+  }
+
+  // Same as above, but for a pair of jointly-coupled fields (e.g. floor
+  // balance + max cut, which are each a no-op without the other).
+  function pickBestPairWithResolve(pairs, applyPair, stageLabel, currentPair) {
+    let best = currentPair;
+    let bestObjective = -Infinity;
+    let bestSuccessRate = -Infinity;
+    let bestBase = solvedBase;
+    let foundTarget = false;
+    for (const pair of pairs) {
+      applyPair(pair[0], pair[1]);
+      const { resolvedBase, successRateAchieved, objectiveValue } = scoreCurrentLeversWithResolve(stageLabel);
+      if (successRateAchieved >= config.desiredSuccessRate) {
+        if (!foundTarget || objectiveValue > bestObjective) {
+          foundTarget = true;
+          best = pair;
+          bestObjective = objectiveValue;
+          bestBase = resolvedBase;
+        }
+      } else if (pinBase && !foundTarget) {
+        if (
+          successRateAchieved > bestSuccessRate
+          || (successRateAchieved === bestSuccessRate && objectiveValue > bestObjective)
+        ) {
+          best = pair;
+          bestSuccessRate = successRateAchieved;
+          bestObjective = objectiveValue;
+          bestBase = resolvedBase;
+        }
+      }
+    }
+    if (pinBase) {
+      applyPair(best[0], best[1]);
+      working.portfolio.base = bestBase;
+      solvedBase = working.portfolio.base;
+      return best;
+    }
+    const winner = foundTarget ? best : currentPair;
+    applyPair(winner[0], winner[1]);
+    working.portfolio.base = foundTarget ? bestBase : solvedBase;
+    solvedBase = working.portfolio.base;
+    return winner;
+  }
+
+  // One pass over every included lever, in a fixed order, re-solving the base
+  // after every single candidate so protective/aggressive settings are scored
+  // by what they actually buy, not by how they look with the base left fixed.
   function tuneLeversOnce() {
     if (config.includeGoGoYears) {
-      const numYears = params.numYears;
-      working.portfolio.goGoYears = bisectMaxSatisfyingInt(
-        (y) => {
-          working.portfolio.goGoYears = y;
-          return meetsTarget('Tuning bonus years');
+      const bonusGrid = buildBonusGrid(solvedBase, config.goGoBonusFractions);
+      working.portfolio.goGoBonus = pickBestCandidateWithResolve(
+        bonusGrid,
+        (value) => {
+          working.portfolio.goGoBonus = value;
         },
-        0,
-        numYears,
+        'Tuning early-years bonus',
+        working.portfolio.goGoBonus,
       );
     }
 
     if (config.includeMarketAdjustments) {
       const adjustmentGrid = buildAdjustmentGrid(solvedBase, config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID);
       for (const field of ['low', 'med', 'high']) {
-        working.dynConfig[field].adj = pickBestCandidate(
+        working.dynConfig[field].adj = pickBestCandidateWithResolve(
           adjustmentGrid,
           (value) => {
             working.dynConfig[field].adj = value;
-            return evaluate('Tuning market adjustments');
           },
-          config.desiredSuccessRate,
+          'Tuning market adjustments',
           working.dynConfig[field].adj,
         );
       }
 
       const balanceGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, null);
       for (const field of ['low', 'med', 'high']) {
-        working.dynConfig[field].bal = pickBestCandidate(
+        working.dynConfig[field].bal = pickBestCandidateWithResolve(
           balanceGrid,
           (value) => {
             working.dynConfig[field].bal = value;
-            return evaluate('Tuning market balance overrides');
           },
-          config.desiredSuccessRate,
+          'Tuning market balance overrides',
           working.dynConfig[field].bal,
         );
       }
@@ -300,46 +577,41 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
     if (config.includeBalanceOverrides) {
       const floorGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, 0);
-      working.portfolio.floorBalance = pickBestCandidate(
-        floorGrid,
-        (value) => {
-          working.portfolio.floorBalance = value;
-          return evaluate('Tuning floor balance');
+      const penaltyGrid = buildFractionGrid(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
+      const floorPairs = buildPairGrid(floorGrid, penaltyGrid, (floor) => floor === 0);
+      const validFloorPairs = floorPairs.filter(
+        ([floor]) =>
+          floor === 0
+          || !Number.isFinite(working.portfolio.ceilingBalance)
+          || floor < working.portfolio.ceilingBalance,
+      );
+      pickBestPairWithResolve(
+        validFloorPairs,
+        (floor, penalty) => {
+          working.portfolio.floorBalance = floor;
+          working.portfolio.floorPenalty = penalty;
         },
-        config.desiredSuccessRate,
-        working.portfolio.floorBalance,
+        'Tuning floor balance & max cut',
+        [working.portfolio.floorBalance, working.portfolio.floorPenalty],
       );
 
       const ceilingGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, Infinity);
-      working.portfolio.ceilingBalance = pickBestCandidate(
-        ceilingGrid,
-        (value) => {
-          working.portfolio.ceilingBalance = value;
-          return evaluate('Tuning ceiling balance');
-        },
-        config.desiredSuccessRate,
-        working.portfolio.ceilingBalance,
+      const bonusRateGrid = buildFractionGrid(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
+      const ceilingPairs = buildPairGrid(ceilingGrid, bonusRateGrid, (ceiling) => !Number.isFinite(ceiling));
+      const validCeilingPairs = ceilingPairs.filter(
+        ([ceiling]) =>
+          !Number.isFinite(ceiling)
+          || working.portfolio.floorBalance === 0
+          || ceiling > working.portfolio.floorBalance,
       );
-
-      const penaltyBonusGrid = buildFractionGrid(config.penaltyBonusGrid || DEFAULT_PENALTY_BONUS_GRID);
-      working.portfolio.floorPenalty = pickBestCandidate(
-        penaltyBonusGrid,
-        (value) => {
-          working.portfolio.floorPenalty = value;
-          return evaluate('Tuning max cut');
+      pickBestPairWithResolve(
+        validCeilingPairs,
+        (ceiling, bonus) => {
+          working.portfolio.ceilingBalance = ceiling;
+          working.portfolio.ceilingBonus = bonus;
         },
-        config.desiredSuccessRate,
-        working.portfolio.floorPenalty,
-      );
-
-      working.portfolio.ceilingBonus = pickBestCandidate(
-        penaltyBonusGrid,
-        (value) => {
-          working.portfolio.ceilingBonus = value;
-          return evaluate('Tuning boost rate');
-        },
-        config.desiredSuccessRate,
-        working.portfolio.ceilingBonus,
+        'Tuning ceiling balance & boost rate',
+        [working.portfolio.ceilingBalance, working.portfolio.ceilingBonus],
       );
     }
   }
@@ -349,7 +621,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   function captureLeverSnapshot() {
     const snapshot = {};
     if (config.includeGoGoYears) {
-      snapshot.goGoYears = working.portfolio.goGoYears;
+      snapshot.goGoBonus = working.portfolio.goGoBonus;
     }
     if (config.includeMarketAdjustments) {
       snapshot.dynLowAdj = working.dynConfig.low.adj;
@@ -377,8 +649,10 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   if (!hasIncludedLevers(config)) {
     // No optional levers selected: nothing to tune, just confirm the base
     // withdrawal once more (matches the cost/behavior of a plain base search).
-    solvedBase = rebisectBase('Finalizing base withdrawal');
-    working.portfolio.base = solvedBase;
+    if (!pinBase) {
+      solvedBase = rebisectBase('Finalizing base withdrawal');
+      working.portfolio.base = solvedBase;
+    }
   } else {
     const maxRounds = config.maxRounds || DEFAULT_MAX_ROUNDS;
     for (let round = 1; round <= maxRounds; round++) {
@@ -386,11 +660,13 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
       const snapshotBefore = captureLeverSnapshot();
 
       tuneLeversOnce();
-      solvedBase = rebisectBase('Finalizing base withdrawal');
-      working.portfolio.base = solvedBase;
+      if (!pinBase) {
+        solvedBase = rebisectBase('Finalizing base withdrawal');
+        working.portfolio.base = solvedBase;
+      }
       roundsUsed = round;
 
-      const baseChanged = Math.abs(solvedBase - baseBeforeRound) >= DOLLAR_ROUNDING;
+      const baseChanged = !pinBase && Math.abs(solvedBase - baseBeforeRound) >= DOLLAR_ROUNDING;
       const leversChanged = !snapshotsEqual(snapshotBefore, captureLeverSnapshot());
       if (!baseChanged && !leversChanged) break;
     }
@@ -401,13 +677,34 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   const finalMetrics = evaluate('Finalizing');
   notify('Confirming final plan', 1);
 
+  const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+  const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
+
+  if (pinBase && finalMetrics.successRateAchieved < config.desiredSuccessRate) {
+    const baseK = Math.round(finalBase / DOLLAR_ROUNDING);
+    return {
+      params: { ...params },
+      summary: {
+        feasible: false,
+        pinnedBase: true,
+        baseWithdrawal: finalBase,
+        achievedSuccessRate: finalMetrics.successRateAchieved,
+        reason: `Your pinned base withdrawal of $${baseK.toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`,
+        evaluationCount: evalCount,
+      },
+    };
+  }
+
   const finalParams = { ...working, numSimulations: params.numSimulations };
+  const earlyYearsWindow = currentEarlyWindow();
 
   const summary = {
     feasible: true,
     baseWithdrawal: finalBase,
+    pinnedBase: pinBase || undefined,
     roundsUsed,
-    goGoYears: config.includeGoGoYears ? working.portfolio.goGoYears : undefined,
+    goGoBonus: config.includeGoGoYears ? working.portfolio.goGoBonus : undefined,
+    spendChangeRate: working.portfolio.spendChangeRate,
     marketAdjustments: config.includeMarketAdjustments
       ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
       : undefined,
@@ -422,8 +719,14 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
           ceilingBonus: working.portfolio.ceilingBonus,
         }
       : undefined,
+    shortfallTolerance,
+    plannedScheduleTotal: plannedTotal,
     achievedSuccessRate: finalMetrics.successRateAchieved,
     achievedMedianTotalWithdrawn: finalMetrics.medianTotalWithdrawn,
+    achievedObjectiveValue: finalMetrics.objectiveValue,
+    // Only set when the search actively optimized for the bonus-years window
+    // rather than the lifetime total (see currentEarlyWindow above).
+    earlyYearsWindow: earlyYearsWindow > 0 ? earlyYearsWindow : undefined,
     evaluationCount: evalCount,
   };
 
@@ -433,23 +736,4 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 function gridLength(gridConfig) {
   const { minPct, maxPct, stepPct } = gridConfig;
   return Math.floor((maxPct - minPct) / stepPct) + 1;
-}
-
-// Try every candidate for one field (holding everything else fixed via the
-// closure in `applyAndEvaluate`), and keep whichever satisfies the success
-// target with the highest median total withdrawn. Falls back to the field's
-// current value if no candidate meets the target.
-function pickBestCandidate(candidates, applyAndEvaluate, desiredSuccessRate, currentValue) {
-  let best = currentValue;
-  let bestMedian = -Infinity;
-  let foundFeasible = false;
-  for (const candidate of candidates) {
-    const { successRateAchieved, medianTotalWithdrawn } = applyAndEvaluate(candidate);
-    if (successRateAchieved >= desiredSuccessRate && medianTotalWithdrawn > bestMedian) {
-      best = candidate;
-      bestMedian = medianTotalWithdrawn;
-      foundFeasible = true;
-    }
-  }
-  return foundFeasible ? best : currentValue;
 }

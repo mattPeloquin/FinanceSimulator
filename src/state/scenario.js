@@ -84,6 +84,8 @@ const FIELDS = [
   field('goalSeekMode', 'goalSeekMode', 'boolean'),
   field('goalSeekTargetEndingBalance', 'goalSeekTargetEndingBalance', 'currency'),
   field('goalSeekDesiredSuccessPct', 'goalSeekDesiredSuccessPct', 'float'),
+  field('goalSeekRiskTolerancePct', 'goalSeekRiskTolerancePct', 'float'),
+  field('goalSeekIncludeBaseWithdrawal', 'goalSeekIncludeBaseWithdrawal', 'boolean'),
   field('goalSeekIncludeGoGoYears', 'goalSeekIncludeGoGoYears', 'boolean'),
   field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
   field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
@@ -146,6 +148,11 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     }
     delete migrated.withdrawalFloor;
   }
+
+  if (migrated.goalSeekIncludeBaseWithdrawal == null && migrated.goalSeekPinBaseWithdrawal != null) {
+    migrated.goalSeekIncludeBaseWithdrawal = !migrated.goalSeekPinBaseWithdrawal;
+  }
+  delete migrated.goalSeekPinBaseWithdrawal;
 
   return migrated;
 }
@@ -291,6 +298,14 @@ export function writeScenarioToDom(scenario, doc = document) {
   const smoothSlider = doc.getElementById('scaledHistoricalSmoothingSlider');
   if (smoothSlider && scenario.scaledHistoricalSmoothing != null) {
     smoothSlider.value = scenario.scaledHistoricalSmoothing;
+  }
+  const goalSeekSuccessSlider = doc.getElementById('goalSeekDesiredSuccessPctSlider');
+  if (goalSeekSuccessSlider && scenario.goalSeekDesiredSuccessPct != null) {
+    goalSeekSuccessSlider.value = scenario.goalSeekDesiredSuccessPct;
+  }
+  const goalSeekRiskSlider = doc.getElementById('goalSeekRiskTolerancePctSlider');
+  if (goalSeekRiskSlider && scenario.goalSeekRiskTolerancePct != null) {
+    goalSeekRiskSlider.value = scenario.goalSeekRiskTolerancePct;
   }
 
   writeWithdrawalFloorsToDom(
@@ -442,6 +457,8 @@ export function buildGoalSeekConfig(scenario) {
   return {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
+    shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 1),
+    pinBaseWithdrawal: !scenario.goalSeekIncludeBaseWithdrawal,
     includeGoGoYears: !!scenario.goalSeekIncludeGoGoYears,
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
@@ -539,8 +556,25 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     if (!Number.isFinite(desired) || desired < 0 || desired > 100) {
       errors.push('Goal Seek desired success % must be between 0 and 100.');
     }
+    const riskTolerance = scenario.goalSeekRiskTolerancePct;
+    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 100) {
+      errors.push('Goal Seek risk tolerance must be between 0 and 100.');
+    }
     if (scenario.withdrawalStrategy === 'specific') {
       errors.push('Goal Seek requires the "Base + Spending Over Time" withdrawal strategy, not a specific list.');
+    }
+    if (scenario.goalSeekMode && !scenario.goalSeekIncludeBaseWithdrawal) {
+      const base = parseCurrency(scenario.baseWithdrawal);
+      if (!Number.isFinite(base) || base <= 0) {
+        errors.push('When the base withdrawal is not included in the search, it must be a positive amount.');
+      }
+      const hasLever =
+        scenario.goalSeekIncludeGoGoYears
+        || scenario.goalSeekIncludeMarketAdjustments
+        || scenario.goalSeekIncludeBalanceOverrides;
+      if (!hasLever) {
+        errors.push('When the base withdrawal is not included in the search, at least one other lever must be included.');
+      }
     }
   }
 
