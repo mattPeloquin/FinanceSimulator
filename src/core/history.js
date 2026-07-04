@@ -34,7 +34,7 @@ export function computeProfiles(records) {
   return out;
 }
 
-// Per-year standardized shocks (z-scores) for Scaled Historical simulation.
+// Per-year standardized shocks (z-scores) for Smoothed Historical simulation.
 // Each year becomes a 7-length array: how many stdDevs above/below that asset's
 // historical mean for the selected range. Values are in percent (same units as
 // historicalData); zero-variance keys yield z=0.

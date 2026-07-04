@@ -43,7 +43,10 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     logNormal,
     samples,
     scaledHistoricalShocks,
+    scaledHistoricalSmoothing,
   } = params;
+
+  const smoothing = scaledHistoricalSmoothing ?? 0;
 
   let totalRealGrowthFactor = 1.0;
   let currentYearIndex = -1;
@@ -96,7 +99,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     lnPhi = blockSize > 1 ? 1 - 1 / blockSize : 0;
   }
 
-  // Scaled Historical setup: target mean/stdDev per asset (same fields as log-normal).
+  // Smoothed Historical setup: target mean/stdDev per asset (same fields as log-normal).
   let shTargets = null;
   let shAlloc = null;
   if (distMethod === 'scaledHistorical') {
@@ -157,10 +160,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       portfolioReturn = 0;
       for (let k = 0; k < 6; k++) {
         const { mean, stdDev } = shTargets[k];
-        portfolioReturn += (mean + z[k] * stdDev) * shAlloc[k];
+        const jitter = smoothing > 0 ? rng.normal() * smoothing * stdDev : 0;
+        portfolioReturn += (mean + z[k] * stdDev + jitter) * shAlloc[k];
       }
       const inf = shTargets[6];
-      inflation = inf.mean + z[6] * inf.stdDev;
+      const infJitter = smoothing > 0 ? rng.normal() * smoothing * inf.stdDev : 0;
+      inflation = inf.mean + z[6] * inf.stdDev + infJitter;
     } else {
       // Historical resampling via a stationary (circular) block bootstrap.
       currentYearIndex = nextBootstrapIndex(rng, currentYearIndex, sampleLen, blockSize);

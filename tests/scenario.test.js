@@ -119,6 +119,13 @@ describe('buildSimParams', () => {
     expect(p.scaledHistoricalShocks).toHaveLength(years.length);
     expect(p.scaledHistoricalShocks[0]).toHaveLength(7);
   });
+
+  it('converts scaledHistoricalSmoothing from percent to a 0-1 fraction', () => {
+    const s = defaultScenario();
+    s.scaledHistoricalSmoothing = 35;
+    const p = buildSimParams(s, { years: [] });
+    expect(p.scaledHistoricalSmoothing).toBeCloseTo(0.35, 6);
+  });
 });
 
 describe('parseSpecificWithdrawals', () => {

@@ -158,12 +158,13 @@ function profilesFromSampleYears(years) {
   };
 }
 
-describe('scaled historical simulation', () => {
+describe('smoothed historical simulation', () => {
   it('runs and produces finite results', () => {
     const params = lognormalParams({
       distMethod: 'scaledHistorical',
       samples: sampleYears,
       scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+      scaledHistoricalSmoothing: 0.35,
       logNormal: profilesFromSampleYears(sampleYears.years),
       blockSize: 1,
       numSimulations: 500,
@@ -173,7 +174,7 @@ describe('scaled historical simulation', () => {
     expect(Number.isFinite(result.finalBalance[0])).toBe(true);
   });
 
-  it('matches resampling when targets equal the sample historical profiles', () => {
+  it('matches resampling when targets equal the sample historical profiles and smoothing is off', () => {
     const logNormal = profilesFromSampleYears(sampleYears.years);
     const base = {
       numYears: 30,
@@ -185,6 +186,7 @@ describe('scaled historical simulation', () => {
       dynConfig: baseDynConfig,
       samples: sampleYears,
       scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+      scaledHistoricalSmoothing: 0,
     };
 
     const resampleRng = createRng(deriveSeed(base.seed, 0));
@@ -195,6 +197,52 @@ describe('scaled historical simulation', () => {
     for (let i = 0; i < base.numYears; i++) {
       expect(scaledPath.path.returns[i]).toBeCloseTo(resamplePath.path.returns[i], 10);
     }
+  });
+
+  it('adds jitter when smoothing is on without biasing the mean', () => {
+    const logNormal = profilesFromSampleYears(sampleYears.years);
+    const sampleReturns = sampleYears.years.map((y) =>
+      (y.us_lg_growth * baseAllocation.usLgGrowth +
+        y.us_lg_value * baseAllocation.usLgValue +
+        y.us_sm_mid * baseAllocation.usSmMid +
+        y.ex_us * baseAllocation.exUs +
+        y.bond * baseAllocation.bond +
+        y.cash * baseAllocation.cash) /
+      100
+    );
+    const base = {
+      numYears: 500,
+      blockSize: 1,
+      seed: 42,
+      allocation: baseAllocation,
+      logNormal,
+      portfolio: lognormalParams().portfolio,
+      dynConfig: baseDynConfig,
+      samples: sampleYears,
+      scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+      scaledHistoricalSmoothing: 0.35,
+    };
+
+    const rng = createRng(deriveSeed(base.seed, 0));
+    const path = simulatePath({ ...base, distMethod: 'scaledHistorical' }, rng, true);
+
+    let differsFromDiscrete = false;
+    for (const r of path.path.returns) {
+      if (!sampleReturns.some((sr) => Math.abs(sr - r) < 1e-9)) {
+        differsFromDiscrete = true;
+        break;
+      }
+    }
+    expect(differsFromDiscrete).toBe(true);
+
+    const avg =
+      path.path.returns.reduce((a, b) => a + b, 0) / path.path.returns.length;
+    expect(avg).toBeCloseTo(logNormal.usLgGrowth.mean * baseAllocation.usLgGrowth +
+      logNormal.usLgValue.mean * baseAllocation.usLgValue +
+      logNormal.usSmMid.mean * baseAllocation.usSmMid +
+      logNormal.exUs.mean * baseAllocation.exUs +
+      logNormal.bond.mean * baseAllocation.bond +
+      logNormal.cash.mean * baseAllocation.cash, 1);
   });
 
   it('shifts average return when target mean is shifted', () => {
@@ -215,6 +263,7 @@ describe('scaled historical simulation', () => {
       dynConfig: baseDynConfig,
       samples: sampleYears,
       scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+      scaledHistoricalSmoothing: 0,
     };
 
     const histRng = createRng(deriveSeed(base.seed, 0));

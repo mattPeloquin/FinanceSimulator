@@ -47,6 +47,8 @@ const REQUIRED_IDS = [
   'historical-range-msg',
   'lognormal-profiles',
   'resampling-profiles',
+  'smoothing-control',
+  'scaledHistoricalSmoothingSlider',
   'blockSizeSlider',
   'sessionSelect',
   'newSessionButton',
@@ -109,8 +111,9 @@ describe('index.html wiring', () => {
     expect(missing).toEqual([]);
   });
 
-  it('has both distribution-method radios', () => {
+  it('has all distribution-method radios', () => {
     expect(html).toMatch(/name="distribution-method"[^>]*value="resampling"/);
+    expect(html).toMatch(/name="distribution-method"[^>]*value="scaledHistorical"/);
     expect(html).toMatch(/name="distribution-method"[^>]*value="lognormal"/);
   });
 });

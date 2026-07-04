@@ -34,6 +34,7 @@ const FIELDS = [
   field('startYear', 'startYear', 'int'),
   field('endYear', 'endYear', 'int'),
   field('blockSize', 'blockSize', 'int'),
+  field('scaledHistoricalSmoothing', 'scaledHistoricalSmoothing', 'float'),
 
   field('usLgGrowthAllocation', 'usLgGrowthAllocation', 'float'),
   field('usLgValueAllocation', 'usLgValueAllocation', 'float'),
@@ -277,9 +278,13 @@ export function writeScenarioToDom(scenario, doc = document) {
   const stratRadio = doc.querySelector(`input[name="withdrawal-strategy"][value="${strat}"]`);
   if (stratRadio) stratRadio.checked = true;
 
-  // Keep the block-size slider in sync with its number input.
+  // Keep the block-size and smoothing sliders in sync with their number inputs.
   const slider = doc.getElementById('blockSizeSlider');
   if (slider && scenario.blockSize != null) slider.value = scenario.blockSize;
+  const smoothSlider = doc.getElementById('scaledHistoricalSmoothingSlider');
+  if (smoothSlider && scenario.scaledHistoricalSmoothing != null) {
+    smoothSlider.value = scenario.scaledHistoricalSmoothing;
+  }
 
   writeWithdrawalFloorsToDom(
     scenario.withdrawalFloors ?? SCENARIO_DEFAULTS.withdrawalFloors,
@@ -409,6 +414,10 @@ export function buildSimParams(scenario, samples) {
     },
     scaledHistoricalShocks:
       samples && samples.years ? computeStandardizedYears(samples.years) : null,
+    scaledHistoricalSmoothing: Math.min(
+      Math.max(num(scenario.scaledHistoricalSmoothing) / 100, 0),
+      1,
+    ),
     samples,
   };
 }

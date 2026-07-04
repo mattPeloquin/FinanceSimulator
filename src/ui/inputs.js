@@ -53,7 +53,7 @@ export function updateAllocationTotal() {
 
 export function toggleDistMethod(method) {
   const lognormal = document.getElementById('lognormal-profiles');
-  // The block-size control applies to resampling and scaled historical (real-year
+  // The block-size control applies to resampling and smoothed historical (real-year
   // bootstrap) and drives year-to-year smoothing for log-normal.
   if (method === 'lognormal' || method === 'scaledHistorical') {
     lognormal.classList.remove('form-section-hidden');
@@ -61,6 +61,14 @@ export function toggleDistMethod(method) {
     lognormal.classList.add('form-section-hidden');
     lognormal.open = false;
   }
+
+  const isScaled = method === 'scaledHistorical';
+  const smoothInput = document.getElementById('scaledHistoricalSmoothing');
+  const smoothSlider = document.getElementById('scaledHistoricalSmoothingSlider');
+  const smoothControl = document.getElementById('smoothing-control');
+  if (smoothInput) smoothInput.disabled = !isScaled;
+  if (smoothSlider) smoothSlider.disabled = !isScaled;
+  if (smoothControl) smoothControl.classList.toggle('opacity-50', !isScaled);
 }
 
 export function toggleWithdrawalStrategy(strategy) {
@@ -192,6 +200,19 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     notify();
   });
 
+  const scaledHistoricalSmoothing = document.getElementById('scaledHistoricalSmoothing');
+  const scaledHistoricalSmoothingSlider = document.getElementById('scaledHistoricalSmoothingSlider');
+  if (scaledHistoricalSmoothing && scaledHistoricalSmoothingSlider) {
+    scaledHistoricalSmoothingSlider.addEventListener('input', (e) => {
+      scaledHistoricalSmoothing.value = e.target.value;
+      notify();
+    });
+    scaledHistoricalSmoothing.addEventListener('input', (e) => {
+      scaledHistoricalSmoothingSlider.value = e.target.value;
+      notify();
+    });
+  }
+
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
       toggleDistMethod(e.target.value);
@@ -252,6 +273,10 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   document.querySelectorAll('input:not(.currency-input):not(.allocation-input), textarea').forEach((input) => {
     if (input.name === 'distribution-method' || input.name === 'withdrawal-strategy') return;
     if (input.id === 'blockSize' || input.id === 'blockSizeSlider' || input.id === 'enableDynamicAdjustments') return;
+    if (
+      input.id === 'scaledHistoricalSmoothing' ||
+      input.id === 'scaledHistoricalSmoothingSlider'
+    ) return;
     if (input.id === 'specificWithdrawals') return;
     input.addEventListener('change', notify);
   });

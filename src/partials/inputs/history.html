@@ -33,8 +33,8 @@
                     <input id="dist-scaled-historical" name="distribution-method" type="radio" value="scaledHistorical" class="focus:ring-theme-accent h-4 w-4 text-theme-accent border-theme-input">
                 </div>
                 <div class="ml-3 text-sm">
-                    <span class="block font-medium text-theme-body">Scaled Historical</span>
-                    <span class="block text-theme-faint">Reuses real historical year-to-year sequences and correlations, rescaled to your own return/volatility assumptions instead of the raw historical average.</span>
+                    <span class="block font-medium text-theme-body">Smoothed Historical</span>
+                    <span class="block text-theme-faint">Reuses real historical year-to-year sequences and correlations, rescaled to your own return/volatility assumptions and lightly smoothed to fill in the gaps between historical data points.</span>
                 </div>
             </label>
             <label for="dist-lognormal" class="relative flex items-start p-3 border rounded-lg cursor-pointer has-[:checked]:bg-theme-accent-subtle has-[:checked]:border-theme-accent">

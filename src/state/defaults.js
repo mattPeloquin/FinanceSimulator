@@ -27,11 +27,15 @@ export const SCENARIO_DEFAULTS = {
   // strength (log-normal). Valid UI range: 1–6. 1 = fully independent years.
   blockSize: 3,
 
+  // Jitter strength for Smoothed Historical only: % of each asset's target stdDev.
+  // Valid UI range: 0–100. 0 = no jitter; 35 = moderate smoothing (default).
+  scaledHistoricalSmoothing: 35,
+
   // Mode selectors (radio buttons)
 
   // How returns are generated. Options:
   //   'resampling'       — sample real historical years (with year-to-year persistence)
-  //   'scaledHistorical' — resample real years, rescaled to target mean/stdDev assumptions
+  //   'scaledHistorical' — Smoothed Historical: resample real years, rescaled + jittered
   //   'lognormal'        — draw from mean/std-dev profiles (requires fields below)
   distMethod: 'resampling',
 
