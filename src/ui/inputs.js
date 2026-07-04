@@ -86,6 +86,48 @@ export function toggleWithdrawalStrategy(strategy) {
   }
 }
 
+// Maps each "include in search" checkbox id to the input field(s) it takes
+// over while Goal Seek mode is on. Each checkbox covers every spending lever
+// that's actually inside its own <details> section: Market adjustment
+// includes both the market-triggered $ adjustments AND their balance
+// override thresholds; Balance adjustment includes the floor/ceiling balance
+// thresholds AND their cut/boost rates.
+const GOAL_SEEK_LEVER_FIELDS = {
+  goalSeekIncludeGoGoYears: ['goGoYears'],
+  goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynMedAdj', 'dynHighAdj', 'dynLowBal', 'dynMedBal', 'dynHighBal'],
+  goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
+};
+
+// Gray out (or restore) the fields a search lever has taken over. Included
+// fields are disabled — Goal Seek will choose their values — and left
+// editable again once the lever is unchecked or Goal Seek mode turns off.
+export function toggleFieldSearchable(fieldIds, included) {
+  for (const id of fieldIds) {
+    const input = document.getElementById(id);
+    if (input) input.disabled = included;
+  }
+}
+
+// Show/hide the Goal Seek panel and its per-field "include in search"
+// checkboxes, and relabel the Run button so it's clear a search (not a plain
+// simulation) will run. Turning the mode off releases any grayed-out fields.
+export function toggleGoalSeekMode(enabled) {
+  const wrapper = document.getElementById('goal-seek-wrapper');
+  if (wrapper) wrapper.classList.toggle('hidden', !enabled);
+
+  for (const [checkboxId, fieldIds] of Object.entries(GOAL_SEEK_LEVER_FIELDS)) {
+    const wrap = document.getElementById(`${checkboxId}Wrap`);
+    if (wrap) wrap.style.display = enabled ? '' : 'none';
+
+    const checkbox = document.getElementById(checkboxId);
+    const included = enabled && !!checkbox?.checked;
+    toggleFieldSearchable(fieldIds, included);
+  }
+
+  const runButton = document.getElementById('runButton');
+  if (runButton) runButton.textContent = enabled ? 'Find Best Plan' : 'Run Simulation';
+}
+
 export function toggleDynamicAdjustments(enabled) {
   const wrapper = document.getElementById('dynamic-adjustments-wrapper');
   if (enabled) {
@@ -236,6 +278,23 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const goalSeekModeCheck = document.getElementById('goalSeekMode');
+  if (goalSeekModeCheck) {
+    goalSeekModeCheck.addEventListener('change', (e) => {
+      toggleGoalSeekMode(e.target.checked);
+      notify();
+    });
+  }
+
+  for (const [checkboxId, fieldIds] of Object.entries(GOAL_SEEK_LEVER_FIELDS)) {
+    const checkbox = document.getElementById(checkboxId);
+    if (!checkbox) continue;
+    checkbox.addEventListener('change', (e) => {
+      toggleFieldSearchable(fieldIds, e.target.checked);
+      notify();
+    });
+  }
+
   // The spending-scale sparkline tracks its inputs (plus the starting balance,
   // which sets the chart's x-range) as the user types.
   for (const id of ['floorBalance', 'floorPenalty', 'ceilingBalance', 'ceilingBonus', 'startBalance']) {
@@ -273,6 +332,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   document.querySelectorAll('input:not(.currency-input):not(.allocation-input), textarea').forEach((input) => {
     if (input.name === 'distribution-method' || input.name === 'withdrawal-strategy') return;
     if (input.id === 'blockSize' || input.id === 'blockSizeSlider' || input.id === 'enableDynamicAdjustments') return;
+    if (input.id === 'goalSeekMode' || input.id in GOAL_SEEK_LEVER_FIELDS) return;
     if (
       input.id === 'scaledHistoricalSmoothing' ||
       input.id === 'scaledHistoricalSmoothingSlider'

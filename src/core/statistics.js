@@ -60,6 +60,20 @@ export function successRate(depletionYear, numYears) {
   return survived / depletionYear.length;
 }
 
+// Fraction of simulations that both (a) never depleted within the horizon and
+// (b) ended with a balance at or above the target ending balance. Used by
+// Goal Seek, where "success" means the plan is sustainable AND leaves at
+// least the desired amount behind.
+export function goalSuccessRate(finalBalance, depletionYear, numYears, targetEndingBalance) {
+  const n = finalBalance.length;
+  if (n === 0) return 0;
+  let met = 0;
+  for (let i = 0; i < n; i++) {
+    if (depletionYear[i] > numYears && finalBalance[i] >= targetEndingBalance) met++;
+  }
+  return met / n;
+}
+
 // Fraction of simulations whose total withdrawn reached at least (1 - tolerance)
 // of the planned schedule total — i.e. within tolerance below target, or above it.
 export function withdrawalTargetSuccessRate(totalWithdrawn, plannedWithdrawn, tolerance = 0.05) {

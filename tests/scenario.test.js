@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   defaultScenario,
   buildSimParams,
+  buildGoalSeekConfig,
   validateScenario,
   parseCurrency,
   formatCurrency,
@@ -128,6 +129,29 @@ describe('buildSimParams', () => {
   });
 });
 
+describe('buildGoalSeekConfig', () => {
+  it('converts $000s and percentages into engine-ready dollars/fractions', () => {
+    const s = defaultScenario();
+    s.goalSeekTargetEndingBalance = 500;
+    s.goalSeekDesiredSuccessPct = 85;
+    s.goalSeekIncludeGoGoYears = true;
+    const config = buildGoalSeekConfig(s);
+    expect(config.targetEndingBalance).toBe(500 * MONEY_SCALE);
+    expect(config.desiredSuccessRate).toBeCloseTo(0.85, 6);
+    expect(config.includeGoGoYears).toBe(true);
+    expect(config.includeMarketAdjustments).toBe(false);
+    expect(config.includeBalanceOverrides).toBe(false);
+  });
+
+  it('clamps desired success rate to 0-1', () => {
+    const s = defaultScenario();
+    s.goalSeekDesiredSuccessPct = 150;
+    expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(1);
+    s.goalSeekDesiredSuccessPct = -10;
+    expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(0);
+  });
+});
+
 describe('parseSpecificWithdrawals', () => {
   it('splits on common spreadsheet delimiters', () => {
     expect(parseSpecificWithdrawals('80\n85\n90')).toEqual([80000, 85000, 90000]);
@@ -237,6 +261,37 @@ describe('validateScenario', () => {
     s.withdrawalFloors = [{ amount: 100, years: 10 }, { amount: 80 }];
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('final tier'))).toBe(true);
+  });
+
+  it('ignores Goal Seek fields when the mode is off', () => {
+    const s = defaultScenario();
+    s.goalSeekTargetEndingBalance = -50;
+    s.goalSeekDesiredSuccessPct = 500;
+    expect(validateScenario(s, range)).toEqual([]);
+  });
+
+  it('flags a negative target ending balance when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekTargetEndingBalance = -50;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('target ending balance'))).toBe(true);
+  });
+
+  it('flags an out-of-range desired success percentage when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekDesiredSuccessPct = 150;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('desired success'))).toBe(true);
+  });
+
+  it('flags the specific-withdrawal strategy when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.withdrawalStrategy = 'specific';
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Goal Seek requires'))).toBe(true);
   });
 });
 

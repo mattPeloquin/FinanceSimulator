@@ -139,4 +139,24 @@ export const SCENARIO_DEFAULTS = {
   cashReturnStdDev: null,
   inflationMean: null,
   inflationStdDev: null,
+
+  // Goal Seek mode
+  // When enabled, clicking "Run" searches for spending settings that hit the
+  // targets below instead of just simulating whatever is currently typed in.
+
+  // Master toggle for Goal Seek mode.
+  goalSeekMode: false,
+
+  // Balance ($000s) the search tries to leave behind at the end of the
+  // horizon (on top of never running out of money along the way).
+  goalSeekTargetEndingBalance: 0,
+
+  // Minimum acceptable success rate (%) for the searched plan.
+  goalSeekDesiredSuccessPct: 90,
+
+  // Which additional levers the search is allowed to tune (checkboxes).
+  // The base withdrawal itself is always searched.
+  goalSeekIncludeGoGoYears: false,
+  goalSeekIncludeMarketAdjustments: false,
+  goalSeekIncludeBalanceOverrides: false,
 };

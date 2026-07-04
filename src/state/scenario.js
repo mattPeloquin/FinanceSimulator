@@ -80,6 +80,13 @@ const FIELDS = [
   field('cashReturnStdDev', 'cashReturnStdDev', 'float'),
   field('inflationMean', 'inflationMean', 'float'),
   field('inflationStdDev', 'inflationStdDev', 'float'),
+
+  field('goalSeekMode', 'goalSeekMode', 'boolean'),
+  field('goalSeekTargetEndingBalance', 'goalSeekTargetEndingBalance', 'currency'),
+  field('goalSeekDesiredSuccessPct', 'goalSeekDesiredSuccessPct', 'float'),
+  field('goalSeekIncludeGoGoYears', 'goalSeekIncludeGoGoYears', 'boolean'),
+  field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
+  field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
 ];
 
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
@@ -427,6 +434,20 @@ function num(v) {
   return Number.isNaN(n) ? 0 : n;
 }
 
+// Convert a scenario's Goal Seek fields into the config object consumed by
+// src/core/goalSeek.js's runGoalSeek(). Mirrors buildSimParams's job of
+// translating $000s/percentages into the raw dollars/fractions the search
+// algorithm works with.
+export function buildGoalSeekConfig(scenario) {
+  return {
+    targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
+    desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
+    includeGoGoYears: !!scenario.goalSeekIncludeGoGoYears,
+    includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
+    includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
+  };
+}
+
 // Upper bounds keep a single run from locking up the browser for minutes.
 export const MAX_NUM_YEARS = 100;
 export const MAX_NUM_SIMULATIONS = 100000;
@@ -506,6 +527,20 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     }
     if (intermediateYears >= scenario.numYears) {
       errors.push('Minimum-withdrawal tiers must leave at least 1 year for the final tier.');
+    }
+  }
+
+  if (scenario.goalSeekMode) {
+    const target = parseCurrency(scenario.goalSeekTargetEndingBalance);
+    if (!Number.isFinite(target) || target < 0) {
+      errors.push('Goal Seek target ending balance must be zero or a positive amount.');
+    }
+    const desired = scenario.goalSeekDesiredSuccessPct;
+    if (!Number.isFinite(desired) || desired < 0 || desired > 100) {
+      errors.push('Goal Seek desired success % must be between 0 and 100.');
+    }
+    if (scenario.withdrawalStrategy === 'specific') {
+      errors.push('Goal Seek requires the "Base + Spending Over Time" withdrawal strategy, not a specific list.');
     }
   }
 

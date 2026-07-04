@@ -8,7 +8,10 @@ import {
   writeScenarioToDom,
   defaultScenario,
   buildSimParams,
+  buildGoalSeekConfig,
   validateScenario,
+  formatCurrency,
+  MONEY_SCALE,
   SCENARIO_DEFAULTS,
 } from './state/scenario.js';
 import {
@@ -37,6 +40,7 @@ import {
   renderYearLabels,
   toggleWithdrawalStrategy,
   toggleDynamicAdjustments,
+  toggleGoalSeekMode,
 } from './ui/inputs.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderResults } from './ui/results.js';
@@ -140,12 +144,12 @@ function setLoading(isLoading) {
   }
 }
 
-function updateProgress(fraction) {
+function updateProgress(fraction, stage) {
   const bar = document.getElementById('progressBar');
   const text = document.getElementById('loadingText');
   const pct = Math.round(fraction * 100);
   if (bar) bar.style.width = `${pct}%`;
-  if (text) text.textContent = `Running simulations… ${pct}%`;
+  if (text) text.textContent = stage ? `${stage}… ${pct}%` : `Running simulations… ${pct}%`;
 }
 
 function runSimulation() {
@@ -188,6 +192,106 @@ function runSimulation() {
     currentWorker = null;
   };
   currentWorker.postMessage({ type: 'run', params });
+}
+
+// Write the base withdrawal (and any levers Goal Seek was allowed to tune)
+// back into the form, so the discovered plan is visible and editable like any
+// other value once the search finishes.
+function applyGoalSeekSummaryToDom(summary) {
+  const setCurrencyField = (id, dollars) => {
+    const el = document.getElementById(id);
+    if (el) el.value = dollars == null ? '' : formatCurrency(dollars / MONEY_SCALE);
+  };
+
+  setCurrencyField('baseWithdrawal', summary.baseWithdrawal);
+
+  if (summary.goGoYears !== undefined) {
+    const el = document.getElementById('goGoYears');
+    if (el) el.value = summary.goGoYears;
+  }
+
+  if (summary.marketAdjustments) {
+    setCurrencyField('dynLowAdj', summary.marketAdjustments.low);
+    setCurrencyField('dynMedAdj', summary.marketAdjustments.med);
+    setCurrencyField('dynHighAdj', summary.marketAdjustments.high);
+  }
+
+  if (summary.marketBalanceOverrides) {
+    setCurrencyField('dynLowBal', summary.marketBalanceOverrides.low);
+    setCurrencyField('dynMedBal', summary.marketBalanceOverrides.med);
+    setCurrencyField('dynHighBal', summary.marketBalanceOverrides.high);
+  }
+
+  if (summary.balanceAdjustment) {
+    const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
+    setCurrencyField('floorBalance', floorBalance);
+    setCurrencyField('ceilingBalance', ceilingBalance);
+
+    const floorPenaltyEl = document.getElementById('floorPenalty');
+    if (floorPenaltyEl) floorPenaltyEl.value = Math.round(floorPenalty * 100);
+    const ceilingBonusEl = document.getElementById('ceilingBonus');
+    if (ceilingBonusEl) ceilingBonusEl.value = Math.round(ceilingBonus * 100);
+  }
+}
+
+function runGoalSeekSearch() {
+  const scenario = readScenarioFromDom();
+  const errors = validateScenario(scenario, YEAR_RANGE);
+  if (errors.length) {
+    showAlert(errors.join('\n'), 'Please fix these inputs');
+    return;
+  }
+
+  refreshHistoryView(scenario.startYear, scenario.endYear);
+  const params = buildSimParams(scenario, historicalSamples);
+  const goalSeekConfig = buildGoalSeekConfig(scenario);
+
+  setLoading(true);
+
+  if (currentWorker) currentWorker.terminate();
+  currentWorker = new SimulationWorker();
+  currentWorker.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'progress') {
+      updateProgress(msg.fraction, msg.stage);
+    } else if (msg.type === 'done') {
+      setLoading(false);
+      currentWorker.terminate();
+      currentWorker = null;
+
+      if (!msg.goalSeekSummary.feasible) {
+        showAlert(msg.goalSeekSummary.reason || 'Goal Seek could not find a plan meeting your target.', 'Goal not reachable');
+        return;
+      }
+
+      applyGoalSeekSummaryToDom(msg.goalSeekSummary);
+      scheduleAutosave();
+      document.getElementById('resultsSection').classList.remove('hidden');
+      renderResults(msg.result, params, msg.goalSeekSummary);
+    } else if (msg.type === 'error') {
+      setLoading(false);
+      showAlert(`Goal Seek error: ${msg.message}`);
+      currentWorker.terminate();
+      currentWorker = null;
+    }
+  };
+  currentWorker.onerror = (err) => {
+    setLoading(false);
+    showAlert(`Worker error: ${err.message}`);
+    currentWorker.terminate();
+    currentWorker = null;
+  };
+  currentWorker.postMessage({ type: 'goalSeek', params, goalSeekConfig });
+}
+
+// Fork between a normal simulation and a Goal Seek search based on the mode toggle.
+function handleRunClick() {
+  const scenario = readScenarioFromDom();
+  if (scenario.goalSeekMode) {
+    runGoalSeekSearch();
+  } else {
+    runSimulation();
+  }
 }
 
 // Stop an in-flight simulation and return the UI to its idle state.
@@ -493,6 +597,7 @@ function applyScenario(scenario) {
   toggleDistMethod(merged.distMethod);
   toggleWithdrawalStrategy(merged.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
+  toggleGoalSeekMode(merged.goalSeekMode ?? false);
   updateAllocationTotal();
   // Refresh charts/samples for the range; keep the scenario's own profiles.
   const hasProfiles = merged.usLgGrowthMean != null && merged.usLgGrowthMean !== '';
@@ -522,13 +627,14 @@ async function init() {
     toggleDistMethod(initial.distMethod);
     toggleWithdrawalStrategy(initial.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
     toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
+    toggleGoalSeekMode(initial.goalSeekMode ?? false);
 
     setupInputBehaviors({
       onChange: scheduleAutosave,
       onDistMethodChange: () => {},
     });
 
-    document.getElementById('runButton').addEventListener('click', runSimulation);
+    document.getElementById('runButton').addEventListener('click', handleRunClick);
     document.getElementById('cancelSimulationButton').addEventListener('click', cancelSimulation);
 
     // Year-range inputs drive the charts + profiles directly (debounced typing).

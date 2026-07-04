@@ -169,12 +169,31 @@ Only the paths that will actually appear on screen are regenerated in full year-
 The worker then sends this compact, chart-ready package back to the page for display in cards and charts  (`src/ui/results.js` and `src/ui/charts/`).
 
 
+### Goal Seek: let the simulator find your plan for you
+
+Instead of guessing at a withdrawal amount and checking whether it works, **Goal Seek** flips the process around: tell it what you want (a target amount left over at the end, and how confident you want to be), and it searches for the highest sustainable spending plan that gets you there.
+
+To use it:
+
+1. Turn on the **Goal Seek** switch near the bottom of the form (above the Run button).
+2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out) and a **Desired Success %** (how sure you want to be that the plan works).
+3. Optionally, check any of the **"Include in search"** boxes if you'd like the search to fine-tune those settings too — instead of using whatever you last typed, they'll gray out while the search decides on their values for you:
+   - **Bonus Years** — how many early "go-go" years get the spending bonus.
+   - **Market adjustment** — the market-triggered spending adjustments (Low/Expected/High) *and* the balance thresholds that override them.
+   - **Balance adjustment** — the Floor/Ceiling Balance thresholds *and* their Max Cut / Boost Rate.
+4. Click **Find Best Plan** (the Run button relabels itself while Goal Seek is on). The simulator will try many combinations behind the scenes and, when it finishes, fill in the winning numbers for you and show the full results — along with a "Goal Seek Result" summary card explaining what it chose.
+
+If your target is impossible to reach (e.g. the ending balance is unrealistically high for your starting balance and horizon), the simulator will tell you so instead of showing a misleading answer — try lowering the target or the desired success percentage.
+
+Turn the switch back off any time to return to typing in your own numbers and running a normal simulation — the values Goal Seek found stay right where you'd expect.
+
 ### Where to look when vibe-coding
 
 
 | You want to change…                 | Look in…                                                                                            |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
 | The math of growth/withdrawals      | `src/core/simulation.js`, `src/core/withdrawal.js`                                                  |
+| Goal Seek's search logic            | `src/core/goalSeek.js`                                                                               |
 | The historical dataset              | `src/data/historicalData.js`                                                                        |
 | An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
 | A chart's look or behavior          | `src/ui/charts/` (one file per chart)                                                               |

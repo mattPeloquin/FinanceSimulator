@@ -53,7 +53,56 @@ function setEndYear(id, balances, numYears) {
   }
 }
 
-export function renderResults(result, params) {
+// Show (or hide) the "Goal Seek Result" card summarizing which levers were
+// solved and what success rate the search achieved during its (reduced-
+// simulation) search — separate from the headline metrics below, which come
+// from the full-fidelity confirmation run.
+function renderGoalSeekSummary(summary) {
+  const card = document.getElementById('goalSeekSummaryCard');
+  const text = document.getElementById('goalSeekSummaryText');
+  if (!card || !text) return;
+
+  if (!summary) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  const formatBalanceOverride = (dollars) => (dollars == null ? 'off' : formatK(dollars));
+  const lines = [`Base withdrawal: <strong>${formatK(summary.baseWithdrawal)}</strong> (000s)`];
+
+  if (summary.goGoYears !== undefined) {
+    lines.push(`Bonus years: <strong>${summary.goGoYears}</strong>`);
+  }
+  if (summary.marketAdjustments) {
+    const { low, med, high } = summary.marketAdjustments;
+    lines.push(
+      `Market adjustments (000s) — Low: <strong>${formatK(low)}</strong>, Expected: <strong>${formatK(med)}</strong>, High: <strong>${formatK(high)}</strong>`,
+    );
+  }
+  if (summary.marketBalanceOverrides) {
+    const { low, med, high } = summary.marketBalanceOverrides;
+    lines.push(
+      `Market balance overrides (000s) — Low: <strong>${formatBalanceOverride(low)}</strong>, Expected: <strong>${formatBalanceOverride(med)}</strong>, High: <strong>${formatBalanceOverride(high)}</strong>`,
+    );
+  }
+  if (summary.balanceAdjustment) {
+    const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
+    lines.push(
+      `Balance adjustment — Floor: <strong>${formatBalanceOverride(floorBalance || null)}</strong>, Ceiling: <strong>${formatBalanceOverride(ceilingBalance)}</strong>, Max Cut: <strong>${formatPercent(floorPenalty, 0)}</strong>, Boost Rate: <strong>${formatPercent(ceilingBonus, 0)}</strong>`,
+    );
+  }
+  lines.push(`Success rate found during search: <strong>${formatPercent(summary.achievedSuccessRate, 1)}</strong>`);
+  if (summary.roundsUsed > 1) {
+    lines.push(`Converged after <strong>${summary.roundsUsed}</strong> rounds of tuning.`);
+  }
+
+  text.innerHTML = lines.join('<br>');
+  card.classList.remove('hidden');
+}
+
+export function renderResults(result, params, goalSeekSummary) {
+  renderGoalSeekSummary(goalSeekSummary);
+
   setText('successRate', formatPercent(result.successRate, 1));
   setText(
     'withdrawalTargetSuccessRate',

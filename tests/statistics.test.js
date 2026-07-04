@@ -6,6 +6,7 @@ import {
   percentileValue,
   closestHistogramBin,
   successRate,
+  goalSuccessRate,
   withdrawalTargetSuccessRate,
   mean,
   median,
@@ -57,6 +58,26 @@ describe('successRate', () => {
   it('counts simulations not depleted within the horizon', () => {
     const depletion = Float64Array.from([41, 10, 41, 5]); // numYears = 40 -> 41 means survived
     expect(successRate(depletion, 40)).toBe(0.5);
+  });
+});
+
+describe('goalSuccessRate', () => {
+  it('counts only runs that both survived and met the ending balance target', () => {
+    const finalBalance = Float64Array.from([500, 2000, 1500, 50]);
+    const depletionYear = Float64Array.from([41, 41, 20, 41]); // numYears = 40
+    // idx0: survived but below target; idx1: survived and above target;
+    // idx2: depleted (ignored regardless of balance); idx3: survived but below target.
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 1000)).toBe(0.25);
+  });
+
+  it('returns 0 for an empty set', () => {
+    expect(goalSuccessRate(Float64Array.from([]), Float64Array.from([]), 40, 1000)).toBe(0);
+  });
+
+  it('treats a target of 0 as "just don\'t deplete"', () => {
+    const finalBalance = Float64Array.from([0, 100]);
+    const depletionYear = Float64Array.from([41, 41]);
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 0)).toBe(1);
   });
 });
 

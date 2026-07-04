@@ -35,6 +35,14 @@
     display: none;
   }
 
+  /* Grayed-out look for fields Goal Seek has taken over (matches the
+     opacity-50 convention already used for other disabled sections). */
+  input.input-theme:disabled,
+  .currency-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* Hide number-input spin buttons */
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
