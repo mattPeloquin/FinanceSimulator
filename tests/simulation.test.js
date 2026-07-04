@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulatePath, runMonteCarlo, regeneratePath } from '../src/core/simulation.js';
 import { createRng, deriveSeed } from '../src/core/rng.js';
 import { successRate } from '../src/core/statistics.js';
+import { computeProfiles, computeStandardizedYears } from '../src/core/history.js';
 
 const baseDynConfig = {
   low: { ret: -15, bal: 1_000_000, adj: 0 },
@@ -140,6 +141,100 @@ describe('historical resampling', () => {
     for (const r of path.path.returns) {
       expect(sampleReturns.some((sr) => Math.abs(sr - r) < 1e-9)).toBe(true);
     }
+  });
+});
+
+function profilesFromSampleYears(years) {
+  const profiles = computeProfiles(years);
+  return {
+    usLgGrowth: { mean: profiles.us_lg_growth.mean / 100, stdDev: profiles.us_lg_growth.stdDev / 100 },
+    usLgValue: { mean: profiles.us_lg_value.mean / 100, stdDev: profiles.us_lg_value.stdDev / 100 },
+    usSmMid: { mean: profiles.us_sm_mid.mean / 100, stdDev: profiles.us_sm_mid.stdDev / 100 },
+    exUs: { mean: profiles.ex_us.mean / 100, stdDev: profiles.ex_us.stdDev / 100 },
+    bond: { mean: profiles.bond.mean / 100, stdDev: profiles.bond.stdDev / 100 },
+    cash: { mean: profiles.cash.mean / 100, stdDev: profiles.cash.stdDev / 100 },
+    inflation: { mean: profiles.inflation.mean / 100, stdDev: profiles.inflation.stdDev / 100 },
+    chol: null,
+  };
+}
+
+describe('scaled historical simulation', () => {
+  it('runs and produces finite results', () => {
+    const params = lognormalParams({
+      distMethod: 'scaledHistorical',
+      samples: sampleYears,
+      scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+      logNormal: profilesFromSampleYears(sampleYears.years),
+      blockSize: 1,
+      numSimulations: 500,
+    });
+    const result = runMonteCarlo(params);
+    expect(result.avgReturn.length).toBe(500);
+    expect(Number.isFinite(result.finalBalance[0])).toBe(true);
+  });
+
+  it('matches resampling when targets equal the sample historical profiles', () => {
+    const logNormal = profilesFromSampleYears(sampleYears.years);
+    const base = {
+      numYears: 30,
+      blockSize: 3,
+      seed: 99,
+      allocation: baseAllocation,
+      logNormal,
+      portfolio: lognormalParams().portfolio,
+      dynConfig: baseDynConfig,
+      samples: sampleYears,
+      scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+    };
+
+    const resampleRng = createRng(deriveSeed(base.seed, 0));
+    const scaledRng = createRng(deriveSeed(base.seed, 0));
+    const resamplePath = simulatePath({ ...base, distMethod: 'resampling' }, resampleRng, true);
+    const scaledPath = simulatePath({ ...base, distMethod: 'scaledHistorical' }, scaledRng, true);
+
+    for (let i = 0; i < base.numYears; i++) {
+      expect(scaledPath.path.returns[i]).toBeCloseTo(resamplePath.path.returns[i], 10);
+    }
+  });
+
+  it('shifts average return when target mean is shifted', () => {
+    const historical = profilesFromSampleYears(sampleYears.years);
+    const shifted = {
+      ...historical,
+      usLgGrowth: {
+        mean: historical.usLgGrowth.mean + 0.02,
+        stdDev: historical.usLgGrowth.stdDev,
+      },
+    };
+    const base = {
+      numYears: 200,
+      blockSize: 1,
+      seed: 77,
+      allocation: { ...baseAllocation, usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      portfolio: lognormalParams().portfolio,
+      dynConfig: baseDynConfig,
+      samples: sampleYears,
+      scaledHistoricalShocks: computeStandardizedYears(sampleYears.years),
+    };
+
+    const histRng = createRng(deriveSeed(base.seed, 0));
+    const shiftRng = createRng(deriveSeed(base.seed, 0));
+    const histPath = simulatePath(
+      { ...base, distMethod: 'scaledHistorical', logNormal: historical },
+      histRng,
+      true,
+    );
+    const shiftPath = simulatePath(
+      { ...base, distMethod: 'scaledHistorical', logNormal: shifted },
+      shiftRng,
+      true,
+    );
+
+    const histAvg =
+      histPath.path.returns.reduce((a, b) => a + b, 0) / histPath.path.returns.length;
+    const shiftAvg =
+      shiftPath.path.returns.reduce((a, b) => a + b, 0) / shiftPath.path.returns.length;
+    expect(shiftAvg - histAvg).toBeCloseTo(0.02, 2);
   });
 });
 

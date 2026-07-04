@@ -5,7 +5,7 @@
 // getElementById calls of the original app and makes persistence, export/import,
 // and validation trivial.
 
-import { correlationCholesky } from '../core/history.js';
+import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { buildWithdrawalFloorSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
@@ -407,6 +407,8 @@ export function buildSimParams(scenario, samples) {
       // the profiles). Lets log-normal draws preserve cross-asset correlations.
       chol: samples && samples.years ? correlationCholesky(samples.years) : null,
     },
+    scaledHistoricalShocks:
+      samples && samples.years ? computeStandardizedYears(samples.years) : null,
     samples,
   };
 }
@@ -460,7 +462,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     errors.push(`Total asset allocation must equal 100%. Current total: ${total.toFixed(2)}%`);
   }
 
-  if (scenario.distMethod === 'lognormal') {
+  if (scenario.distMethod === 'lognormal' || scenario.distMethod === 'scaledHistorical') {
     const missing = [
       'usLgGrowthMean', 'usLgGrowthStdDev', 'usLgValueMean', 'usLgValueStdDev',
       'usSmMidMean', 'usSmMidStdDev', 'exUsMean', 'exUsStdDev',
@@ -468,7 +470,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       'inflationMean', 'inflationStdDev',
     ].some((k) => scenario[k] == null || scenario[k] === '');
     if (missing) {
-      errors.push('Log-normal profiles are incomplete. Click "Update From History" to populate them.');
+      errors.push('Return assumptions are incomplete. Adjust the year range or edit the Mean / Std Dev fields.');
     }
   }
 

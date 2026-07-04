@@ -34,6 +34,24 @@ export function computeProfiles(records) {
   return out;
 }
 
+// Per-year standardized shocks (z-scores) for Scaled Historical simulation.
+// Each year becomes a 7-length array: how many stdDevs above/below that asset's
+// historical mean for the selected range. Values are in percent (same units as
+// historicalData); zero-variance keys yield z=0.
+export function computeStandardizedYears(records, keys = LOGNORMAL_ORDER) {
+  if (!records || records.length === 0) return [];
+
+  const profiles = {};
+  for (const key of keys) profiles[key] = calculateProfile(records, key);
+
+  return records.map((record) =>
+    keys.map((key) => {
+      const { mean, stdDev } = profiles[key];
+      return stdDev > 0 ? (record[key] - mean) / stdDev : 0;
+    })
+  );
+}
+
 // Pearson correlation matrix (N×N) across `keys`, estimated from records. A key
 // with zero variance yields zero correlation with everything (diagonal stays 1).
 export function computeCorrelationMatrix(records, keys = LOGNORMAL_ORDER) {

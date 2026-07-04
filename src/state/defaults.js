@@ -30,8 +30,9 @@ export const SCENARIO_DEFAULTS = {
   // Mode selectors (radio buttons)
 
   // How returns are generated. Options:
-  //   'resampling' — sample real historical years (with year-to-year persistence)
-  //   'lognormal'  — draw from mean/std-dev profiles (requires fields below)
+  //   'resampling'       — sample real historical years (with year-to-year persistence)
+  //   'scaledHistorical' — resample real years, rescaled to target mean/stdDev assumptions
+  //   'lognormal'        — draw from mean/std-dev profiles (requires fields below)
   distMethod: 'resampling',
 
   // How withdrawals are chosen. Options:

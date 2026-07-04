@@ -53,9 +53,9 @@ export function updateAllocationTotal() {
 
 export function toggleDistMethod(method) {
   const lognormal = document.getElementById('lognormal-profiles');
-  // The block-size control applies to both methods now: it bootstraps blocks for
-  // resampling and drives year-to-year smoothing for log-normal, so keep it shown.
-  if (method === 'lognormal') {
+  // The block-size control applies to resampling and scaled historical (real-year
+  // bootstrap) and drives year-to-year smoothing for log-normal.
+  if (method === 'lognormal' || method === 'scaledHistorical') {
     lognormal.classList.remove('form-section-hidden');
   } else {
     lognormal.classList.add('form-section-hidden');

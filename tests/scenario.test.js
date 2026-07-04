@@ -12,7 +12,7 @@ import {
   MONEY_SCALE,
   SCENARIO_DEFAULTS,
 } from '../src/state/scenario.js';
-import { getSampleYears, computeProfiles } from '../src/core/history.js';
+import { getSampleYears, computeProfiles, computeStandardizedYears } from '../src/core/history.js';
 
 describe('currency helpers', () => {
   it('parses comma-separated strings as $000s', () => {
@@ -111,6 +111,14 @@ describe('buildSimParams', () => {
     const p = buildSimParams(s, { years: [] });
     expect(p.portfolio.withdrawalFloorSeries.every((v) => v === 0)).toBe(true);
   });
+
+  it('includes scaledHistoricalShocks when sample years are provided', () => {
+    const s = defaultScenario();
+    const years = getSampleYears(2000, 2009);
+    const p = buildSimParams(s, { years });
+    expect(p.scaledHistoricalShocks).toHaveLength(years.length);
+    expect(p.scaledHistoricalShocks[0]).toHaveLength(7);
+  });
 });
 
 describe('parseSpecificWithdrawals', () => {
@@ -166,7 +174,14 @@ describe('validateScenario', () => {
     const s = defaultScenario();
     s.distMethod = 'lognormal';
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('Log-normal'))).toBe(true);
+    expect(errors.some((e) => e.includes('Return assumptions'))).toBe(true);
+  });
+
+  it('flags incomplete scaled historical profiles', () => {
+    const s = defaultScenario();
+    s.distMethod = 'scaledHistorical';
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Return assumptions'))).toBe(true);
   });
 
   it('flags a horizon or simulation count above the caps', () => {
@@ -230,5 +245,30 @@ describe('history helpers', () => {
     expect(Number.isFinite(profiles.us_lg_growth.mean)).toBe(true);
     expect(profiles.us_lg_growth.stdDev).toBeGreaterThan(0);
     expect(Number.isFinite(profiles.inflation.mean)).toBe(true);
+  });
+
+  it('standardizes each year to z-scores with mean ~0 and stdDev ~1', () => {
+    const records = getSampleYears(1928, 2025);
+    const shocks = computeStandardizedYears(records);
+    expect(shocks).toHaveLength(records.length);
+    expect(shocks[0]).toHaveLength(7);
+
+    for (let k = 0; k < 7; k++) {
+      const series = shocks.map((row) => row[k]);
+      const mean = series.reduce((a, b) => a + b, 0) / series.length;
+      const variance =
+        series.reduce((a, z) => a + (z - mean) ** 2, 0) / series.length;
+      expect(mean).toBeCloseTo(0, 1);
+      expect(Math.sqrt(variance)).toBeCloseTo(1, 1);
+    }
+  });
+
+  it('returns zero z-scores for zero-variance keys', () => {
+    const records = [
+      { us_lg_growth: 5, us_lg_value: 5, us_sm_mid: 5, ex_us: 5, bond: 5, cash: 5, inflation: 2 },
+      { us_lg_growth: 5, us_lg_value: 5, us_sm_mid: 5, ex_us: 5, bond: 5, cash: 5, inflation: 2 },
+    ];
+    const shocks = computeStandardizedYears(records);
+    expect(shocks.every((row) => row.every((z) => z === 0))).toBe(true);
   });
 });

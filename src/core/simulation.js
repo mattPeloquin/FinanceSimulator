@@ -7,6 +7,16 @@ import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
 
+// Stationary (circular) block bootstrap: continue consecutive years or jump to a
+// new random start with probability 1/blockSize (average run length = blockSize).
+function nextBootstrapIndex(rng, currentIndex, poolLen, blockSize) {
+  const restartProb = blockSize > 1 ? 1 / blockSize : 1;
+  if (currentIndex < 0 || rng.uniform() < restartProb) {
+    return Math.floor(rng.uniform() * poolLen);
+  }
+  return (currentIndex + 1) % poolLen;
+}
+
 // Lower-triangular matrix · vector (L is N×N, v length N).
 function matVec(L, v) {
   const N = v.length;
@@ -23,7 +33,17 @@ function matVec(L, v) {
 // When `collectPath` is true the full per-year arrays are returned (used only
 // for the handful of paths we actually chart); otherwise only summary stats.
 export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0) {
-  const { numYears, distMethod, allocation, blockSize, portfolio, dynConfig, logNormal, samples } = params;
+  const {
+    numYears,
+    distMethod,
+    allocation,
+    blockSize,
+    portfolio,
+    dynConfig,
+    logNormal,
+    samples,
+    scaledHistoricalShocks,
+  } = params;
 
   let totalRealGrowthFactor = 1.0;
   let currentYearIndex = -1;
@@ -76,6 +96,29 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     lnPhi = blockSize > 1 ? 1 - 1 / blockSize : 0;
   }
 
+  // Scaled Historical setup: target mean/stdDev per asset (same fields as log-normal).
+  let shTargets = null;
+  let shAlloc = null;
+  if (distMethod === 'scaledHistorical') {
+    shTargets = [
+      logNormal.usLgGrowth,
+      logNormal.usLgValue,
+      logNormal.usSmMid,
+      logNormal.exUs,
+      logNormal.bond,
+      logNormal.cash,
+      logNormal.inflation,
+    ];
+    shAlloc = [
+      allocation.usLgGrowth,
+      allocation.usLgValue,
+      allocation.usSmMid,
+      allocation.exUs,
+      allocation.bond,
+      allocation.cash,
+    ];
+  }
+
   for (let j = 0; j < numYears; j++) {
     let portfolioReturn;
     let inflation;
@@ -103,19 +146,24 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         portfolioReturn += rng.logNormalFromZ(lnAssets[k].mean, lnAssets[k].stdDev, z[k]) * lnAlloc[k];
       }
       inflation = rng.logNormalFromZ(lnAssets[6].mean, lnAssets[6].stdDev, z[6]);
+    } else if (distMethod === 'scaledHistorical') {
+      // Resample real historical year-to-year sequences, then rescale each asset
+      // from its historical z-score onto the user's target mean/stdDev.
+      const shockPool = scaledHistoricalShocks;
+      const shockLen = shockPool ? shockPool.length : 0;
+      currentYearIndex = nextBootstrapIndex(rng, currentYearIndex, shockLen, blockSize);
+
+      const z = shockPool[currentYearIndex];
+      portfolioReturn = 0;
+      for (let k = 0; k < 6; k++) {
+        const { mean, stdDev } = shTargets[k];
+        portfolioReturn += (mean + z[k] * stdDev) * shAlloc[k];
+      }
+      const inf = shTargets[6];
+      inflation = inf.mean + z[6] * inf.stdDev;
     } else {
       // Historical resampling via a stationary (circular) block bootstrap.
-      // Each year we either continue the current run of consecutive years or,
-      // with probability 1/blockSize, jump to a new random start year. This makes
-      // the run lengths random (geometric) with an *average* of blockSize years,
-      // so there are no rigid block boundaries. Wrapping past the final year back
-      // to the first keeps every year equally likely (removes end-of-range bias).
-      const restartProb = blockSize > 1 ? 1 / blockSize : 1;
-      if (currentYearIndex < 0 || rng.uniform() < restartProb) {
-        currentYearIndex = Math.floor(rng.uniform() * sampleLen);
-      } else {
-        currentYearIndex = (currentYearIndex + 1) % sampleLen;
-      }
+      currentYearIndex = nextBootstrapIndex(rng, currentYearIndex, sampleLen, blockSize);
 
       const yearData = sampleYears[currentYearIndex];
       const usLgGrowthReturn = yearData.us_lg_growth / 100;
