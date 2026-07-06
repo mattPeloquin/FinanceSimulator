@@ -53,7 +53,7 @@ function setEndYear(id, balances, numYears) {
   }
 }
 
-export function renderResults(result, params, goalSeekSummary) {
+export function renderResults(result, params) {
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
   if (onPlanLabel) {

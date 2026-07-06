@@ -295,7 +295,7 @@ function runGoalSeekSearch() {
       applyGoalSeekSummaryToDom(msg.goalSeekSummary, scenario.withdrawalStrategy);
       scheduleAutosave();
       document.getElementById('resultsSection').classList.remove('hidden');
-      renderResults(msg.result, params, msg.goalSeekSummary);
+      renderResults(msg.result, params);
     } else if (msg.type === 'error') {
       setLoading(false);
       showAlert(`Goal Seek error: ${msg.message}`);
