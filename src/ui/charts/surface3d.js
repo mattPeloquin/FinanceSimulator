@@ -21,10 +21,28 @@ const BOX_HEIGHT = 60;
 // Adjust in the browser, then copy from __SOR_SURFACE__.getOption().grid3D[0].viewControl.
 const CAMERA_ALPHA = 15; // vertical tilt (°); higher = more top-down
 const CAMERA_BETA = 220; // horizontal orbit (°); spins the scene left/right
-const CAMERA_DISTANCE = 220; // zoom; lower = closer to the grid
+const CAMERA_DISTANCE = 220; // zoom at the reference container size below; lower = closer to the grid
 const PAN_CENTER_X = -20; // pan pivot X (scene units)
 const PAN_CENTER_Y = -30; // pan pivot Y; negative shifts plot upward on screen
 const PAN_CENTER_Z = 0; // pan pivot Z (scene units)
+
+// The perspective camera's FOV is fixed, so a wider container (taller aspect
+// ratio) leaves the plot looking small/centered instead of filling the width.
+// Scale the camera distance against the container's own aspect ratio so the
+// grid keeps roughly the same on-screen footprint at any container size.
+const REFERENCE_WIDTH = 900; // container size CAMERA_DISTANCE was tuned at
+const REFERENCE_HEIGHT = 420;
+const MIN_CAMERA_DISTANCE = 90; // don't let very wide screens zoom in past this
+const MAX_CAMERA_DISTANCE = 260; // don't let very narrow screens zoom out past this
+
+function computeCameraDistance(dom) {
+  const w = dom?.clientWidth || REFERENCE_WIDTH;
+  const h = dom?.clientHeight || REFERENCE_HEIGHT;
+  const referenceAspect = REFERENCE_WIDTH / REFERENCE_HEIGHT;
+  const aspect = w / h || referenceAspect;
+  const distance = CAMERA_DISTANCE * (referenceAspect / aspect);
+  return Math.max(MIN_CAMERA_DISTANCE, Math.min(MAX_CAMERA_DISTANCE, distance));
+}
 
 const RETURN_MIN = -0.5;
 const RETURN_MAX = 0.5;
@@ -1019,7 +1037,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
         viewControl: {
           alpha: CAMERA_ALPHA,
           beta: CAMERA_BETA,
-          distance: CAMERA_DISTANCE,
+          distance: computeCameraDistance(dom),
           center: [PAN_CENTER_X, PAN_CENTER_Y, PAN_CENTER_Z],
           autoRotate: false,
           rotateMouseButton: 'left',
@@ -1075,7 +1093,16 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     columnPercentileLabel(col, surfaceState.columns.length);
 
   if (!window.__sorSurfaceResizeBound) {
-    window.addEventListener('resize', () => chartInstance && chartInstance.resize());
+    window.addEventListener('resize', () => {
+      if (!chartInstance) return;
+      // setOption alone doesn't move an already-initialized orbit camera;
+      // grid3DChangeCamera is the action that actually updates the live view.
+      chartInstance.dispatchAction({
+        type: 'grid3DChangeCamera',
+        distance: computeCameraDistance(dom),
+      });
+      chartInstance.resize();
+    });
     window.__sorSurfaceResizeBound = true;
   }
 }
