@@ -140,3 +140,21 @@ export const historicalData = {
 export const availableYears = Object.keys(historicalData).map(Number);
 export const minAvailableYear = Math.min(...availableYears);
 export const maxAvailableYear = Math.max(...availableYears);
+
+// First year with style-level US index series (Fama-French sources). Earlier years
+// in the table are rounded reconstructions — see the file header disclaimer.
+export const STYLE_INDEX_DATA_FROM_YEAR = 1928;
+
+export function clampYearToAvailableRange(year, min = minAvailableYear, max = maxAvailableYear) {
+  const n = typeof year === 'number' ? year : parseInt(year, 10);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+/** Clamp both ends to the available range and ensure startYear <= endYear. */
+export function normalizeYearRange(startYear, endYear, min = minAvailableYear, max = maxAvailableYear) {
+  let start = clampYearToAvailableRange(startYear, min, max);
+  let end = clampYearToAvailableRange(endYear, min, max);
+  if (start > end) end = start;
+  return { startYear: start, endYear: end };
+}

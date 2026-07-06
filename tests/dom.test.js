@@ -45,6 +45,7 @@ const REQUIRED_IDS = [
   'totalAllocation',
   'year-labels',
   'historical-range-msg',
+  'historical-range-help',
   'lognormal-profiles',
   'resampling-profiles',
   'smoothing-control',

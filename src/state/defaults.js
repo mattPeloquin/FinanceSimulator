@@ -47,10 +47,11 @@ export const SCENARIO_DEFAULTS = {
   // Historical range
 
   // First year included when sampling history or computing profiles.
-  // Must be within built-in history (1900–2025) and ≤ endYear.
+  // Must be within built-in history (see minAvailableYear–maxAvailableYear in
+  // historicalData.js) and ≤ endYear.
   startYear: 1960,
 
-  // Last year included. Must be within built-in history (1900–2025) and ≥ startYear.
+  // Last year included. Must be within built-in history and ≥ startYear.
   endYear: 2025,
 
   // Asset allocation (%). All six fields must sum to exactly 100.

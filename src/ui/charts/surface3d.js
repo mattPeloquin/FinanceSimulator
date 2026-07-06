@@ -1,6 +1,6 @@
 // 3D topography column chart. ECharts + ECharts-GL are heavy, so they are
 // lazy-loaded (dynamic import) the first time this chart is drawn.
-import { formatK } from '../format.js';
+import { formatK, formatPercent } from '../format.js';
 import { Chart } from './chartSetup.js';
 import {
   rankForOverviewColumn,
@@ -499,7 +499,7 @@ function showFloatWithdrawal(col) {
     <div style="font-weight:700;margin-bottom:2px;">${sampleRunTitle(col)}</div>
     <div style="display:flex; justify-content:space-between; align-items:flex-start;font-weight:normal;">
       <div style="color:${status.color}">${status.text}</div>
-      <div style="color:${muted};">Avg Return: ${(series.avg * 100).toFixed(2)}%</div>
+      <div style="color:${muted};">Avg Return: ${formatPercent(series.avg)}</div>
     </div>
     <div style="font-weight:normal;color:${muted};margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
   `;
@@ -590,7 +590,7 @@ function openLargeWithdrawalChart(col) {
   if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(series.total)} | Plan: ${formatK(series.totalUnadjusted)}`;
   
   const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
-  if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${(series.avg * 100).toFixed(2)}%`;
+  if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${formatPercent(series.avg)}`;
 
   const canvas = document.getElementById('largeWithdrawalCanvas');
   const balanceCanvas = document.getElementById('largeBalanceCanvas');
@@ -691,7 +691,7 @@ function tooltipFormatter(params) {
   return (
     `<b>${sampleRunTitle(col)}</b>` +
     `<br>Total Withdrawn: <b>${formatK(total)}</b>` +
-    `<br>Avg Annual Return: <b>${(avg * 100).toFixed(2)}%</b>` +
+    `<br>Avg Annual Return: <b>${formatPercent(avg)}</b>` +
     `<br>Year: ${y}` +
     `<br>Withdrawn: ${formatK(wd)}${deltaStr}` +
     `<br>Original Plan: ${formatK(unadj)}` +

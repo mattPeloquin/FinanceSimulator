@@ -32,9 +32,10 @@ import {
   computeProfiles,
   profilesToScenarioFields,
 } from './core/history.js';
-import { minAvailableYear, maxAvailableYear } from './data/historicalData.js';
+import { minAvailableYear, maxAvailableYear, STYLE_INDEX_DATA_FROM_YEAR } from './data/historicalData.js';
 import {
   setupInputBehaviors,
+  setupHistoricalYearRangeInputs,
   toggleDistMethod,
   updateAllocationTotal,
   renderYearLabels,
@@ -631,6 +632,13 @@ async function init() {
     setupInputBehaviors({
       onChange: scheduleAutosave,
       onDistMethodChange: () => {},
+    });
+
+    setupHistoricalYearRangeInputs({
+      minYear: minAvailableYear,
+      maxYear: maxAvailableYear,
+      styleIndexFromYear: STYLE_INDEX_DATA_FROM_YEAR,
+      onChange: scheduleHistoryUpdate,
     });
 
     document.getElementById('runButton').addEventListener('click', handleRunClick);

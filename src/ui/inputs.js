@@ -1,6 +1,8 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
 import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom } from '../state/scenario.js';
+import { formatPct1, roundPct1 } from '../core/precision.js';
+import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
@@ -28,6 +30,47 @@ function formatCurrencyInputValue(input) {
     return;
   }
   if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+}
+
+function formatPctInputValue(input) {
+  const n = parseFloat(input.value);
+  if (Number.isNaN(n)) return;
+  input.value = formatPct1(roundPct1(n));
+}
+
+// Set min/max on the year-range fields, show data-quality help, and clamp on blur.
+export function setupHistoricalYearRangeInputs({ minYear, maxYear, styleIndexFromYear, onChange }) {
+  const startEl = document.getElementById('startYear');
+  const endEl = document.getElementById('endYear');
+  const helpEl = document.getElementById('historical-range-help');
+  if (!startEl || !endEl) return;
+
+  startEl.min = String(minYear);
+  startEl.max = String(maxYear);
+  endEl.min = String(minYear);
+  endEl.max = String(maxYear);
+
+  if (helpEl) {
+    helpEl.textContent =
+      `Built-in data spans ${minYear}–${maxYear}. Years before ${styleIndexFromYear} are approximate reconstructions; from ${styleIndexFromYear} onward the US asset classes use style-level index series (e.g. Fama-French).`;
+  }
+
+  function clampBoth(triggerChange) {
+    const { startYear, endYear } = normalizeYearRange(startEl.value, endEl.value, minYear, maxYear);
+    const startStr = String(startYear);
+    const endStr = String(endYear);
+    const changed = startEl.value !== startStr || endEl.value !== endStr;
+    startEl.value = startStr;
+    endEl.value = endStr;
+    if (changed && triggerChange) onChange?.();
+  }
+
+  const onBlur = () => clampBoth(true);
+  startEl.addEventListener('blur', onBlur);
+  endEl.addEventListener('blur', onBlur);
+
+  // Normalize saved or imported values that fall outside the available range.
+  clampBoth(false);
 }
 
 export function formatAllCurrencyInputs() {
@@ -243,6 +286,13 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   document.querySelectorAll('.currency-input').forEach((input) => {
     input.addEventListener('blur', () => {
       formatCurrencyInputValue(input);
+      notify();
+    });
+  });
+
+  document.querySelectorAll('input.pct-input').forEach((input) => {
+    input.addEventListener('blur', () => {
+      formatPctInputValue(input);
       notify();
     });
   });

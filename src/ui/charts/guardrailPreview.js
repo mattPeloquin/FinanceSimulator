@@ -91,7 +91,7 @@ function buildChart(canvas, points) {
           displayColors: false,
           callbacks: {
             title: (items) => `Balance: ${formatK(items[0].parsed.x)}`,
-            label: (ctx) => `Spending \u00d7${ctx.parsed.y.toFixed(2)}`,
+            label: (ctx) => `Spending \u00d7${ctx.parsed.y.toFixed(1)}`,
           },
         },
       },

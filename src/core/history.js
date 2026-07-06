@@ -1,6 +1,7 @@
 // Pure helpers for turning the historical dataset into (a) a resampling pool and
 // (b) log-normal profile estimates. DOM-free and unit-testable.
 
+import { roundPct1 } from './precision.js';
 import { historicalData } from '../data/historicalData.js';
 
 const PROFILE_KEYS = ['us_lg_growth', 'us_lg_value', 'us_sm_mid', 'ex_us', 'bond', 'cash', 'inflation'];
@@ -9,11 +10,20 @@ const PROFILE_KEYS = ['us_lg_growth', 'us_lg_value', 'us_sm_mid', 'ex_us', 'bond
 // The simulation engine indexes its correlated draws in exactly this order.
 export const LOGNORMAL_ORDER = PROFILE_KEYS;
 
+// Round each asset return to one decimal (0.1%) — matches UI precision.
+export function normalizeHistoricalYear(record) {
+  const out = { ...record };
+  for (const key of PROFILE_KEYS) {
+    if (key in out) out[key] = roundPct1(out[key]);
+  }
+  return out;
+}
+
 // Year-data records (inclusive range), in chronological order.
 export function getSampleYears(startYear, endYear, data = historicalData) {
   const years = [];
   for (let year = startYear; year <= endYear; year++) {
-    if (data[year]) years.push(data[year]);
+    if (data[year]) years.push(normalizeHistoricalYear(data[year]));
   }
   return years;
 }
@@ -105,9 +115,9 @@ export function correlationCholesky(records, keys = LOGNORMAL_ORDER) {
   return choleskyDecompose(computeCorrelationMatrix(records, keys));
 }
 
-// Map computed profiles onto the scenario log-normal fields (rounded like the UI).
+// Map computed profiles onto the scenario log-normal fields (one decimal).
 export function profilesToScenarioFields(profiles) {
-  const r = (v) => Number(v.toFixed(2));
+  const r = roundPct1;
   return {
     usLgGrowthMean: r(profiles.us_lg_growth.mean),
     usLgGrowthStdDev: r(profiles.us_lg_growth.stdDev),
@@ -135,12 +145,12 @@ export function getMiniChartSeries(startYear, endYear, data = historicalData) {
 
   return {
     years,
-    inflation: years.map((y) => data[y].inflation),
-    us_lg_growth: years.map((y) => data[y].us_lg_growth),
-    us_lg_value: years.map((y) => data[y].us_lg_value),
-    us_sm_mid: years.map((y) => data[y].us_sm_mid),
-    ex_us: years.map((y) => data[y].ex_us),
-    bond: years.map((y) => data[y].bond),
-    cash: years.map((y) => data[y].cash),
+    inflation: years.map((y) => roundPct1(data[y].inflation)),
+    us_lg_growth: years.map((y) => roundPct1(data[y].us_lg_growth)),
+    us_lg_value: years.map((y) => roundPct1(data[y].us_lg_value)),
+    us_sm_mid: years.map((y) => roundPct1(data[y].us_sm_mid)),
+    ex_us: years.map((y) => roundPct1(data[y].ex_us)),
+    bond: years.map((y) => roundPct1(data[y].bond)),
+    cash: years.map((y) => roundPct1(data[y].cash)),
   };
 }

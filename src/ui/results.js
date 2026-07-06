@@ -70,10 +70,10 @@ export function renderResults(result, params, goalSeekSummary) {
         : 'Share of runs whose total withdrawn reached at least 95% of the planned schedule';
   }
 
-  setText('successRate', formatPercent(result.successRate, 1));
+  setText('successRate', formatPercent(result.successRate));
   setText(
     'withdrawalTargetSuccessRate',
-    result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 1),
+    result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate),
   );
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianWithdrawn', formatK(result.medianWithdrawn));

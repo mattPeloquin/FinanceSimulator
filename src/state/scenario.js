@@ -6,6 +6,7 @@
 // and validation trivial.
 
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
+import { formatPct1, roundPct1 } from '../core/precision.js';
 import { buildWithdrawalFloorSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
@@ -19,6 +20,7 @@ export const MONEY_SCALE = 1000;
 // type: how the raw input string is parsed and re-formatted.
 //   int      -> integer
 //   float    -> float
+//   pct1     -> percent with one decimal (return assumptions)
 //   currency -> float in thousands ($000s), displayed with thousands separators
 //   string   -> raw string (e.g. optional seed)
 function field(key, dom, type) {
@@ -66,20 +68,20 @@ const FIELDS = [
   field('dynHighBal', 'dynHighBal', 'optionalCurrency'),
   field('dynHighAdj', 'dynHighAdj', 'currency'),
 
-  field('usLgGrowthMean', 'usLgGrowthMean', 'float'),
-  field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'float'),
-  field('usLgValueMean', 'usLgValueMean', 'float'),
-  field('usLgValueStdDev', 'usLgValueStdDev', 'float'),
-  field('usSmMidMean', 'usSmMidMean', 'float'),
-  field('usSmMidStdDev', 'usSmMidStdDev', 'float'),
-  field('exUsMean', 'exUsMean', 'float'),
-  field('exUsStdDev', 'exUsStdDev', 'float'),
-  field('bondReturnMean', 'bondReturnMean', 'float'),
-  field('bondReturnStdDev', 'bondReturnStdDev', 'float'),
-  field('cashReturnMean', 'cashReturnMean', 'float'),
-  field('cashReturnStdDev', 'cashReturnStdDev', 'float'),
-  field('inflationMean', 'inflationMean', 'float'),
-  field('inflationStdDev', 'inflationStdDev', 'float'),
+  field('usLgGrowthMean', 'usLgGrowthMean', 'pct1'),
+  field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'pct1'),
+  field('usLgValueMean', 'usLgValueMean', 'pct1'),
+  field('usLgValueStdDev', 'usLgValueStdDev', 'pct1'),
+  field('usSmMidMean', 'usSmMidMean', 'pct1'),
+  field('usSmMidStdDev', 'usSmMidStdDev', 'pct1'),
+  field('exUsMean', 'exUsMean', 'pct1'),
+  field('exUsStdDev', 'exUsStdDev', 'pct1'),
+  field('bondReturnMean', 'bondReturnMean', 'pct1'),
+  field('bondReturnStdDev', 'bondReturnStdDev', 'pct1'),
+  field('cashReturnMean', 'cashReturnMean', 'pct1'),
+  field('cashReturnStdDev', 'cashReturnStdDev', 'pct1'),
+  field('inflationMean', 'inflationMean', 'pct1'),
+  field('inflationStdDev', 'inflationStdDev', 'pct1'),
 
   field('goalSeekMode', 'goalSeekMode', 'boolean'),
   field('goalSeekTargetEndingBalance', 'goalSeekTargetEndingBalance', 'currency'),
@@ -324,6 +326,10 @@ function parseField(raw, type) {
       const n = parseFloat(raw);
       return Number.isNaN(n) ? null : n;
     }
+    case 'pct1': {
+      const n = parseFloat(raw);
+      return Number.isNaN(n) ? null : roundPct1(n);
+    }
     case 'currency':
       return parseCurrency(raw);
     case 'optionalCurrency':
@@ -338,6 +344,7 @@ function formatField(value, type) {
   if (value == null || value === '') return '';
   if (type === 'optionalCurrency' && parseCurrency(value) === 0) return '';
   if (type === 'currency' || type === 'optionalCurrency') return formatCurrency(value);
+  if (type === 'pct1') return formatPct1(value);
   return String(value);
 }
 

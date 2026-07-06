@@ -1,4 +1,5 @@
 // Allocation sparkline mini-charts showing each asset class vs inflation.
+import { formatPct1 } from '../../core/precision.js';
 import { Chart } from './chartSetup.js';
 import { getMiniChartSeries } from '../../core/history.js';
 import { getChartTheme, chartJsTooltip } from './chartTheme.js';
@@ -55,8 +56,8 @@ function buildMiniChart(canvas, labels, assetData, inflationData, color, assetNa
             title: (c) => `Year: ${c[0].label}`,
             label: (c) =>
               c.datasetIndex === 1
-                ? `Inflation: ${c.raw.toFixed(2)}%`
-                : `${assetName} Return: ${c.raw.toFixed(2)}%`,
+                ? `Inflation: ${formatPct1(c.raw)}%`
+                : `${assetName} Return: ${formatPct1(c.raw)}%`,
           },
         },
       },

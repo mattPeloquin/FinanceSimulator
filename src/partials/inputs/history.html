@@ -1,17 +1,18 @@
 <!-- Historical Data Section -->
 <div class="space-y-4 p-4 border rounded-lg bg-theme-muted">
-    <h3 class="font-semibold text-theme-heading">Historical Data Range</h3>
-    <p class="text-sm text-theme-muted">Charts and profiles update automatically as you adjust the range.</p>
+    <h2 class="font-semibold text-theme-heading">Future Returns Simulation</h3>
+    <p class="text-sm text-theme-muted">Select the range of years to use as basis for simulating future returns.</p>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
         <div>
             <label for="startYear" class="block text-sm font-medium text-theme-body">Start Year</label>
-            <input type="number" id="startYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <input type="number" id="startYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2" step="1">
         </div>
         <div>
             <label for="endYear" class="block text-sm font-medium text-theme-body">End Year</label>
-            <input type="number" id="endYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <input type="number" id="endYear" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2" step="1">
         </div>
     </div>
+    <p id="historical-range-help" class="text-xs text-theme-faint"></p>
     <p id="historical-range-msg" class="text-xs text-theme-faint text-center mt-2"></p>
 
     <!-- Distribution Method Selector -->
@@ -34,7 +35,7 @@
                 </div>
                 <div class="ml-3 text-sm">
                     <span class="block font-medium text-theme-body">Smoothed Historical</span>
-                    <span class="block text-theme-faint">Reuses real historical year-to-year sequences and correlations, rescaled to your own return/volatility assumptions and lightly smoothed to fill in the gaps between historical data points.</span>
+                    <span class="block text-theme-faint">Reuses real historical year-to-year sequences and correlations, optionally rescaled to your own return/volatility assumptions and lightly smoothed to fill gaps between historical data points.</span>
                 </div>
             </label>
             <label for="dist-lognormal" class="relative flex items-start p-3 border rounded-lg cursor-pointer has-[:checked]:bg-theme-accent-subtle has-[:checked]:border-theme-accent">
