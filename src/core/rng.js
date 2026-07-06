@@ -26,6 +26,27 @@ export function deriveSeed(baseSeed, index) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
+// Convert an asset's arithmetic mean/stdDev (as decimals) into the underlying
+// log-normal distribution's `mu`/`sigma` parameters. These only depend on the
+// asset's fixed mean/stdDev — never on the random draw — so callers that run
+// many years/simulations for the *same* asset (like the Monte Carlo engine)
+// should compute this once and reuse it, rather than recomputing it on every
+// draw (see `applyLogNormalMuSigma`).
+export function logNormalMuSigma(mean, stdDev) {
+  const m = 1 + mean;
+  const s = stdDev;
+  const sigma2 = Math.log(1 + (s * s) / (m * m));
+  const mu = Math.log(m) - sigma2 / 2.0;
+  const sigma = Math.sqrt(sigma2);
+  return { mu, sigma };
+}
+
+// Map a *supplied* standard-normal draw `z` to a log-normal return using
+// pre-computed `mu`/`sigma` (from `logNormalMuSigma`). Cheap: no logs/sqrt.
+export function applyLogNormalMuSigma(mu, sigma, z) {
+  return Math.exp(mu + sigma * z) - 1;
+}
+
 export function createRng(seed) {
   const uniform = mulberry32(seed);
   let cached = null;
@@ -51,13 +72,11 @@ export function createRng(seed) {
   // Map a *supplied* standard-normal draw `z` to a log-normal return with the
   // given arithmetic mean and standard deviation (as decimals). Keeping the
   // normal draw external lets callers inject correlated/serially-smoothed draws.
+  // Prefer `logNormalMuSigma` + `applyLogNormalMuSigma` in hot loops that reuse
+  // the same mean/stdDev across many draws (e.g. once per year per simulation).
   function logNormalFromZ(mean, stdDev, z) {
-    const m = 1 + mean;
-    const s = stdDev;
-    const sigma2 = Math.log(1 + (s * s) / (m * m));
-    const mu = Math.log(m) - sigma2 / 2.0;
-    const sigma = Math.sqrt(sigma2);
-    return Math.exp(mu + sigma * z) - 1;
+    const { mu, sigma } = logNormalMuSigma(mean, stdDev);
+    return applyLogNormalMuSigma(mu, sigma, z);
   }
 
   // Log-normal return drawing its own standard-normal internally.

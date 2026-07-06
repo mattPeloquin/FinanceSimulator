@@ -91,6 +91,7 @@ const FIELDS = [
   field('goalSeekIncludeGoGoYears', 'goalSeekIncludeGoGoYears', 'boolean'),
   field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
   field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
+  field('goalSeekNumSimulations', 'goalSeekNumSimulations', 'int'),
 ];
 
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
@@ -412,11 +413,15 @@ export function buildSimParams(scenario, samples) {
       floorPenalty: (scenario.floorPenalty || 0) / 100,
       ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
-      withdrawalFloorSeries: buildWithdrawalFloorSeries(
-        normalizeWithdrawalFloors(scenario.withdrawalFloors),
-        scenario.numYears,
-        toDollars,
-      ),
+      // Minimum withdrawal is a Base-strategy guide only — a Specific List's
+      // amounts are typed in directly, so the floor never applies to it.
+      withdrawalFloorSeries: scenario.withdrawalStrategy === 'specific'
+        ? []
+        : buildWithdrawalFloorSeries(
+            normalizeWithdrawalFloors(scenario.withdrawalFloors),
+            scenario.numYears,
+            toDollars,
+          ),
       // Front-loading controls. Same name as the scenario's spendChangePct field,
       // but converted from a percentage to a decimal rate.
       spendChangeRate: (scenario.spendChangePct || 0) / 100,
@@ -461,14 +466,21 @@ function num(v) {
 // translating $000s/percentages into the raw dollars/fractions the search
 // algorithm works with.
 export function buildGoalSeekConfig(scenario) {
+  // A Specific List has no single scalar "base" to search — each year's
+  // amount is typed in directly — so Goal Seek always keeps it fixed and
+  // only tunes the Market/Balance adjustment levers on top of it. Go-Go
+  // years (bonus front-loading) has no effect on the specific-list engine
+  // path, so it's never searched here either.
+  const isSpecific = scenario.withdrawalStrategy === 'specific';
   return {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
     shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 1),
-    pinBaseWithdrawal: !scenario.goalSeekIncludeBaseWithdrawal,
-    includeGoGoYears: !!scenario.goalSeekIncludeGoGoYears,
+    pinBaseWithdrawal: isSpecific ? true : !scenario.goalSeekIncludeBaseWithdrawal,
+    includeGoGoYears: isSpecific ? false : !!scenario.goalSeekIncludeGoGoYears,
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
+    searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
   };
 }
 
@@ -489,6 +501,14 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     scenario.numSimulations > MAX_NUM_SIMULATIONS
   ) {
     errors.push(`Number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
+  }
+  if (
+    scenario.goalSeekMode &&
+    (!Number.isFinite(scenario.goalSeekNumSimulations) ||
+      scenario.goalSeekNumSimulations < 1 ||
+      scenario.goalSeekNumSimulations > MAX_NUM_SIMULATIONS)
+  ) {
+    errors.push(`Goal Seek's number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
   }
 
   // The dynamic adjustment curve interpolates between the three market-return
@@ -538,8 +558,10 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     errors.push(`Year range must be valid and within ${minYear}-${maxYear}.`);
   }
 
+  // Minimum-withdrawal tiers only apply to the Base strategy (see buildSimParams),
+  // so a Specific List scenario shouldn't be blocked by their configuration.
   const tiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
-  if (Number.isFinite(scenario.numYears) && tiers.length > 1) {
+  if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && tiers.length > 1) {
     let intermediateYears = 0;
     for (let i = 0; i < tiers.length - 1; i++) {
       const years = tiers[i].years;
@@ -560,17 +582,22 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       errors.push('Goal Seek target ending balance must be zero or a positive amount.');
     }
     const desired = scenario.goalSeekDesiredSuccessPct;
-    if (!Number.isFinite(desired) || desired < 0 || desired > 100) {
-      errors.push('Goal Seek desired success % must be between 0 and 100.');
+    if (!Number.isFinite(desired) || desired < 50 || desired > 99) {
+      errors.push('Goal Seek desired success % must be between 50 and 99.');
     }
     const riskTolerance = scenario.goalSeekRiskTolerancePct;
-    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 100) {
-      errors.push('Goal Seek risk tolerance must be between 0 and 100.');
+    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 50) {
+      errors.push('Goal Seek risk tolerance must be between 0 and 50.');
     }
     if (scenario.withdrawalStrategy === 'specific') {
-      errors.push('Goal Seek requires the "Base + Spending Over Time" withdrawal strategy, not a specific list.');
-    }
-    if (scenario.goalSeekMode && !scenario.goalSeekIncludeBaseWithdrawal) {
+      // With a Specific List, each year's amount is fixed as typed — Goal Seek
+      // can only tune the Market/Balance adjustment levers on top of it.
+      const hasSpecificLever =
+        scenario.goalSeekIncludeMarketAdjustments || scenario.goalSeekIncludeBalanceOverrides;
+      if (!hasSpecificLever) {
+        errors.push('With a Specific List, Goal Seek keeps each year\'s amount fixed and can only tune the Market adjustment or Balance adjustment levers — include at least one of those in the search.');
+      }
+    } else if (!scenario.goalSeekIncludeBaseWithdrawal) {
       const base = parseCurrency(scenario.baseWithdrawal);
       if (!Number.isFinite(base) || base <= 0) {
         errors.push('When the base withdrawal is not included in the search, it must be a positive amount.');

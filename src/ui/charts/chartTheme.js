@@ -29,6 +29,9 @@ function buildChartTheme(mode) {
     accentStroke: rgba('chrome.accent', 1),
     accentFillSoft: rgba('chrome.accent', 0.12),
     accentFillSofter: rgba('chrome.accent', 0.1),
+    // Dashed reference line for the minimum-withdrawal guide overlaid on the
+    // Base + Spending schedule preview.
+    floorLine: hex('status.danger'),
   };
 }
 

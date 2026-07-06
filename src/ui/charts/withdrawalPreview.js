@@ -1,8 +1,8 @@
-// Live preview of the specific-withdrawal list entered in the form.
+// Live preview of the specific-withdrawal list entered in the form. Shares
+// its chart look with the Base + Spending Over Time preview (see
+// schedulePreviewChart.js).
 import { fitSpecificWithdrawalsToHorizon, parseSpecificWithdrawals } from '../../state/scenario.js';
-import { Chart } from './chartSetup.js';
-import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
 import { onThemeChange } from '../theme.js';
 
 let previewChart = null;
@@ -26,56 +26,6 @@ export function destroyWithdrawalPreviewChart() {
   lastAmounts = null;
 }
 
-function buildChart(canvas, amounts) {
-  const theme = getChartTheme();
-  const labels = amounts.map((_, i) => String(i + 1));
-  return new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Withdrawal',
-          data: amounts,
-          borderColor: theme.accent,
-          backgroundColor: theme.accentFillSoft,
-          borderWidth: 2,
-          tension: 0.1,
-          pointRadius: amounts.length <= 40 ? 3 : 0,
-          pointHoverRadius: 4,
-          fill: true,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      scales: {
-        x: {
-          title: { display: true, text: 'Year', font: { size: 10 }, color: theme.axisTitle },
-          ticks: { maxTicksLimit: 12, font: { size: 9 }, color: theme.axisTick },
-          grid: { color: theme.gridLine },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { callback: (v) => formatK(v), font: { size: 9 }, color: theme.axisTick },
-          grid: { color: theme.gridLine },
-        },
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          ...chartJsTooltip(theme),
-          callbacks: {
-            label: (ctx) => ` ${formatK(ctx.raw)}`,
-          },
-        },
-      },
-    },
-  });
-}
-
 function renderPreview(amounts) {
   const canvas = document.getElementById('specificWithdrawalsChart');
   if (!canvas || !isSectionVisible()) return;
@@ -90,7 +40,8 @@ function renderPreview(amounts) {
     previewChart = null;
   }
 
-  previewChart = buildChart(canvas, amounts);
+  previewChart = buildSchedulePreviewChart(canvas, amounts);
+  renderSchedulePreviewTotal('specificWithdrawalsChartTotal', amounts);
 }
 
 export function updateWithdrawalPreviewChart(amounts) {

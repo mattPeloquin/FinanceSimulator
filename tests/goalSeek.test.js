@@ -212,6 +212,30 @@ describe('plannedScheduleTotal', () => {
     const expected = 120_000 + 120_000 + 100_000 * 0.98 ** 2 + 100_000 * 0.98 ** 3 + 100_000 * 0.98 ** 4;
     expect(plannedScheduleTotal(portfolio, 5)).toBeCloseTo(expected, 0);
   });
+
+  it('sums the fixed per-year amounts for a specific-list strategy, ignoring base/bonus fields', () => {
+    const portfolio = {
+      strategy: 'specific',
+      specificWithdrawals: [80_000, 85_000, 90_000, 90_000, 90_000],
+      // These would change the total if the (unused) base-strategy formula were applied.
+      base: 999_000,
+      spendChangeRate: 0.5,
+      goGoBonus: 500_000,
+      goGoYears: 5,
+      withdrawalFloorSeries: new Array(5).fill(0),
+    };
+    expect(plannedScheduleTotal(portfolio, 5)).toBe(80_000 + 85_000 + 90_000 + 90_000 + 90_000);
+  });
+
+  it('applies minimum-withdrawal floors on top of a specific-list schedule', () => {
+    const portfolio = {
+      strategy: 'specific',
+      specificWithdrawals: [50_000, 85_000, 90_000],
+      withdrawalFloorSeries: [70_000, 0, 0],
+    };
+    // year 0: max(50k, 70k floor) = 70k; years 1-2 unchanged.
+    expect(plannedScheduleTotal(portfolio, 3)).toBe(70_000 + 85_000 + 90_000);
+  });
 });
 
 describe('highestMinimumWithdrawal', () => {
@@ -723,5 +747,42 @@ describe('runGoalSeek', () => {
     expect(summary.pinnedBase).toBe(true);
     expect(summary.baseWithdrawal).toBe(500_000);
     expect(summary.reason).toMatch(/pinned base withdrawal/i);
+  });
+
+  it('tunes Market/Balance levers around a fixed specific-list schedule without changing it', () => {
+    const numYears = 25;
+    const specificWithdrawals = new Array(numYears).fill(70_000);
+    const params = makeParams({
+      numYears,
+      numSimulations: 600,
+      portfolio: {
+        ...makeParams().portfolio,
+        strategy: 'specific',
+        specificWithdrawals,
+        start: 2_000_000,
+        goGoBonus: 0,
+        goGoYears: 0,
+      },
+    });
+    const { params: finalParams, summary } = runGoalSeek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.7,
+      shortfallTolerance: 0.3,
+      pinBaseWithdrawal: true,
+      includeGoGoYears: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 2,
+      ...FAST_LEVER_GRIDS,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.pinnedBase).toBe(true);
+    // The specific-list schedule itself is never touched by the search.
+    expect(finalParams.portfolio.specificWithdrawals).toEqual(specificWithdrawals);
+    expect(summary.marketAdjustments).toBeDefined();
+    expect(summary.balanceAdjustment).toBeDefined();
+    expect(summary.plannedScheduleTotal).toBe(70_000 * numYears);
   });
 });

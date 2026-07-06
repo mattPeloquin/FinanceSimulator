@@ -7,9 +7,9 @@
 import { runMonteCarlo } from './simulation.js';
 import { goalSuccessRate, median } from './statistics.js';
 
-const DEFAULT_SEARCH_NUM_SIMULATIONS = 2000;
+const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
 const DEFAULT_ADJUSTMENT_GRID = { minPct: -50, maxPct: 50, stepPct: 5 };
-const DEFAULT_BALANCE_MULTIPLES = [0, 0.5, 1, 1.5, 2];
+const DEFAULT_BALANCE_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
 // Used by the exported buildFractionGrid()'s own default (unit-tested directly) —
 // keep this fine-grained; the coarser PAIR grid below is what the search actually
 // uses internally, since joint pairs already multiply out two dimensions.
@@ -21,7 +21,7 @@ const DEFAULT_PAIR_FRACTION_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
 const BASE_BISECTION_MAX_ITERATIONS = 30;
 
 // Bonus-amount candidates, as fractions of the currently-solved base withdrawal.
-const DEFAULT_GOGO_BONUS_FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
+const DEFAULT_GOGO_BONUS_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5];
 
 // Each candidate scored via the re-solve scorer costs one inner bisection
 // (this many predicate evaluations at reduced fidelity) plus one confirming
@@ -54,19 +54,28 @@ function roundDownToThousand(value) {
 }
 
 // Sum the unadjusted withdrawal schedule (base × age factor + bonus, with
-// minimum-withdrawal floors). Deterministic — mirrors simulatePath's
+// minimum-withdrawal floors), or the fixed per-year specific-list amounts
+// when that strategy is in use. Deterministic — mirrors simulatePath's
 // unadjustedTarget logic without running a simulation.
 export function plannedScheduleTotal(portfolio, numYears) {
+  const isSpecific = portfolio.strategy === 'specific';
   let total = 0;
   for (let j = 0; j < numYears; j++) {
-    const baseVal = portfolio.base;
-    const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
-    let unadjustedTarget = portfolio.base * ageFactor;
-    if (j < (portfolio.goGoYears || 0)) {
-      unadjustedTarget += portfolio.goGoBonus || 0;
-    }
-    if (baseVal >= 0 && unadjustedTarget < 0) {
-      unadjustedTarget = 0;
+    let unadjustedTarget;
+    if (isSpecific) {
+      // Each year's amount is typed in directly and never scaled — it's
+      // the plan as-is, before any market/balance adjustment is layered on.
+      unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
+    } else {
+      const baseVal = portfolio.base;
+      const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
+      unadjustedTarget = portfolio.base * ageFactor;
+      if (j < (portfolio.goGoYears || 0)) {
+        unadjustedTarget += portfolio.goGoBonus || 0;
+      }
+      if (baseVal >= 0 && unadjustedTarget < 0) {
+        unadjustedTarget = 0;
+      }
     }
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
     if (unadjustedTarget >= 0 && yearFloor > 0) {

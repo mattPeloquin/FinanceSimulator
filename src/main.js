@@ -198,13 +198,18 @@ function runSimulation() {
 // Write the base withdrawal (and any levers Goal Seek was allowed to tune)
 // back into the form, so the discovered plan is visible and editable like any
 // other value once the search finishes.
-function applyGoalSeekSummaryToDom(summary) {
+function applyGoalSeekSummaryToDom(summary, strategy) {
   const setCurrencyField = (id, dollars) => {
     const el = document.getElementById(id);
     if (el) el.value = dollars == null ? '' : formatCurrency(dollars / MONEY_SCALE);
   };
 
-  setCurrencyField('baseWithdrawal', summary.baseWithdrawal);
+  // The base withdrawal field is hidden and unused under a Specific List, so
+  // Goal Seek never searches it (see buildGoalSeekConfig) — leave it alone
+  // rather than writing back a stray, irrelevant value.
+  if (strategy !== 'specific') {
+    setCurrencyField('baseWithdrawal', summary.baseWithdrawal);
+  }
 
   if (summary.goGoBonus !== undefined) {
     setCurrencyField('goGoBonus', summary.goGoBonus);
@@ -264,7 +269,7 @@ function runGoalSeekSearch() {
         return;
       }
 
-      applyGoalSeekSummaryToDom(msg.goalSeekSummary);
+      applyGoalSeekSummaryToDom(msg.goalSeekSummary, scenario.withdrawalStrategy);
       scheduleAutosave();
       document.getElementById('resultsSection').classList.remove('hidden');
       renderResults(msg.result, params, msg.goalSeekSummary);

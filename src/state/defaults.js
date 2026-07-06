@@ -168,4 +168,9 @@ export const SCENARIO_DEFAULTS = {
   goalSeekIncludeGoGoYears: false,
   goalSeekIncludeMarketAdjustments: false,
   goalSeekIncludeBalanceOverrides: false,
+
+  // Number of simulations run for each candidate the search evaluates.
+  // Lower = faster search but noisier success-rate estimates; higher = slower
+  // but more accurate.
+  goalSeekNumSimulations: 500,
 };

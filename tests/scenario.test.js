@@ -113,6 +113,16 @@ describe('buildSimParams', () => {
     expect(p.portfolio.withdrawalFloorSeries.every((v) => v === 0)).toBe(true);
   });
 
+  it('ignores minimum-withdrawal tiers entirely for a Specific List strategy', () => {
+    const s = defaultScenario();
+    s.numYears = 5;
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '80\n85\n90';
+    s.withdrawalFloors = [{ amount: 120, years: 2 }, { amount: 80 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.withdrawalFloorSeries).toEqual([]);
+  });
+
   it('includes scaledHistoricalShocks when sample years are provided', () => {
     const s = defaultScenario();
     const years = getSampleYears(2000, 2009);
@@ -166,6 +176,18 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).pinBaseWithdrawal).toBe(false);
     s.goalSeekIncludeBaseWithdrawal = false;
     expect(buildGoalSeekConfig(s).pinBaseWithdrawal).toBe(true);
+  });
+
+  it('forces pinBaseWithdrawal and disables go-go years for a specific-list strategy', () => {
+    const s = defaultScenario();
+    s.withdrawalStrategy = 'specific';
+    s.goalSeekIncludeBaseWithdrawal = true;
+    s.goalSeekIncludeGoGoYears = true;
+    s.goalSeekIncludeMarketAdjustments = true;
+    const config = buildGoalSeekConfig(s);
+    expect(config.pinBaseWithdrawal).toBe(true);
+    expect(config.includeGoGoYears).toBe(false);
+    expect(config.includeMarketAdjustments).toBe(true);
   });
 });
 
@@ -280,6 +302,16 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('final tier'))).toBe(true);
   });
 
+  it('does not validate minimum-withdrawal tiers for a Specific List strategy', () => {
+    const s = defaultScenario();
+    s.numYears = 10;
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '80\n85\n90';
+    s.withdrawalFloors = [{ amount: 100, years: 10 }, { amount: 80 }];
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('final tier'))).toBe(false);
+  });
+
   it('ignores Goal Seek fields when the mode is off', () => {
     const s = defaultScenario();
     s.goalSeekTargetEndingBalance = -50;
@@ -303,12 +335,36 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('desired success'))).toBe(true);
   });
 
+  it('flags a desired success percentage outside the 50-99 range when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekDesiredSuccessPct = 49;
+    expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(true);
+    s.goalSeekDesiredSuccessPct = 100;
+    expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(true);
+    s.goalSeekDesiredSuccessPct = 50;
+    expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(false);
+    s.goalSeekDesiredSuccessPct = 99;
+    expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(false);
+  });
+
   it('flags an out-of-range risk tolerance when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.goalSeekRiskTolerancePct = 150;
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('risk tolerance'))).toBe(true);
+  });
+
+  it('flags a risk tolerance outside the 0-50 range when Goal Seek is on', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.goalSeekRiskTolerancePct = 51;
+    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(true);
+    s.goalSeekRiskTolerancePct = 0;
+    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
+    s.goalSeekRiskTolerancePct = 50;
+    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
   });
 
   it('requires at least one other lever when base is not included in the search', () => {
@@ -330,12 +386,21 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('positive amount'))).toBe(true);
   });
 
-  it('flags the specific-withdrawal strategy when Goal Seek is on', () => {
+  it('flags a specific-list strategy under Goal Seek when no lever is included', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.withdrawalStrategy = 'specific';
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('Goal Seek requires'))).toBe(true);
+    expect(errors.some((e) => e.includes('Specific List'))).toBe(true);
+  });
+
+  it('allows a specific-list strategy under Goal Seek once a lever is included', () => {
+    const s = defaultScenario();
+    s.goalSeekMode = true;
+    s.withdrawalStrategy = 'specific';
+    s.goalSeekIncludeMarketAdjustments = true;
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Specific List'))).toBe(false);
   });
 });
 

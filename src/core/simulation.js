@@ -1,11 +1,33 @@
 // Core Monte Carlo engine. Pure and DOM-free so it can run in a web worker
 // and be unit-tested directly.
 
-import { createRng, deriveSeed } from './rng.js';
+import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
 import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
+
+// `logNormalMuSigma` only depends on an asset's fixed mean/stdDev, never on the
+// random draw, so it's wasteful to recompute it every year of every simulation
+// (Goal Seek alone can run hundreds of thousands of years across its candidate
+// searches). Cache the derived {mu, sigma} per `logNormal` config object — that
+// object is reused by reference across an entire Monte Carlo run (and across
+// every Goal Seek candidate, since only portfolio/lever fields change between
+// candidates), so this cache effectively computes each asset's parameters once.
+const logNormalMuSigmaCache = new WeakMap();
+
+// Canonical order of the 7 log-normal assets (6 asset classes + inflation),
+// matching the correlated draw order (`params.logNormal.chol`).
+const LOGNORMAL_ASSET_ORDER = ['usLgGrowth', 'usLgValue', 'usSmMid', 'exUs', 'bond', 'cash', 'inflation'];
+
+function getLogNormalMuSigmas(logNormal, assetKeysInOrder) {
+  let cached = logNormalMuSigmaCache.get(logNormal);
+  if (!cached) {
+    cached = assetKeysInOrder.map((key) => logNormalMuSigma(logNormal[key].mean, logNormal[key].stdDev));
+    logNormalMuSigmaCache.set(logNormal, cached);
+  }
+  return cached;
+}
 
 // Stationary (circular) block bootstrap: continue consecutive years or jump to a
 // new random start with probability 1/blockSize (average run length = blockSize).
@@ -76,21 +98,13 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
   // Log-normal setup (only used when distMethod === 'lognormal').
   // Assets/inflation ordered to match the correlation Cholesky factor.
-  let lnAssets = null;
+  let lnMuSigma = null;
   let lnChol = null;
   let lnAlloc = null;
   let lnPhi = 0;
   let lnPrevZ = null;
   if (distMethod === 'lognormal') {
-    lnAssets = [
-      logNormal.usLgGrowth,
-      logNormal.usLgValue,
-      logNormal.usSmMid,
-      logNormal.exUs,
-      logNormal.bond,
-      logNormal.cash,
-      logNormal.inflation,
-    ];
+    lnMuSigma = getLogNormalMuSigmas(logNormal, LOGNORMAL_ASSET_ORDER);
     lnAlloc = [
       allocation.usLgGrowth,
       allocation.usLgValue,
@@ -152,9 +166,9 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
       portfolioReturn = 0;
       for (let k = 0; k < 6; k++) {
-        portfolioReturn += rng.logNormalFromZ(lnAssets[k].mean, lnAssets[k].stdDev, z[k]) * lnAlloc[k];
+        portfolioReturn += applyLogNormalMuSigma(lnMuSigma[k].mu, lnMuSigma[k].sigma, z[k]) * lnAlloc[k];
       }
-      inflation = rng.logNormalFromZ(lnAssets[6].mean, lnAssets[6].stdDev, z[6]);
+      inflation = applyLogNormalMuSigma(lnMuSigma[6].mu, lnMuSigma[6].sigma, z[6]);
     } else if (distMethod === 'scaledHistorical') {
       // Resample real historical year-to-year sequences, then rescale each asset
       // from its historical z-score onto the user's target mean/stdDev.

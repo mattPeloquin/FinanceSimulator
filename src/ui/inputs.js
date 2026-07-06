@@ -7,6 +7,7 @@ import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
+import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
 // accordion is opened so they fill the now-visible container.
@@ -122,10 +123,12 @@ export function toggleWithdrawalStrategy(strategy) {
     specificSection.classList.remove('hidden');
     const textarea = document.getElementById('specificWithdrawals');
     if (textarea) syncWithdrawalPreview(textarea.value);
+    destroyBaseWithdrawalPreviewChart();
   } else {
     baseSection.classList.remove('hidden');
     specificSection.classList.add('hidden');
     destroyWithdrawalPreviewChart();
+    syncBaseWithdrawalPreview();
   }
 }
 
@@ -158,8 +161,12 @@ function syncGoalSeekSectionExpansion() {
   const goalSeekEnabled = !!document.getElementById('goalSeekMode')?.checked;
   if (!goalSeekEnabled) return;
 
+  // Minimum withdrawal only applies to (and is only visible under) the Base
+  // strategy — expanding it under Specific List would just open an empty,
+  // hidden accordion.
+  const strategy = document.querySelector('input[name="withdrawal-strategy"]:checked')?.value;
   const minDetails = document.getElementById('details-min-withdrawal');
-  if (minDetails) minDetails.open = true;
+  if (minDetails && strategy !== 'specific') minDetails.open = true;
 
   if (document.getElementById('goalSeekIncludeMarketAdjustments')?.checked) {
     const marketDetails = document.getElementById('details-market-adjustment');
@@ -411,6 +418,12 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   }
   syncWithdrawalAdjPreview();
 
+  for (const id of ['baseWithdrawal', 'spendChangePct', 'goGoBonus', 'goGoYears', 'numYears']) {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener('input', syncBaseWithdrawalPreview);
+  }
+  syncBaseWithdrawalPreview();
+
   const specificWithdrawals = document.getElementById('specificWithdrawals');
   if (specificWithdrawals) {
     specificWithdrawals.addEventListener('input', (e) => {
@@ -446,6 +459,21 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   });
 
   setupWithdrawalFloorList({ onChange: notify });
+
+  // Redraw the base spending preview's minimum-withdrawal guide line whenever
+  // a tier is typed into, added, or removed. Registered after
+  // setupWithdrawalFloorList so its DOM rebuild (add/remove tier) has already
+  // happened by the time this runs.
+  const withdrawalFloorsList = document.getElementById('withdrawalFloorsList');
+  if (withdrawalFloorsList) {
+    withdrawalFloorsList.addEventListener('input', syncBaseWithdrawalPreview);
+    withdrawalFloorsList.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+  const addWithdrawalFloorTierBtn = document.getElementById('addWithdrawalFloorTier');
+  if (addWithdrawalFloorTierBtn) {
+    addWithdrawalFloorTierBtn.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+
   setupAccordionResize();
 }
 

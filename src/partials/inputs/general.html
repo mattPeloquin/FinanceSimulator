@@ -58,6 +58,12 @@
                 </div>
                 <p class="text-xs text-theme-faint">Softens Smoothed Historical's output so it isn't limited to only the exact years in your selected range. Not used by the other two methods.</p>
             </div>
+
+            <div>
+                <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Goal Seek: Simulations per Search Step</label>
+                <input type="number" id="goalSeekNumSimulations" min="1" class="mt-1 block w-full max-w-xs rounded-md input-theme sm:text-sm p-2">
+                <p class="text-xs text-theme-faint mt-1">How many simulations Goal Seek runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
+            </div>
         </div>
     </details>
 </div>
