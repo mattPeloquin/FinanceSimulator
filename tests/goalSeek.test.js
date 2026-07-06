@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { runMonteCarlo } from '../src/core/simulation.js';
 import {
   bisectMaxSatisfying,
+  bisectMaxSatisfyingAsync,
   bisectMaxSatisfyingInt,
   buildAdjustmentGrid,
   buildBalanceGrid,
@@ -12,6 +14,12 @@ import {
   runGoalSeek,
 } from '../src/core/goalSeek.js';
 
+const simulateAsync = (params) => Promise.resolve(runMonteCarlo(params));
+
+function seek(params, config, opts) {
+  return runGoalSeek(params, config, simulateAsync, opts);
+}
+
 describe('bisectMaxSatisfying', () => {
   it('finds the boundary of a monotonically-decreasing-to-false predicate', () => {
     // predicate is true for x <= 42.3
@@ -22,6 +30,13 @@ describe('bisectMaxSatisfying', () => {
   it('returns lo when predicate is false everywhere above lo', () => {
     const result = bisectMaxSatisfying((x) => x <= 0, 0, 100, { tolerance: 0.01 });
     expect(result).toBeCloseTo(0, 1);
+  });
+});
+
+describe('bisectMaxSatisfyingAsync', () => {
+  it('finds the boundary with an async predicate', async () => {
+    const result = await bisectMaxSatisfyingAsync(async (x) => x <= 42.3, 0, 100, { tolerance: 0.01 });
+    expect(result).toBeCloseTo(42.3, 1);
   });
 });
 
@@ -250,9 +265,9 @@ describe('highestMinimumWithdrawal', () => {
 });
 
 describe('runGoalSeek', () => {
-  it('finds a base withdrawal achieving roughly the desired success rate', () => {
+  it('finds a base withdrawal achieving roughly the desired success rate', async () => {
     const params = makeParams();
-    const { params: finalParams, summary } = runGoalSeek(params, {
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: false,
@@ -273,9 +288,9 @@ describe('runGoalSeek', () => {
     expect(summary.earlyYearsWindow).toBeUndefined();
   });
 
-  it('reports infeasible when even a $0 withdrawal cannot hit the target', () => {
+  it('reports infeasible when even a $0 withdrawal cannot hit the target', async () => {
     const params = makeParams({ portfolio: { ...makeParams().portfolio, start: 1000 } });
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 50_000_000, // unreachable from a $1000 starting balance
       desiredSuccessRate: 0.9,
       includeGoGoYears: false,
@@ -286,7 +301,7 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(false);
   });
 
-  it('does not search for a base below the highest minimum-withdrawal tier', () => {
+  it('does not search for a base below the highest minimum-withdrawal tier', async () => {
     const minWithdrawal = 100_000;
     const params = makeParams({
       portfolio: {
@@ -297,7 +312,7 @@ describe('runGoalSeek', () => {
         withdrawalFloorSeries: new Array(25).fill(minWithdrawal),
       },
     });
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.5,
       includeGoGoYears: false,
@@ -311,9 +326,9 @@ describe('runGoalSeek', () => {
     expect(summary.baseWithdrawal).toBeGreaterThanOrEqual(minWithdrawal);
   });
 
-  it('returns dollar values rounded to whole $1,000, never fractional', () => {
+  it('returns dollar values rounded to whole $1,000, never fractional', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
@@ -339,9 +354,9 @@ describe('runGoalSeek', () => {
     ).toBe(true);
   });
 
-  it('optionally tunes early-years bonus alongside the base withdrawal', () => {
+  it('optionally tunes early-years bonus alongside the base withdrawal', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
@@ -355,9 +370,9 @@ describe('runGoalSeek', () => {
     expect(summary.goGoBonus).toBeGreaterThanOrEqual(0);
   });
 
-  it('tunes market adjustments and their balance override thresholds together', () => {
+  it('tunes market adjustments and their balance override thresholds together', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: false,
@@ -376,9 +391,9 @@ describe('runGoalSeek', () => {
     expect(summary.marketBalanceOverrides).toHaveProperty('high');
   });
 
-  it('tunes floor/ceiling balance and their cut/boost rates together', () => {
+  it('tunes floor/ceiling balance and their cut/boost rates together', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: false,
@@ -404,7 +419,7 @@ describe('runGoalSeek', () => {
   // scenario with meaningful volatility and a starting balance close to what
   // the base withdrawal can sustain gives guardrails real value — the joint
   // pair search (scored with the base re-solved) should find that value.
-  it('finds nonzero guardrail settings when they meaningfully help (regression for the stuck-at-neutral bug)', () => {
+  it('finds nonzero guardrail settings when they meaningfully help (regression for the stuck-at-neutral bug)', async () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -415,7 +430,7 @@ describe('runGoalSeek', () => {
         goGoYears: 0,
       },
     });
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
       includeGoGoYears: false,
@@ -437,7 +452,7 @@ describe('runGoalSeek', () => {
   // pays off once the base is re-solved against it, a plan allowed to use
   // guardrails should sustain a base withdrawal at least as high as one
   // without any guardrails available.
-  it('sustains at least as high a base withdrawal with guardrails available as without', () => {
+  it('sustains at least as high a base withdrawal with guardrails available as without', async () => {
     const baseParams = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -452,13 +467,13 @@ describe('runGoalSeek', () => {
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
     };
 
-    const withoutGuardrails = runGoalSeek(baseParams, {
+    const withoutGuardrails = await seek(baseParams, {
       ...sharedConfig,
       includeGoGoYears: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
     });
-    const withGuardrails = runGoalSeek(baseParams, {
+    const withGuardrails = await seek(baseParams, {
       ...sharedConfig,
       includeGoGoYears: false,
       includeMarketAdjustments: false,
@@ -474,9 +489,9 @@ describe('runGoalSeek', () => {
   // the achieved objective (average annual withdrawal during the bonus-year
   // window) should be reported, and the window should reflect whatever
   // goGoYears the search actually converged on.
-  it('optimizes for average annual spending during the bonus-year window when Bonus Years is included', () => {
+  it('optimizes for average annual spending during the bonus-year window when Bonus Years is included', async () => {
     const params = makeParams({ numYears: 20, numSimulations: 500 });
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
       includeGoGoYears: true,
@@ -498,9 +513,9 @@ describe('runGoalSeek', () => {
     }
   });
 
-  it('takes the no-lever fast path (roundsUsed is 0, single confirming bisection)', () => {
+  it('takes the no-lever fast path (roundsUsed is 0, single confirming bisection)', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: false,
@@ -512,9 +527,9 @@ describe('runGoalSeek', () => {
     expect(summary.roundsUsed).toBe(0);
   });
 
-  it('stops before exhausting maxRounds once a round makes no further difference', () => {
+  it('stops before exhausting maxRounds once a round makes no further difference', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
@@ -529,9 +544,9 @@ describe('runGoalSeek', () => {
     expect(summary.roundsUsed).toBeLessThanOrEqual(5);
   });
 
-  it('reports roundsUsed at most maxRounds', () => {
+  it('reports roundsUsed at most maxRounds', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
@@ -548,7 +563,7 @@ describe('runGoalSeek', () => {
   // With the on-plan success constraint, additional rounds are not guaranteed
   // to monotonically improve the objective at reduced search fidelity — both
   // runs should still produce feasible plans with comparable objectives.
-  it('produces feasible plans with multiple rounds for the same config', () => {
+  it('produces feasible plans with multiple rounds for the same config', async () => {
     const params = makeParams();
     const baseConfig = {
       targetEndingBalance: 0,
@@ -560,8 +575,8 @@ describe('runGoalSeek', () => {
       ...FAST_LEVER_GRIDS,
     };
 
-    const singleRound = runGoalSeek(params, { ...baseConfig, maxRounds: 1 });
-    const multiRound = runGoalSeek(params, { ...baseConfig, maxRounds: 3 });
+    const singleRound = await seek(params, { ...baseConfig, maxRounds: 1 });
+    const multiRound = await seek(params, { ...baseConfig, maxRounds: 3 });
 
     expect(singleRound.summary.feasible).toBe(true);
     expect(multiRound.summary.feasible).toBe(true);
@@ -569,10 +584,10 @@ describe('runGoalSeek', () => {
     expect(singleRound.summary.achievedSuccessRate).toBeGreaterThanOrEqual(0.7);
   });
 
-  it('does not mutate the caller-supplied params object', () => {
+  it('does not mutate the caller-supplied params object', async () => {
     const params = makeParams();
     const originalBase = params.portfolio.base;
-    runGoalSeek(params, {
+    await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeGoGoYears: true,
@@ -589,7 +604,7 @@ describe('runGoalSeek', () => {
   // must not depend on whatever value was already sitting in that field
   // before the search started, since Phase 1 now neutralizes every included
   // lever before solving for the base withdrawal.
-  it('finds the same early-years bonus answer regardless of the starting value', () => {
+  it('finds the same early-years bonus answer regardless of the starting value', async () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
@@ -601,15 +616,15 @@ describe('runGoalSeek', () => {
       ...FAST_LEVER_GRIDS,
     };
 
-    const resultA = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 200_000 } }), config);
-    const resultB = runGoalSeek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 2_000 } }), config);
+    const resultA = await seek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 200_000 } }), config);
+    const resultB = await seek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 2_000 } }), config);
 
     expect(resultA.summary.feasible).toBe(true);
     expect(resultB.summary.feasible).toBe(true);
     expect(resultA.summary.goGoBonus).toBe(resultB.summary.goGoBonus);
   });
 
-  it('finds the same base withdrawal regardless of pre-existing market/balance settings', () => {
+  it('finds the same base withdrawal regardless of pre-existing market/balance settings', async () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
@@ -632,15 +647,15 @@ describe('runGoalSeek', () => {
       portfolio: { ...makeParams().portfolio, floorBalance: 3_000_000, floorPenalty: 0.9, ceilingBalance: 3_500_000, ceilingBonus: 0.9 },
     });
 
-    const resultA = runGoalSeek(paramsA, config);
-    const resultB = runGoalSeek(paramsB, config);
+    const resultA = await seek(paramsA, config);
+    const resultB = await seek(paramsB, config);
 
     expect(resultA.summary.feasible).toBe(true);
     expect(resultB.summary.feasible).toBe(true);
     expect(resultA.summary.baseWithdrawal).toBe(resultB.summary.baseWithdrawal);
   });
 
-  it('allows a higher base withdrawal when risk tolerance is higher', () => {
+  it('allows a higher base withdrawal when risk tolerance is higher', async () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -658,17 +673,17 @@ describe('runGoalSeek', () => {
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
     };
 
-    const conservative = runGoalSeek(params, { ...shared, shortfallTolerance: 0 });
-    const aggressive = runGoalSeek(params, { ...shared, shortfallTolerance: 0.4 });
+    const conservative = await seek(params, { ...shared, shortfallTolerance: 0 });
+    const aggressive = await seek(params, { ...shared, shortfallTolerance: 0.4 });
 
     expect(conservative.summary.feasible).toBe(true);
     expect(aggressive.summary.feasible).toBe(true);
     expect(aggressive.summary.baseWithdrawal).toBeGreaterThanOrEqual(conservative.summary.baseWithdrawal);
   });
 
-  it('reports planned schedule total and risk tolerance in the summary', () => {
+  it('reports planned schedule total and risk tolerance in the summary', async () => {
     const params = makeParams();
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       shortfallTolerance: 0.25,
@@ -683,7 +698,7 @@ describe('runGoalSeek', () => {
     expect(summary.plannedScheduleTotal).toBeGreaterThan(0);
   });
 
-  it('keeps the pinned base withdrawal fixed and tunes levers when feasible', () => {
+  it('keeps the pinned base withdrawal fixed and tunes levers when feasible', async () => {
     const pinnedBase = 60_000;
     const params = makeParams({
       numYears: 30,
@@ -696,7 +711,7 @@ describe('runGoalSeek', () => {
         goGoYears: 0,
       },
     });
-    const { params: finalParams, summary } = runGoalSeek(params, {
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.7,
       shortfallTolerance: 0.3,
@@ -717,7 +732,7 @@ describe('runGoalSeek', () => {
     expect(summary.balanceAdjustment).toBeDefined();
   });
 
-  it('reports infeasible when a pinned base cannot meet the desired success rate', () => {
+  it('reports infeasible when a pinned base cannot meet the desired success rate', async () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 500,
@@ -729,7 +744,7 @@ describe('runGoalSeek', () => {
         goGoYears: 0,
       },
     });
-    const { summary } = runGoalSeek(params, {
+    const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.9,
       shortfallTolerance: 0.05,
@@ -749,7 +764,7 @@ describe('runGoalSeek', () => {
     expect(summary.reason).toMatch(/pinned base withdrawal/i);
   });
 
-  it('tunes Market/Balance levers around a fixed specific-list schedule without changing it', () => {
+  it('tunes Market/Balance levers around a fixed specific-list schedule without changing it', async () => {
     const numYears = 25;
     const specificWithdrawals = new Array(numYears).fill(70_000);
     const params = makeParams({
@@ -764,7 +779,7 @@ describe('runGoalSeek', () => {
         goGoYears: 0,
       },
     });
-    const { params: finalParams, summary } = runGoalSeek(params, {
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.7,
       shortfallTolerance: 0.3,

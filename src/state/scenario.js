@@ -92,6 +92,7 @@ const FIELDS = [
   field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
   field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
   field('goalSeekNumSimulations', 'goalSeekNumSimulations', 'int'),
+  field('parallelCores', 'parallelCores', 'string'),
 ];
 
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));

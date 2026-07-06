@@ -307,7 +307,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 // Run the full Monte Carlo. Returns summary stats packed into typed arrays
 // (memory-light) plus the baseSeed needed to regenerate any individual path.
 // `onProgress(fraction)` is called periodically (0..1).
-export function runMonteCarlo(params, { onProgress } = {}) {
+// `startIndex` offsets the per-simulation seed so parallel chunks stay deterministic.
+export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const { numSimulations, numYears } = params;
   const baseSeed = params.seed >>> 0;
 
@@ -321,7 +322,8 @@ export function runMonteCarlo(params, { onProgress } = {}) {
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
   for (let i = 0; i < numSimulations; i++) {
-    const rng = createRng(deriveSeed(baseSeed, i));
+    const globalIndex = startIndex + i;
+    const rng = createRng(deriveSeed(baseSeed, globalIndex));
     const s = simulatePath(params, rng, false, allYearsReturns, i * numYears);
     avgReturn[i] = s.avgReturn;
     finalBalance[i] = s.finalBalance;

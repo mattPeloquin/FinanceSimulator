@@ -2,6 +2,7 @@ import './styles.css';
 import './ui/theme.js';
 
 import SimulationWorker from './workers/simulation.worker.js?worker&inline';
+import { resolveNumCores } from './workers/parallelConfig.js';
 
 import {
   readScenarioFromDom,
@@ -51,6 +52,7 @@ const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 
 let historicalSamples = { years: [] };
 let currentWorker = null;
+let currentNumCores = 1;
 let currentSessionName = '';
 let currentSessionDescription = '';
 let suppressSessionSelect = false;
@@ -149,8 +151,16 @@ function updateProgress(fraction, stage) {
   const bar = document.getElementById('progressBar');
   const text = document.getElementById('loadingText');
   const pct = Math.round(fraction * 100);
+  const coreLabel = currentNumCores === 1 ? '1 core' : `${currentNumCores} cores`;
   if (bar) bar.style.width = `${pct}%`;
-  if (text) text.textContent = stage ? `${stage}… ${pct}%` : `Running simulations… ${pct}%`;
+  if (text) {
+    const prefix = stage ? `${stage}… ${pct}%` : `Running simulations… ${pct}%`;
+    text.textContent = `${prefix} (using ${coreLabel})`;
+  }
+}
+
+function resolveRunNumCores(scenario) {
+  return resolveNumCores(scenario.parallelCores, navigator.hardwareConcurrency);
 }
 
 function runSimulation() {
@@ -164,6 +174,7 @@ function runSimulation() {
   // Ensure the sample pool matches the current year range.
   refreshHistoryView(scenario.startYear, scenario.endYear);
   const params = buildSimParams(scenario, historicalSamples);
+  currentNumCores = resolveRunNumCores(scenario);
 
   setLoading(true);
 
@@ -192,7 +203,7 @@ function runSimulation() {
     currentWorker.terminate();
     currentWorker = null;
   };
-  currentWorker.postMessage({ type: 'run', params });
+  currentWorker.postMessage({ type: 'run', params, numCores: currentNumCores });
 }
 
 // Write the base withdrawal (and any levers Goal Seek was allowed to tune)
@@ -250,6 +261,7 @@ function runGoalSeekSearch() {
   refreshHistoryView(scenario.startYear, scenario.endYear);
   const params = buildSimParams(scenario, historicalSamples);
   const goalSeekConfig = buildGoalSeekConfig(scenario);
+  currentNumCores = resolveRunNumCores(scenario);
 
   setLoading(true);
 
@@ -286,7 +298,7 @@ function runGoalSeekSearch() {
     currentWorker.terminate();
     currentWorker = null;
   };
-  currentWorker.postMessage({ type: 'goalSeek', params, goalSeekConfig });
+  currentWorker.postMessage({ type: 'goalSeek', params, goalSeekConfig, numCores: currentNumCores });
 }
 
 // Fork between a normal simulation and a Goal Seek search based on the mode toggle.

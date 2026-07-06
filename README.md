@@ -133,7 +133,9 @@ When you click **Run Simulation**, the scenario is validated (allocation must to
 
 ### Step 3: The simulation engine (runs off-screen in a Web Worker)
 
-The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
+The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. The progress bar also shows how many CPU cores are being used. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
+
+On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Goal Seek benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (about half your cores), or **High** (all available cores). Lower settings leave more of your computer free for other apps; higher settings finish faster.
 
 The core engine (`src/core/simulation.js`) simulates one "possible future" at a time. For each simulated year it:
 

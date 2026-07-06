@@ -173,4 +173,8 @@ export const SCENARIO_DEFAULTS = {
   // Lower = faster search but noisier success-rate estimates; higher = slower
   // but more accurate.
   goalSeekNumSimulations: 500,
+
+  // How aggressively to use CPU cores during simulation runs.
+  // Options: 'low' (1 core), 'med' (half), 'high' (all available).
+  parallelCores: 'high',
 };

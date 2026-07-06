@@ -4,7 +4,6 @@
 // and DOM-free, like the rest of `core/`, so it can run inside the worker
 // and be unit-tested directly.
 
-import { runMonteCarlo } from './simulation.js';
 import { goalSuccessRate, median } from './statistics.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
@@ -121,6 +120,17 @@ export function bisectMaxSatisfyingInt(predicate, lo, hi) {
   while (a < b) {
     const mid = Math.ceil((a + b) / 2);
     if (predicate(mid)) a = mid; else b = mid - 1;
+  }
+  return a;
+}
+
+// Async variant of bisectMaxSatisfying for predicates that await simulation runs.
+export async function bisectMaxSatisfyingAsync(predicate, lo, hi, { tolerance = 1, maxIterations = BASE_BISECTION_MAX_ITERATIONS } = {}) {
+  let a = lo;
+  let b = hi;
+  for (let i = 0; i < maxIterations && b - a > tolerance; i++) {
+    const mid = (a + b) / 2;
+    if (await predicate(mid)) a = mid; else b = mid;
   }
   return a;
 }
@@ -255,7 +265,7 @@ function estimateEvalBudget(params, config) {
 //   adjustmentGrid             optional { minPct, maxPct, stepPct }
 //   balanceMultiples           optional array of multiples
 //   penaltyBonusGrid           optional { minPct, maxPct, stepPct }
-export function runGoalSeek(params, config, { onProgress } = {}) {
+export async function runGoalSeek(params, config, simulateAsync, { onProgress } = {}) {
   const notify = typeof onProgress === 'function' ? onProgress : () => {};
   const pinBase = !!config.pinBaseWithdrawal;
   const working = cloneParams(params);
@@ -286,12 +296,12 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     return median(result.totalWithdrawn);
   }
 
-  function evaluateWith(numSimulations, stage) {
+  async function evaluateWith(numSimulations, stage) {
     evalCount++;
     notify(stage, Math.min(evalCount / estimatedEvalBudget, 0.99));
     const window = currentEarlyWindow();
     const searchParams = { ...working, numSimulations, earlyYearsWindow: window };
-    const result = runMonteCarlo(searchParams);
+    const result = await simulateAsync(searchParams);
     const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     const successRateAchieved = goalSuccessRate(
@@ -310,12 +320,12 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     };
   }
 
-  function evaluate(stage) {
+  async function evaluate(stage) {
     return evaluateWith(searchNumSimulations, stage);
   }
 
-  function meetsTarget(stage) {
-    return evaluate(stage).successRateAchieved >= config.desiredSuccessRate;
+  async function meetsTarget(stage) {
+    return (await evaluate(stage)).successRateAchieved >= config.desiredSuccessRate;
   }
 
   // Neutralize every lever marked "include in search" before Phase 1 solves
@@ -359,10 +369,8 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
   if (!pinBase) {
   // ---- Phase 1: bisect the base withdrawal -----------------------------------
-  const feasibleAtMinBase = (() => {
-    working.portfolio.base = baseLowerBound;
-    return meetsTarget('Checking feasibility');
-  })();
+  working.portfolio.base = baseLowerBound;
+  const feasibleAtMinBase = await meetsTarget('Checking feasibility');
 
   if (!feasibleAtMinBase) {
     return {
@@ -382,14 +390,14 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   const GOGO_MAX_UPPER_BOUND_DOUBLINGS = 10;
   for (let i = 0; i < GOGO_MAX_UPPER_BOUND_DOUBLINGS; i++) {
     working.portfolio.base = hi;
-    if (!meetsTarget('Bracketing base withdrawal')) break;
+    if (!(await meetsTarget('Bracketing base withdrawal'))) break;
     hi *= 2;
   }
 
   baseTolerance = Math.max(50, hi * 0.001);
   solvedBase = roundDownToThousand(
-    bisectMaxSatisfying(
-      (x) => {
+    await bisectMaxSatisfyingAsync(
+      async (x) => {
         working.portfolio.base = x;
         return meetsTarget('Tuning base withdrawal');
       },
@@ -408,12 +416,12 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   // hold, at full search fidelity. Used both for the no-lever fast path (a
   // single confirming pass, same cost as before this feature existed) and
   // once per round below. ----
-  function rebisectBase(stageLabel) {
+  async function rebisectBase(stageLabel) {
     if (pinBase) return solvedBase;
     const rebisectHi = Math.max(solvedBase * 2, initialUpperBound);
     return roundDownToThousand(
-      bisectMaxSatisfying(
-        (x) => {
+      await bisectMaxSatisfyingAsync(
+        async (x) => {
           working.portfolio.base = x;
           return meetsTarget(stageLabel);
         },
@@ -430,14 +438,14 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   // below a guardrail) always looks strictly worse than doing nothing, since
   // its entire payoff — a higher feasible base — would otherwise be invisible
   // until the next round's full rebisection.
-  function innerResolveBase(stageLabel) {
+  async function innerResolveBase(stageLabel) {
     if (pinBase) return solvedBase;
     const innerHi = Math.max(solvedBase * 2, initialUpperBound);
     return roundDownToThousand(
-      bisectMaxSatisfying(
-        (x) => {
+      await bisectMaxSatisfyingAsync(
+        async (x) => {
           working.portfolio.base = x;
-          return evaluateWith(resolveNumSimulations, stageLabel).successRateAchieved >= config.desiredSuccessRate;
+          return (await evaluateWith(resolveNumSimulations, stageLabel)).successRateAchieved >= config.desiredSuccessRate;
         },
         baseLowerBound,
         innerHi,
@@ -448,10 +456,10 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
   // Score whatever lever values are currently applied to `working`: re-solve
   // the base against them, then confirm at full search fidelity.
-  function scoreCurrentLeversWithResolve(stageLabel) {
-    const resolvedBase = innerResolveBase(stageLabel);
+  async function scoreCurrentLeversWithResolve(stageLabel) {
+    const resolvedBase = await innerResolveBase(stageLabel);
     working.portfolio.base = resolvedBase;
-    const metrics = evaluate(stageLabel);
+    const metrics = await evaluate(stageLabel);
     return { resolvedBase, ...metrics };
   }
 
@@ -459,7 +467,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   // keep whichever satisfies the success target with the highest objective
   // value. Applies the winner (or the current value, if none qualified) to
   // `working` before returning, including the base it was solved against.
-  function pickBestCandidateWithResolve(candidates, applyCandidate, stageLabel, currentValue) {
+  async function pickBestCandidateWithResolve(candidates, applyCandidate, stageLabel, currentValue) {
     let best = currentValue;
     let bestObjective = -Infinity;
     let bestSuccessRate = -Infinity;
@@ -467,7 +475,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     let foundTarget = false;
     for (const candidate of candidates) {
       applyCandidate(candidate);
-      const { resolvedBase, successRateAchieved, objectiveValue } = scoreCurrentLeversWithResolve(stageLabel);
+      const { resolvedBase, successRateAchieved, objectiveValue } = await scoreCurrentLeversWithResolve(stageLabel);
       if (successRateAchieved >= config.desiredSuccessRate) {
         if (!foundTarget || objectiveValue > bestObjective) {
           foundTarget = true;
@@ -501,7 +509,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
   // Same as above, but for a pair of jointly-coupled fields (e.g. floor
   // balance + max cut, which are each a no-op without the other).
-  function pickBestPairWithResolve(pairs, applyPair, stageLabel, currentPair) {
+  async function pickBestPairWithResolve(pairs, applyPair, stageLabel, currentPair) {
     let best = currentPair;
     let bestObjective = -Infinity;
     let bestSuccessRate = -Infinity;
@@ -509,7 +517,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     let foundTarget = false;
     for (const pair of pairs) {
       applyPair(pair[0], pair[1]);
-      const { resolvedBase, successRateAchieved, objectiveValue } = scoreCurrentLeversWithResolve(stageLabel);
+      const { resolvedBase, successRateAchieved, objectiveValue } = await scoreCurrentLeversWithResolve(stageLabel);
       if (successRateAchieved >= config.desiredSuccessRate) {
         if (!foundTarget || objectiveValue > bestObjective) {
           foundTarget = true;
@@ -545,10 +553,10 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
   // One pass over every included lever, in a fixed order, re-solving the base
   // after every single candidate so protective/aggressive settings are scored
   // by what they actually buy, not by how they look with the base left fixed.
-  function tuneLeversOnce() {
+  async function tuneLeversOnce() {
     if (config.includeGoGoYears) {
       const bonusGrid = buildBonusGrid(solvedBase, config.goGoBonusFractions);
-      working.portfolio.goGoBonus = pickBestCandidateWithResolve(
+      working.portfolio.goGoBonus = await pickBestCandidateWithResolve(
         bonusGrid,
         (value) => {
           working.portfolio.goGoBonus = value;
@@ -561,7 +569,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     if (config.includeMarketAdjustments) {
       const adjustmentGrid = buildAdjustmentGrid(solvedBase, config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID);
       for (const field of ['low', 'med', 'high']) {
-        working.dynConfig[field].adj = pickBestCandidateWithResolve(
+        working.dynConfig[field].adj = await pickBestCandidateWithResolve(
           adjustmentGrid,
           (value) => {
             working.dynConfig[field].adj = value;
@@ -573,7 +581,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
       const balanceGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, null);
       for (const field of ['low', 'med', 'high']) {
-        working.dynConfig[field].bal = pickBestCandidateWithResolve(
+        working.dynConfig[field].bal = await pickBestCandidateWithResolve(
           balanceGrid,
           (value) => {
             working.dynConfig[field].bal = value;
@@ -594,7 +602,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
           || !Number.isFinite(working.portfolio.ceilingBalance)
           || floor < working.portfolio.ceilingBalance,
       );
-      pickBestPairWithResolve(
+      await pickBestPairWithResolve(
         validFloorPairs,
         (floor, penalty) => {
           working.portfolio.floorBalance = floor;
@@ -613,7 +621,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
           || working.portfolio.floorBalance === 0
           || ceiling > working.portfolio.floorBalance,
       );
-      pickBestPairWithResolve(
+      await pickBestPairWithResolve(
         validCeilingPairs,
         (ceiling, bonus) => {
           working.portfolio.ceilingBalance = ceiling;
@@ -659,7 +667,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
     // No optional levers selected: nothing to tune, just confirm the base
     // withdrawal once more (matches the cost/behavior of a plain base search).
     if (!pinBase) {
-      solvedBase = rebisectBase('Finalizing base withdrawal');
+      solvedBase = await rebisectBase('Finalizing base withdrawal');
       working.portfolio.base = solvedBase;
     }
   } else {
@@ -668,9 +676,9 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
       const baseBeforeRound = solvedBase;
       const snapshotBefore = captureLeverSnapshot();
 
-      tuneLeversOnce();
+      await tuneLeversOnce();
       if (!pinBase) {
-        solvedBase = rebisectBase('Finalizing base withdrawal');
+        solvedBase = await rebisectBase('Finalizing base withdrawal');
         working.portfolio.base = solvedBase;
       }
       roundsUsed = round;
@@ -683,7 +691,7 @@ export function runGoalSeek(params, config, { onProgress } = {}) {
 
   const finalBase = solvedBase;
 
-  const finalMetrics = evaluate('Finalizing');
+  const finalMetrics = await evaluate('Finalizing');
   notify('Confirming final plan', 1);
 
   const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
