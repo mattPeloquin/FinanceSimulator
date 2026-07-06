@@ -7,16 +7,17 @@
 import { goalSuccessRate, median } from './statistics.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
-const DEFAULT_ADJUSTMENT_GRID = { minPct: -50, maxPct: 50, stepPct: 5 };
-const DEFAULT_BALANCE_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
-// Used by the exported buildFractionGrid()'s own default (unit-tested directly) —
-// keep this fine-grained; the coarser PAIR grid below is what the search actually
-// uses internally, since joint pairs already multiply out two dimensions.
+const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: 0, stepPct: 5 };
+const DEFAULT_MARKET_MED_ADJ_GRID = { minPct: -20, maxPct: 20, stepPct: 5 };
+const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 0, maxPct: 50, stepPct: 5 };
+const DEFAULT_FLOOR_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
+const DEFAULT_CEILING_MULTIPLES = [0, 1.25, 1.5, 2.0, 2.5, 3.0];
+// Used by the exported buildFractionGrid()'s own default (unit-tested directly).
 const DEFAULT_PENALTY_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
-// Coarser than DEFAULT_PENALTY_BONUS_GRID: the floor/ceiling search tunes balance
-// threshold AND cut/boost rate together (see buildPairGrid), so a finer grid here
-// would multiply out too many candidate evaluations.
-const DEFAULT_PAIR_FRACTION_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
+// Coarser than DEFAULT_PENALTY_BONUS_GRID: ceiling pairs tune balance threshold
+// AND boost rate together (see buildPairGrid).
+const DEFAULT_CEILING_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
+const FLOOR_PENALTY_STEP_PCT = 10;
 const BASE_BISECTION_MAX_ITERATIONS = 30;
 
 // Bonus-amount candidates, as fractions of the currently-solved base withdrawal.
@@ -141,7 +142,7 @@ export async function bisectMaxSatisfyingAsync(predicate, lo, hi, { tolerance = 
 
 // Dollar adjustment candidates expressed as a % of the base withdrawal, so the
 // grid automatically rescales with whatever base the search has found so far.
-export function buildAdjustmentGrid(baseWithdrawal, { minPct, maxPct, stepPct } = DEFAULT_ADJUSTMENT_GRID) {
+export function buildAdjustmentGrid(baseWithdrawal, { minPct, maxPct, stepPct } = DEFAULT_MARKET_MED_ADJ_GRID) {
   const candidates = [];
   for (let pct = minPct; pct <= maxPct + 1e-9; pct += stepPct) {
     candidates.push(roundToThousand((baseWithdrawal * pct) / 100));
@@ -153,7 +154,7 @@ export function buildAdjustmentGrid(baseWithdrawal, { minPct, maxPct, stepPct } 
 // multiple of 0 maps to `offValue` — pass `null` for the dynLow/Med/HighBal
 // override fields (blank = off), `0` for floorBalance, or `Infinity` for
 // ceilingBalance, matching how each field represents "disabled".
-export function buildBalanceGrid(startBalance, multiples = DEFAULT_BALANCE_MULTIPLES, offValue = null) {
+export function buildBalanceGrid(startBalance, multiples = DEFAULT_FLOOR_MULTIPLES, offValue = null) {
   return multiples.map((m) => (m > 0 ? roundToThousand(startBalance * m) : offValue));
 }
 
@@ -221,20 +222,29 @@ function perCandidateCost(config) {
   return config.pinBaseWithdrawal ? PINNED_PER_CANDIDATE_COST : PER_CANDIDATE_COST;
 }
 
+function buildFloorPenaltyGridConfig(config) {
+  const maxPenalty = Math.round((config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE) * 100);
+  return config.floorPenaltyGrid || { minPct: 0, maxPct: maxPenalty, stepPct: FLOOR_PENALTY_STEP_PCT };
+}
+
 function estimateEvalBudget(params, config) {
-  const balanceGridLen = (config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES).length;
-  const pairFractionGridLen = gridLength(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
-  const adjustmentGridLen = gridLength(config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID);
+  const floorMultiplesLen = (config.floorMultiples || DEFAULT_FLOOR_MULTIPLES).length;
+  const ceilingMultiplesLen = (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).length;
+  const marketDownAdjLen = gridLength(config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID);
+  const marketMedAdjLen = gridLength(config.marketMedAdjGrid || DEFAULT_MARKET_MED_ADJ_GRID);
+  const marketUpAdjLen = gridLength(config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID);
+  const floorPenaltyGridLen = gridLength(buildFloorPenaltyGridConfig(config));
+  const ceilingBonusGridLen = gridLength(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
   const bonusGridLen = (config.goGoBonusFractions || DEFAULT_GOGO_BONUS_FRACTIONS).length;
   const candidateCost = perCandidateCost(config);
 
   const perRoundLeverCost =
     (config.includeGoGoYears ? bonusGridLen * candidateCost : 0) +
     (config.includeMarketAdjustments
-      ? (3 * adjustmentGridLen + 3 * balanceGridLen) * candidateCost
+      ? (marketDownAdjLen + marketMedAdjLen + marketUpAdjLen + floorMultiplesLen + 2 * ceilingMultiplesLen) * candidateCost
       : 0) +
     (config.includeBalanceOverrides
-      ? 2 * balanceGridLen * pairFractionGridLen * candidateCost
+      ? (floorMultiplesLen * floorPenaltyGridLen + ceilingMultiplesLen * ceilingBonusGridLen) * candidateCost
       : 0);
 
   if (config.pinBaseWithdrawal) {
@@ -264,9 +274,13 @@ function estimateEvalBudget(params, config) {
 //   includeMarketAdjustments   bool — covers dynLow/Med/HighAdj AND dynLow/Med/HighBal
 //   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
 //   searchNumSimulations       optional override of the reduced sim count
-//   adjustmentGrid             optional { minPct, maxPct, stepPct }
-//   balanceMultiples           optional array of multiples
-//   penaltyBonusGrid           optional { minPct, maxPct, stepPct }
+//   marketDownAdjGrid          optional { minPct, maxPct, stepPct } for dynLowAdj
+//   marketMedAdjGrid           optional { minPct, maxPct, stepPct } for dynMedAdj
+//   marketUpAdjGrid            optional { minPct, maxPct, stepPct } for dynHighAdj
+//   floorMultiples             optional array of starting-balance multiples for floor thresholds
+//   ceilingMultiples           optional array of starting-balance multiples for ceiling thresholds
+//   floorPenaltyGrid           optional { minPct, maxPct, stepPct } — defaults maxPct to shortfallTolerance
+//   ceilingBonusGrid           optional { minPct, maxPct, stepPct }
 export async function runGoalSeek(params, config, simulateAsync, { onProgress } = {}) {
   const notify = typeof onProgress === 'function' ? onProgress : () => {};
   const pinBase = !!config.pinBaseWithdrawal;
@@ -569,8 +583,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
 
     if (config.includeMarketAdjustments) {
-      const adjustmentGrid = buildAdjustmentGrid(solvedBase, config.adjustmentGrid || DEFAULT_ADJUSTMENT_GRID);
+      const marketAdjGrids = {
+        low: config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID,
+        med: config.marketMedAdjGrid || DEFAULT_MARKET_MED_ADJ_GRID,
+        high: config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID,
+      };
       for (const field of ['low', 'med', 'high']) {
+        const adjustmentGrid = buildAdjustmentGrid(solvedBase, marketAdjGrids[field]);
         working.dynConfig[field].adj = await pickBestCandidateWithResolve(
           adjustmentGrid,
           (value) => {
@@ -581,10 +600,28 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         );
       }
 
-      const balanceGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, null);
-      for (const field of ['low', 'med', 'high']) {
+      const floorBalanceGrid = buildBalanceGrid(
+        params.portfolio.start,
+        config.floorMultiples || DEFAULT_FLOOR_MULTIPLES,
+        null,
+      );
+      working.dynConfig.low.bal = await pickBestCandidateWithResolve(
+        floorBalanceGrid,
+        (value) => {
+          working.dynConfig.low.bal = value;
+        },
+        'Tuning market balance overrides',
+        working.dynConfig.low.bal,
+      );
+
+      const ceilingBalanceGrid = buildBalanceGrid(
+        params.portfolio.start,
+        config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES,
+        null,
+      );
+      for (const field of ['med', 'high']) {
         working.dynConfig[field].bal = await pickBestCandidateWithResolve(
-          balanceGrid,
+          ceilingBalanceGrid,
           (value) => {
             working.dynConfig[field].bal = value;
           },
@@ -595,8 +632,12 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
 
     if (config.includeBalanceOverrides) {
-      const floorGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, 0);
-      const penaltyGrid = buildFractionGrid(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
+      const floorGrid = buildBalanceGrid(
+        params.portfolio.start,
+        config.floorMultiples || DEFAULT_FLOOR_MULTIPLES,
+        0,
+      );
+      const penaltyGrid = buildFractionGrid(buildFloorPenaltyGridConfig(config));
       const floorPairs = buildPairGrid(floorGrid, penaltyGrid, (floor) => floor === 0);
       const validFloorPairs = floorPairs.filter(
         ([floor]) =>
@@ -614,8 +655,12 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         [working.portfolio.floorBalance, working.portfolio.floorPenalty],
       );
 
-      const ceilingGrid = buildBalanceGrid(params.portfolio.start, config.balanceMultiples || DEFAULT_BALANCE_MULTIPLES, Infinity);
-      const bonusRateGrid = buildFractionGrid(config.penaltyBonusGrid || DEFAULT_PAIR_FRACTION_GRID);
+      const ceilingGrid = buildBalanceGrid(
+        params.portfolio.start,
+        config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES,
+        Infinity,
+      );
+      const bonusRateGrid = buildFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
       const ceilingPairs = buildPairGrid(ceilingGrid, bonusRateGrid, (ceiling) => !Number.isFinite(ceiling));
       const validCeilingPairs = ceilingPairs.filter(
         ([ceiling]) =>
@@ -700,7 +745,11 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
 
   if (pinBase && finalMetrics.successRateAchieved < config.desiredSuccessRate) {
-    const baseK = Math.round(finalBase / DOLLAR_ROUNDING);
+    const isSpecific = params.portfolio.strategy === 'specific';
+    const reason = isSpecific
+      ? 'Your Specific List of withdrawals cannot meet the desired success rate even with the best lever settings. Try lowering the amounts in your list, the target ending balance, or the desired success rate, or raising the risk tolerance.'
+      : `Your pinned base withdrawal of $${Math.round(finalBase / DOLLAR_ROUNDING).toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`;
+
     return {
       params: { ...params },
       summary: {
@@ -708,7 +757,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         pinnedBase: true,
         baseWithdrawal: finalBase,
         achievedSuccessRate: finalMetrics.successRateAchieved,
-        reason: `Your pinned base withdrawal of $${baseK.toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`,
+        reason,
         evaluationCount: evalCount,
       },
     };
