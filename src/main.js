@@ -53,6 +53,7 @@ const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 
 let historicalSamples = { years: [] };
 let currentWorker = null;
+let currentSubWorkers = [];
 let currentNumCores = 1;
 let currentSessionName = '';
 let currentSessionDescription = '';
@@ -172,6 +173,31 @@ function resolveRunNumCores(scenario) {
   return resolveNumCores(scenario.parallelCores, navigator.hardwareConcurrency);
 }
 
+function terminateWorkers() {
+  if (currentWorker) currentWorker.terminate();
+  currentWorker = null;
+  for (const w of currentSubWorkers) w.terminate();
+  currentSubWorkers = [];
+}
+
+// Sub-workers must be spawned here on the main thread: a worker created from a
+// blob/data URL (single-file build) has a null origin and cannot spawn its own
+// sub-workers, e.g. when the app is opened directly from disk (file://).
+// Each sub-worker gets one end of a MessageChannel; the other ends are
+// transferred to the master worker, which farms chunks out over them.
+function spawnSubWorkerPorts(numCores) {
+  const masterPorts = [];
+  if (numCores <= 1) return masterPorts;
+  for (let i = 0; i < numCores; i++) {
+    const subWorker = new SimulationWorker();
+    const channel = new MessageChannel();
+    subWorker.postMessage({ type: 'connect', port: channel.port1 }, [channel.port1]);
+    currentSubWorkers.push(subWorker);
+    masterPorts.push(channel.port2);
+  }
+  return masterPorts;
+}
+
 function runSimulation() {
   const scenario = readScenarioFromDom();
   const errors = validateScenario(scenario, YEAR_RANGE);
@@ -187,7 +213,7 @@ function runSimulation() {
 
   setLoading(true);
 
-  if (currentWorker) currentWorker.terminate();
+  terminateWorkers();
   currentWorker = new SimulationWorker();
   currentWorker.onmessage = (e) => {
     const msg = e.data;
@@ -197,22 +223,23 @@ function runSimulation() {
       setLoading(false);
       document.getElementById('resultsSection').classList.remove('hidden');
       renderResults(msg.result, params);
-      currentWorker.terminate();
-      currentWorker = null;
+      terminateWorkers();
     } else if (msg.type === 'error') {
       setLoading(false);
       showAlert(`Simulation error: ${msg.message}`);
-      currentWorker.terminate();
-      currentWorker = null;
+      terminateWorkers();
     }
   };
   currentWorker.onerror = (err) => {
     setLoading(false);
     showAlert(`Worker error: ${err.message}`);
-    currentWorker.terminate();
-    currentWorker = null;
+    terminateWorkers();
   };
-  currentWorker.postMessage({ type: 'run', params, numCores: currentNumCores });
+  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores);
+  currentWorker.postMessage(
+    { type: 'run', params, numCores: currentNumCores, subWorkerPorts },
+    subWorkerPorts,
+  );
 }
 
 // Write the base withdrawal (and any levers Goal Seek was allowed to tune)
@@ -276,7 +303,7 @@ function runGoalSeekSearch() {
 
   setLoading(true);
 
-  if (currentWorker) currentWorker.terminate();
+  terminateWorkers();
   currentWorker = new SimulationWorker();
   currentWorker.onmessage = (e) => {
     const msg = e.data;
@@ -284,8 +311,7 @@ function runGoalSeekSearch() {
       updateProgress(msg.fraction, msg.stage);
     } else if (msg.type === 'done') {
       setLoading(false);
-      currentWorker.terminate();
-      currentWorker = null;
+      terminateWorkers();
 
       if (!msg.goalSeekSummary.feasible) {
         showAlert(msg.goalSeekSummary.reason || 'Goal Seek could not find a plan meeting your target.', 'Goal not reachable');
@@ -299,17 +325,19 @@ function runGoalSeekSearch() {
     } else if (msg.type === 'error') {
       setLoading(false);
       showAlert(`Goal Seek error: ${msg.message}`);
-      currentWorker.terminate();
-      currentWorker = null;
+      terminateWorkers();
     }
   };
   currentWorker.onerror = (err) => {
     setLoading(false);
     showAlert(`Worker error: ${err.message}`);
-    currentWorker.terminate();
-    currentWorker = null;
+    terminateWorkers();
   };
-  currentWorker.postMessage({ type: 'goalSeek', params, goalSeekConfig, numCores: currentNumCores });
+  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores);
+  currentWorker.postMessage(
+    { type: 'goalSeek', params, goalSeekConfig, numCores: currentNumCores, subWorkerPorts },
+    subWorkerPorts,
+  );
 }
 
 // Fork between a normal simulation and a Goal Seek search based on the mode toggle.
@@ -324,10 +352,7 @@ function handleRunClick() {
 
 // Stop an in-flight simulation and return the UI to its idle state.
 function cancelSimulation() {
-  if (currentWorker) {
-    currentWorker.terminate();
-    currentWorker = null;
-  }
+  terminateWorkers();
   setLoading(false);
 }
 

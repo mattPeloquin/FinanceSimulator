@@ -9,11 +9,9 @@ import { runMonteCarlo } from '../core/simulation.js';
 import { buildRunResult } from '../core/resultPackaging.js';
 import { runGoalSeek } from '../core/goalSeek.js';
 import { ParallelPool } from './parallelPool.js';
-// Nested inline worker: Vite falls back to a data URL when blob sub-workers are blocked (file://).
-import SubWorker from './simulation.worker.js?worker&inline';
 
-function postChunkResult(startIndex, numSimulations, result) {
-  self.postMessage(
+function postChunkResult(target, startIndex, numSimulations, result) {
+  target.postMessage(
     {
       type: 'chunkDone',
       startIndex,
@@ -38,23 +36,38 @@ function postChunkResult(startIndex, numSimulations, result) {
   );
 }
 
-self.onmessage = async (e) => {
-  const { type, params, goalSeekConfig, numCores, startIndex, numSimulations } = e.data || {};
+function handleChunkMessage(target, data) {
+  const { params, startIndex, numSimulations } = data;
+  try {
+    const result = runMonteCarlo(
+      { ...params, numSimulations },
+      { startIndex },
+    );
+    postChunkResult(target, startIndex, numSimulations, result);
+  } catch (err) {
+    target.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });
+  }
+}
 
-  if (type === 'chunk') {
-    try {
-      const result = runMonteCarlo(
-        { ...params, numSimulations },
-        { startIndex },
-      );
-      postChunkResult(startIndex, numSimulations, result);
-    } catch (err) {
-      self.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });
-    }
+self.onmessage = async (e) => {
+  const { type, params, goalSeekConfig, numCores, subWorkerPorts } = e.data || {};
+
+  // Sub-worker role: chunk requests arrive over a MessagePort wired up by the
+  // main thread (workers can't reliably spawn their own sub-workers on file://).
+  if (type === 'connect') {
+    const port = e.data.port;
+    port.onmessage = (pe) => {
+      if (pe.data && pe.data.type === 'chunk') handleChunkMessage(port, pe.data);
+    };
     return;
   }
 
-  const pool = new ParallelPool(SubWorker, numCores || 1);
+  if (type === 'chunk') {
+    handleChunkMessage(self, e.data);
+    return;
+  }
+
+  const pool = new ParallelPool(subWorkerPorts || [], numCores || 1);
   const simulateAsync = (simParams) => pool.run(simParams);
 
   if (type === 'run') {

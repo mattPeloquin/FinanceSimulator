@@ -1,6 +1,10 @@
 // Parallel Monte Carlo execution across a pool of sub-workers.
 // Domain code calls `run(params)`; this module owns chunking, messaging,
 // and stitching transferred ArrayBuffers back into typed arrays.
+//
+// Sub-workers are spawned by the MAIN THREAD and handed to the master worker
+// as MessagePorts (workers can't spawn blob sub-workers from a null origin,
+// e.g. when the single-file build runs over file://).
 
 import { runMonteCarlo } from '../core/simulation.js';
 
@@ -64,13 +68,13 @@ function stitchMonteCarloResults(params, chunkResults) {
   };
 }
 
-function runChunkOnWorker(worker, params, startIndex, numSimulations) {
+function runChunkOnPort(port, params, startIndex, numSimulations) {
   return new Promise((resolve, reject) => {
     const onMessage = (e) => {
       const msg = e.data;
       if (msg.type === 'chunkDone') {
-        worker.removeEventListener('message', onMessage);
-        worker.removeEventListener('error', onError);
+        port.removeEventListener('message', onMessage);
+        port.removeEventListener('messageerror', onError);
         const { avgReturn, finalBalance, totalWithdrawn, earlyWithdrawn, depletionYear, allYearsReturns } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
@@ -83,44 +87,42 @@ function runChunkOnWorker(worker, params, startIndex, numSimulations) {
           allYearsReturns: new Float64Array(allYearsReturns),
         });
       } else if (msg.type === 'error') {
-        worker.removeEventListener('message', onMessage);
-        worker.removeEventListener('error', onError);
+        port.removeEventListener('message', onMessage);
+        port.removeEventListener('messageerror', onError);
         reject(new Error(msg.message));
       }
     };
     const onError = (err) => {
-      worker.removeEventListener('message', onMessage);
-      worker.removeEventListener('error', onError);
+      port.removeEventListener('message', onMessage);
+      port.removeEventListener('messageerror', onError);
       reject(err);
     };
-    worker.addEventListener('message', onMessage);
-    worker.addEventListener('error', onError);
-    worker.postMessage({ type: 'chunk', params, startIndex, numSimulations });
+    port.addEventListener('message', onMessage);
+    port.addEventListener('messageerror', onError);
+    port.start();
+    port.postMessage({ type: 'chunk', params, startIndex, numSimulations });
   });
 }
 
 export class ParallelPool {
-  constructor(WorkerClass, numCores) {
-    this.WorkerClass = WorkerClass;
+  constructor(subWorkerPorts, numCores) {
+    this.ports = subWorkerPorts || [];
     this.numCores = Math.max(1, numCores);
-    this.workers = [];
   }
 
   async run(params, { onProgress } = {}) {
     const totalSims = params.numSimulations;
-    if (this.numCores <= 1 || totalSims <= 1) {
+    const maxWorkers = Math.min(this.numCores, this.ports.length);
+    if (maxWorkers <= 1 || totalSims <= 1) {
       return runMonteCarlo(params, { onProgress });
     }
 
-    const chunks = splitIntoChunks(totalSims, Math.min(this.numCores, totalSims));
-    while (this.workers.length < chunks.length) {
-      this.workers.push(new this.WorkerClass());
-    }
+    const chunks = splitIntoChunks(totalSims, Math.min(maxWorkers, totalSims));
 
     try {
       let completedChunks = 0;
       const chunkPromises = chunks.map((chunk, i) =>
-        runChunkOnWorker(this.workers[i], params, chunk.startIndex, chunk.numSimulations).then((result) => {
+        runChunkOnPort(this.ports[i], params, chunk.startIndex, chunk.numSimulations).then((result) => {
           completedChunks++;
           if (onProgress) onProgress(completedChunks / chunks.length);
           return result;
@@ -135,7 +137,7 @@ export class ParallelPool {
   }
 
   terminate() {
-    for (const worker of this.workers) worker.terminate();
-    this.workers = [];
+    for (const port of this.ports) port.close();
+    this.ports = [];
   }
 }
