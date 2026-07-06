@@ -10,6 +10,7 @@ import {
   successRate,
   withdrawalTargetSuccessRate,
   median,
+  isMedianYearlyMetric,
   buildHistogram,
   summarizeReturns,
 } from './statistics.js';
@@ -74,11 +75,13 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const tolerance = shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
   const n = result.numSimulations;
   const numYears = params.numYears;
+  const withdrawalMetric = params.withdrawalMetric || 'total';
+  const useMedianYearly = isMedianYearlyMetric(withdrawalMetric);
 
-  // Percentile cards & timelines use the total-withdrawn ranking. Each is a
+  // Percentile cards & timelines use the selected withdrawal ranking. Each is a
   // kernel-weighted average of the band of runs around the target rank, which
   // greatly reduces the run-to-run noise of a single representative path.
-  const rankW = rankByWithdrawn(result);
+  const rankW = rankByWithdrawn(result, withdrawalMetric);
   const halfW = Math.round((params.smoothFraction || 0) * n);
   const percentiles = {};
   for (const p of PERCENTILES) {
@@ -86,7 +89,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     percentiles[`p${Math.round(p * 100)}`] = smoothedPercentile(params, result, rankW, centerRank, halfW);
   }
 
-  // 3D topography samples paths across the SAME total-withdrawn ranking used
+  // 3D topography samples paths across the SAME withdrawal ranking used
   // by the percentile cards, so the X axis P5..P60 is consistent.
   const p5i = percentileIndex(n, 0.05);
   const p60i = percentileIndex(n, 0.6);
@@ -102,6 +105,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       withdrawals: re.path.withdrawals,
       unadjustedWithdrawals: re.path.unadjustedWithdrawals,
       totalWithdrawn: result.totalWithdrawn[simIndex],
+      medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
       avgReturn: result.avgReturn[simIndex],
     });
   }
@@ -112,28 +116,37 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const allYearsSummary = summarizeReturns(result.allYearsReturns);
 
   // The planned (unadjusted) withdrawal schedule ignores market returns, so it
-  // is identical in every run — sum it once from the p50 path already in hand.
-  const plannedWithdrawn = percentiles.p50.path.unadjustedWithdrawals.reduce((a, b) => a + b, 0);
+  // is identical in every run — derive totals and median-yearly once from p50.
+  const plannedSchedule = percentiles.p50.path.unadjustedWithdrawals;
+  const plannedWithdrawn = plannedSchedule.reduce((a, b) => a + b, 0);
+  const plannedMedianYearly = median(plannedSchedule);
+  const onPlanActuals = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
+  const onPlanBenchmark = useMedianYearly ? plannedMedianYearly : plannedWithdrawn;
 
   return {
     numSimulations: n,
     numYears,
     seed: result.baseSeed,
+    withdrawalMetric,
     successRate: successRate(result.depletionYear, numYears),
     withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(
-      result.totalWithdrawn,
-      plannedWithdrawn,
+      onPlanActuals,
+      onPlanBenchmark,
       tolerance,
     ),
     shortfallTolerance: tolerance,
     medianBalance: median(result.finalBalance),
     medianWithdrawn: median(result.totalWithdrawn),
+    medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
     plannedWithdrawn,
+    plannedMedianYearly,
+    onPlanBenchmark,
     percentiles,
     surfacePaths,
     surfaceMeta: {
       numSimulations: n,
       rankW,
+      withdrawalMetric,
       p5Rank: p5i,
       p60Rank: p60i,
       surfaceSamples: SURFACE_SAMPLES,

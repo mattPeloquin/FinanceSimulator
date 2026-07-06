@@ -11,6 +11,7 @@ import {
   buildPairGrid,
   highestMinimumWithdrawal,
   plannedScheduleTotal,
+  plannedScheduleMedianYearly,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
 
@@ -253,6 +254,29 @@ describe('plannedScheduleTotal', () => {
   });
 });
 
+describe('plannedScheduleMedianYearly', () => {
+  it('returns the median of the unadjusted per-year schedule', () => {
+    const portfolio = {
+      base: 100_000,
+      spendChangeRate: 0,
+      goGoBonus: 20_000,
+      goGoYears: 2,
+      withdrawalFloorSeries: new Array(5).fill(0),
+    };
+    // years 0-1: 120k, years 2-4: 100k -> median = 100k
+    expect(plannedScheduleMedianYearly(portfolio, 5)).toBe(100_000);
+  });
+
+  it('uses typed amounts for a specific-list strategy', () => {
+    const portfolio = {
+      strategy: 'specific',
+      specificWithdrawals: [80_000, 85_000, 90_000],
+      withdrawalFloorSeries: [0, 0, 0],
+    };
+    expect(plannedScheduleMedianYearly(portfolio, 3)).toBe(85_000);
+  });
+});
+
 describe('highestMinimumWithdrawal', () => {
   it('returns the largest tier amount in the series', () => {
     expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [120_000, 80_000, 0] })).toBe(120_000);
@@ -286,6 +310,24 @@ describe('runGoalSeek', () => {
     // No front-loading lever included, so the objective stays the lifetime
     // total and there's no bonus-years window to report.
     expect(summary.earlyYearsWindow).toBeUndefined();
+  });
+
+  it('optimizes median yearly withdrawal when that metric is selected', async () => {
+    const params = makeParams();
+    const { summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      includeGoGoYears: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 800,
+      withdrawalMetric: 'medianYearly',
+      ...DEFAULT_GOAL_SEEK_CONFIG,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.achievedMedianYearlyWithdrawn).toBeGreaterThan(0);
+    expect(summary.achievedObjectiveValue).toBe(summary.achievedMedianYearlyWithdrawn);
   });
 
   it('reports infeasible when even a $0 withdrawal cannot hit the target', async () => {

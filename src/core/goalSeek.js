@@ -4,7 +4,7 @@
 // and DOM-free, like the rest of `core/`, so it can run inside the worker
 // and be unit-tested directly.
 
-import { goalSuccessRate, median } from './statistics.js';
+import { goalSuccessRate, median, isMedianYearlyMetric } from './statistics.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
 const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: 0, stepPct: 5 };
@@ -86,6 +86,34 @@ export function plannedScheduleTotal(portfolio, numYears) {
     total += unadjustedTarget;
   }
   return total;
+}
+
+// Median of the unadjusted per-year withdrawal schedule — the plan benchmark
+// when scoring runs by median yearly spending instead of lifetime total.
+export function plannedScheduleMedianYearly(portfolio, numYears) {
+  const yearlyAmounts = [];
+  for (let j = 0; j < numYears; j++) {
+    let unadjustedTarget;
+    if (portfolio.strategy === 'specific') {
+      unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
+    } else {
+      const baseVal = portfolio.base;
+      const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
+      unadjustedTarget = portfolio.base * ageFactor;
+      if (j < (portfolio.goGoYears || 0)) {
+        unadjustedTarget += portfolio.goGoBonus || 0;
+      }
+      if (baseVal >= 0 && unadjustedTarget < 0) {
+        unadjustedTarget = 0;
+      }
+    }
+    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
+    if (unadjustedTarget >= 0 && yearFloor > 0) {
+      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
+    }
+    yearlyAmounts.push(unadjustedTarget);
+  }
+  return median(yearlyAmounts);
 }
 
 // Highest per-year minimum-withdrawal backstop in the staged tier series.
@@ -309,6 +337,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     if (window > 0) {
       return median(result.earlyWithdrawn) / window;
     }
+    if (isMedianYearlyMetric(config.withdrawalMetric)) {
+      return median(result.medianYearlyWithdrawal);
+    }
     return median(result.totalWithdrawn);
   }
 
@@ -318,20 +349,26 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const window = currentEarlyWindow();
     const searchParams = { ...working, numSimulations, earlyYearsWindow: window };
     const result = await simulateAsync(searchParams);
+    const useMedianYearly = isMedianYearlyMetric(config.withdrawalMetric);
     const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
+    const plannedBenchmark = useMedianYearly
+      ? plannedScheduleMedianYearly(working.portfolio, params.numYears)
+      : plannedTotal;
+    const actualWithdrawn = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,
       result.depletionYear,
       params.numYears,
       config.targetEndingBalance,
-      result.totalWithdrawn,
-      plannedTotal,
+      actualWithdrawn,
+      plannedBenchmark,
       shortfallTolerance,
     );
     return {
       successRateAchieved,
       medianTotalWithdrawn: median(result.totalWithdrawn),
+      medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
       objectiveValue: computeObjective(result, window),
     };
   }
@@ -791,6 +828,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     plannedScheduleTotal: plannedTotal,
     achievedSuccessRate: finalMetrics.successRateAchieved,
     achievedMedianTotalWithdrawn: finalMetrics.medianTotalWithdrawn,
+    achievedMedianYearlyWithdrawn: finalMetrics.medianYearlyWithdrawn,
     achievedObjectiveValue: finalMetrics.objectiveValue,
     // Only set when the search actively optimized for the bonus-years window
     // rather than the lifetime total (see currentEarlyWindow above).

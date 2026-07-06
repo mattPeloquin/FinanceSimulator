@@ -3,6 +3,7 @@ import { formatK, formatPercent } from './format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
 import { drawDistributionChart, drawAllYearsDistributionChart } from './charts/distribution.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
+import { isMedianYearlyMetric, median } from '../core/statistics.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
 
@@ -11,7 +12,13 @@ function setText(id, text) {
   if (el) el.textContent = text;
 }
 
-// Show how far a percentile's total withdrawn landed from the planned schedule:
+function percentileWithdrawal(path) {
+  const withdrawals = path?.withdrawals;
+  if (!withdrawals || withdrawals.length === 0) return 0;
+  return median(withdrawals);
+}
+
+// Show how far a percentile's withdrawals landed from the planned schedule:
 // green = withdrew more than planned, red = fell short of the plan.
 function setDelta(id, delta) {
   const el = document.getElementById(id);
@@ -53,7 +60,27 @@ function setEndYear(id, balances, numYears) {
   }
 }
 
+function applyMetricLabels(useMedianYearly) {
+  setText(
+    'medianWithdrawnLabel',
+    useMedianYearly ? 'Median Withdrawal / Year' : 'Median Total Withdrawn',
+  );
+  setText(
+    'plannedWithdrawnLabel',
+    useMedianYearly ? 'Planned Median / Year' : 'Planned Total Withdrawal',
+  );
+  setText(
+    'outcomesDescription',
+    useMedianYearly
+      ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
+      : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
+  );
+}
+
 export function renderResults(result, params) {
+  const useMedianYearly = isMedianYearlyMetric(result.withdrawalMetric);
+  const plannedBenchmark = result.onPlanBenchmark ?? (useMedianYearly ? result.plannedMedianYearly : result.plannedWithdrawn);
+  const medianActual = useMedianYearly ? result.medianYearlyWithdrawn : result.medianWithdrawn;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
   if (onPlanLabel) {
@@ -61,9 +88,12 @@ export function renderResults(result, params) {
   }
   const onPlanCard = onPlanLabel?.closest('.rounded-lg');
   if (onPlanCard) {
-    onPlanCard.title =
-      `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
+    onPlanCard.title = useMedianYearly
+      ? `Share of runs whose median yearly withdrawal reached at least ${100 - tolerancePct}% of the planned median per year`
+      : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
+
+  applyMetricLabels(useMedianYearly);
 
   setText('successRate', formatPercent(result.successRate));
   setText(
@@ -71,13 +101,14 @@ export function renderResults(result, params) {
     result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate),
   );
   setText('medianBalance', formatK(result.medianBalance));
-  setText('medianWithdrawn', formatK(result.medianWithdrawn));
-  setText('plannedWithdrawn', formatK(result.plannedWithdrawn));
+  setText('medianWithdrawn', formatK(medianActual));
+  setText('plannedWithdrawn', formatK(plannedBenchmark));
 
   for (const key of PERCENTILE_KEYS) {
     const p = result.percentiles[key];
-    setText(`${key}Wd`, formatK(p.totalWithdrawn));
-    setDelta(`${key}Delta`, p.totalWithdrawn - result.plannedWithdrawn);
+    const actual = useMedianYearly ? percentileWithdrawal(p.path) : p.totalWithdrawn;
+    setText(`${key}Wd`, formatK(actual));
+    setDelta(`${key}Delta`, actual - plannedBenchmark);
     setText(`${key}Bal`, formatK(p.finalBalance));
     setEndYear(`${key}EndYear`, p.path.balances, result.numYears);
     setText(`${key}Ret`, formatPercent(p.avgReturn));
@@ -109,6 +140,9 @@ export function renderResults(result, params) {
     surfaceMeta: result.surfaceMeta,
     shortfallTolerance: result.shortfallTolerance ?? 0.05,
     plannedWithdrawn: result.plannedWithdrawn,
+    plannedMedianYearly: result.plannedMedianYearly,
+    onPlanBenchmark: plannedBenchmark,
+    withdrawalMetric: result.withdrawalMetric ?? 'total',
   }).catch((err) => {
     console.error('3D chart failed to render:', err);
   });

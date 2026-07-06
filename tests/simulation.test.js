@@ -67,6 +67,7 @@ describe('runMonteCarlo determinism', () => {
     expect(Array.from(a.avgReturn)).toEqual(Array.from(b.avgReturn));
     expect(Array.from(a.finalBalance)).toEqual(Array.from(b.finalBalance));
     expect(Array.from(a.totalWithdrawn)).toEqual(Array.from(b.totalWithdrawn));
+    expect(Array.from(a.medianYearlyWithdrawal)).toEqual(Array.from(b.medianYearlyWithdrawal));
     expect(Array.from(a.allYearsReturns)).toEqual(Array.from(b.allYearsReturns));
   });
 
@@ -91,6 +92,7 @@ describe('regeneratePath', () => {
       const re = regeneratePath(params, result.baseSeed, i);
       expect(re.finalBalance).toBeCloseTo(result.finalBalance[i], 6);
       expect(re.totalWithdrawn).toBeCloseTo(result.totalWithdrawn[i], 6);
+      expect(re.medianYearlyWithdrawal).toBeCloseTo(result.medianYearlyWithdrawal[i], 6);
       expect(re.avgReturn).toBeCloseTo(result.avgReturn[i], 12);
       // The regenerated path arrays are populated and self-consistent.
       expect(re.path.balances.length).toBe(params.numYears + 1);

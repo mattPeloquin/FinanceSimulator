@@ -22,6 +22,9 @@ function makeSummary(arrs) {
     avgReturn: Float64Array.from(arrs.avgReturn),
     finalBalance: Float64Array.from(arrs.finalBalance),
     totalWithdrawn: Float64Array.from(arrs.totalWithdrawn),
+    medianYearlyWithdrawal: Float64Array.from(
+      arrs.medianYearlyWithdrawal ?? arrs.totalWithdrawn,
+    ),
     depletionYear: Float64Array.from(arrs.depletionYear ?? []),
   };
 }
@@ -34,6 +37,26 @@ describe('rankByWithdrawn', () => {
       totalWithdrawn: [100, 100, 90],
     });
     expect(Array.from(rankByWithdrawn(summary))).toEqual([2, 1, 0]);
+  });
+
+  it('sorts by median yearly withdrawal when that metric is selected', () => {
+    const summary = makeSummary({
+      avgReturn: [0, 0, 0],
+      finalBalance: [10, 20, 30],
+      totalWithdrawn: [300, 200, 100],
+      medianYearlyWithdrawal: [30, 20, 25],
+    });
+    expect(Array.from(rankByWithdrawn(summary, 'medianYearly'))).toEqual([1, 2, 0]);
+  });
+
+  it('tie-breaks median-yearly ranks by total withdrawn then final balance', () => {
+    const summary = makeSummary({
+      avgReturn: [0, 0, 0],
+      finalBalance: [50, 10, 30],
+      totalWithdrawn: [100, 90, 100],
+      medianYearlyWithdrawal: [20, 20, 20],
+    });
+    expect(Array.from(rankByWithdrawn(summary, 'medianYearly'))).toEqual([1, 2, 0]);
   });
 });
 
@@ -110,21 +133,27 @@ describe('meetsWithdrawalTarget', () => {
 });
 
 describe('withdrawalTargetSuccessRate', () => {
-  it('counts runs within a custom tolerance of planned total or above it', () => {
-    const totalWithdrawn = Float64Array.from([800, 850, 1000]); // planned = 1000, tolerance 0.2 -> min 800
-    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000, 0.2)).toBe(1);
-    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000, 0.05)).toBe(1 / 3);
+  it('counts runs within a custom tolerance of planned benchmark or above it', () => {
+    const actualWithdrawn = Float64Array.from([800, 850, 1000]); // planned = 1000, tolerance 0.2 -> min 800
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 1000, 0.2)).toBe(1);
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 1000, 0.05)).toBe(1 / 3);
+  });
+
+  it('works with median-yearly actuals and planned benchmark', () => {
+    const actualWithdrawn = Float64Array.from([45, 50, 55]); // planned median = 50, tolerance 0.2 -> min 40
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 50, 0.2)).toBe(1);
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 50, 0.05)).toBe(2 / 3);
   });
 
   it('counts runs within 5% of planned total or above it', () => {
-    const totalWithdrawn = Float64Array.from([950, 960, 1000, 800]); // planned = 1000 -> min 950
-    expect(withdrawalTargetSuccessRate(totalWithdrawn, 1000)).toBe(0.75);
+    const actualWithdrawn = Float64Array.from([950, 960, 1000, 800]); // planned = 1000 -> min 950
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 1000)).toBe(0.75);
   });
 
-  it('returns null when the planned total is not positive', () => {
-    const totalWithdrawn = Float64Array.from([100, 200]);
-    expect(withdrawalTargetSuccessRate(totalWithdrawn, 0)).toBeNull();
-    expect(withdrawalTargetSuccessRate(totalWithdrawn, -100)).toBeNull();
+  it('returns null when the planned benchmark is not positive', () => {
+    const actualWithdrawn = Float64Array.from([100, 200]);
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 0)).toBeNull();
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, -100)).toBeNull();
   });
 });
 

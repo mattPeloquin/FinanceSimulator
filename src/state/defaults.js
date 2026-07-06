@@ -28,6 +28,11 @@ export const SCENARIO_DEFAULTS = {
   // Valid UI range: 0–65. Goal Seek uses its own Risk Tolerance when enabled.
   planRiskTolerancePct: 5,
 
+  // How runs are ranked and scored against the plan. Options:
+  //   'total'        — lifetime total withdrawn (default)
+  //   'medianYearly' — median withdrawal per year (horizon-independent)
+  withdrawalMetric: 'total',
+
   // Expected length of consecutive-year runs (resampling) or AR(1) smoothing
   // strength (log-normal). Valid UI range: 1–6. 1 = fully independent years.
   blockSize: 3,

@@ -135,7 +135,7 @@ When you click **Run Simulation**, the scenario is validated (allocation must to
 
 The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. The progress bar also shows how many CPU cores are being used. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
 
-On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Goal Seek benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 6 cores: 1 master + 5 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster. The same panel has **Plan Risk Tolerance** — how far below your planned lifetime spending a run can fall and still count as "on plan" in the results and 3D chart (Goal Seek uses its own **Risk Tolerance** when enabled).
+On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Goal Seek benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 6 cores: 1 master + 5 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster. The same panel has **Withdrawal Success Metric** — choose whether runs are ranked and scored by **total lifetime withdrawal** (default) or **median withdrawal per year** (better when simulated horizons may differ). **Plan Risk Tolerance** sets how far below plan a run can fall and still count as "on plan" in the results and 3D chart (Goal Seek uses its own **Risk Tolerance** when enabled).
 
 The core engine (`src/core/simulation.js`) simulates one "possible future" at a time. For each simulated year it:
 
@@ -156,9 +156,9 @@ This is repeated for every year in your horizon, and the whole thing is repeated
 Once all simulations finish, the worker (`src/core/statistics.js`) computes:
 
 - **Success Rate (not depleted)** — the share of futures where your portfolio never ran out of money.
-- **Success Rate (on plan)** — a separate metric shown next to it: the share of futures where total withdrawn reached at least your acceptable shortfall below the planned schedule (default: within 5%; adjustable under **Advanced simulation settings** → **Plan Risk Tolerance**).
-- **Median end balance** and **median total withdrawn** across all runs.
-- A **ranking of every simulation by total money withdrawn**, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
+- **Success Rate (on plan)** — a separate metric shown next to it: the share of futures whose withdrawals reached at least your acceptable shortfall below the planned schedule (default: within 5%; adjustable under **Advanced simulation settings** → **Plan Risk Tolerance**). When **Withdrawal Success Metric** is set to median per year, this compares each run's median yearly withdrawal to the planned median instead of lifetime totals.
+- **Median end balance** and either **median total withdrawn** or **median withdrawal per year** across all runs (depending on the metric you chose).
+- A **ranking of every simulation** by your chosen withdrawal metric, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
 - A **histogram** of average annual real returns across all simulations, with summary cards above it (mean, median, worst, best, and spread) and colored reference bars for the median, P5, P95, and mean ± one standard deviation. A second histogram below it shows the same stats for every individual year real return used in the simulation.
 
 ### Step 5: Visualizing the results

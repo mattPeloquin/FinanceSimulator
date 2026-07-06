@@ -2,6 +2,7 @@
 // and be unit-tested directly.
 
 import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
+import { median } from './statistics.js';
 import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
@@ -87,6 +88,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const withdrawals = collectPath ? [] : null;
   const returns = collectPath ? [] : null;
   const unadjustedWithdrawals = collectPath ? [] : null;
+  // Per-year actual withdrawals — used to score each run by median yearly spending.
+  const yearlyWithdrawals = new Array(numYears);
 
   const sampleYears = samples ? samples.years : null;
   const sampleLen = sampleYears ? sampleYears.length : 0;
@@ -275,6 +278,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     }
 
     totalWithdrawn += actualWithdrawal;
+    yearlyWithdrawals[j] = actualWithdrawal;
     if (earlyWindow > 0 && j < earlyWindow) {
       earlyWithdrawn += actualWithdrawal;
     }
@@ -294,6 +298,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     avgReturn,
     finalBalance: balance,
     totalWithdrawn,
+    medianYearlyWithdrawal: median(yearlyWithdrawals),
     earlyWithdrawn,
     depletionYear,
   };
@@ -316,6 +321,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const avgReturn = new Float64Array(numSimulations);
   const finalBalance = new Float64Array(numSimulations);
   const totalWithdrawn = new Float64Array(numSimulations);
+  const medianYearlyWithdrawal = new Float64Array(numSimulations);
   const earlyWithdrawn = new Float64Array(numSimulations);
   const depletionYear = new Float64Array(numSimulations);
   const allYearsReturns = new Float64Array(numSimulations * numYears);
@@ -329,6 +335,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     avgReturn[i] = s.avgReturn;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
+    medianYearlyWithdrawal[i] = s.medianYearlyWithdrawal;
     earlyWithdrawn[i] = s.earlyWithdrawn;
     depletionYear[i] = s.depletionYear === Infinity ? params.numYears + 1 : s.depletionYear;
 
@@ -339,7 +346,17 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
 
   if (onProgress) onProgress(1);
 
-  return { baseSeed, numSimulations, avgReturn, finalBalance, totalWithdrawn, earlyWithdrawn, depletionYear, allYearsReturns };
+  return {
+    baseSeed,
+    numSimulations,
+    avgReturn,
+    finalBalance,
+    totalWithdrawn,
+    medianYearlyWithdrawal,
+    earlyWithdrawn,
+    depletionYear,
+    allYearsReturns,
+  };
 }
 
 // Regenerate the full path for a specific simulation index (exact, thanks to

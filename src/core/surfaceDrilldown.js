@@ -61,6 +61,7 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
       withdrawals: re.path.withdrawals,
       unadjustedWithdrawals: re.path.unadjustedWithdrawals,
       totalWithdrawn: re.totalWithdrawn,
+      medianYearlyWithdrawal: re.medianYearlyWithdrawal,
       avgReturn: re.avgReturn,
     };
   });

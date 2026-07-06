@@ -4,7 +4,7 @@
         <div class="text-[10px] uppercase tracking-wider text-theme-accent-text/70">Success Rate (not depleted)</div>
         <div id="successRate" class="text-2xl font-bold text-theme-accent-text"></div>
     </div>
-    <div class="bg-theme-accent-subtle border border-theme-accent/40 rounded-lg p-4 text-center" title="Share of runs whose total withdrawn reached at least the acceptable shortfall below the planned schedule">
+    <div class="bg-theme-accent-subtle border border-theme-accent/40 rounded-lg p-4 text-center" title="Share of runs whose withdrawals reached at least the acceptable shortfall below the planned schedule (total or median per year, depending on your metric setting)">
         <div id="withdrawalTargetSuccessRateLabel" class="text-[10px] uppercase tracking-wider text-theme-accent-text/70">Success Rate (on plan)</div>
         <div id="withdrawalTargetSuccessRate" class="text-2xl font-bold text-theme-accent-text"></div>
     </div>
@@ -13,11 +13,11 @@
         <div id="medianBalance" class="text-2xl font-bold text-theme-heading"></div>
     </div>
     <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
-        <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median Total Withdrawn</div>
+        <div id="medianWithdrawnLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Median Total Withdrawn</div>
         <div id="medianWithdrawn" class="text-2xl font-bold text-theme-heading"></div>
     </div>
     <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Total of the base withdrawal schedule, before any dynamic adjustments">
-        <div class="text-[10px] uppercase tracking-wider text-theme-faint">Planned Total Withdrawal</div>
+        <div id="plannedWithdrawnLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Planned Total Withdrawal</div>
         <div id="plannedWithdrawn" class="text-2xl font-bold text-theme-heading"></div>
     </div>
 </div>
@@ -25,7 +25,7 @@
 <div class="space-y-4">
     <h3 class="text-lg font-semibold text-theme-body"
     >Simulation Outcomes</h3>
-    <p class="text-sm text-theme-faint mb-4"
+    <p id="outcomesDescription" class="text-sm text-theme-faint mb-4"
         >Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.</p>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
 

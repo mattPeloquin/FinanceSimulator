@@ -33,6 +33,7 @@ const FIELDS = [
   field('randomSeed', 'randomSeed', 'string'),
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
   field('planRiskTolerancePct', 'planRiskTolerancePct', 'float'),
+  field('withdrawalMetric', 'withdrawalMetric', 'string'),
 
   field('startYear', 'startYear', 'int'),
   field('endYear', 'endYear', 'int'),
@@ -500,6 +501,7 @@ export function buildSimParams(scenario, samples) {
     // Fraction of runs on each side of a percentile rank to average together
     // (clamped to a sane range). Consumed by the worker's path smoothing.
     smoothFraction: Math.min(Math.max(num(scenario.smoothWindowPct) / 100, 0), 0.1),
+    withdrawalMetric: scenario.withdrawalMetric === 'medianYearly' ? 'medianYearly' : 'total',
     allocation: {
       usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
       usLgValue: (scenario.usLgValueAllocation || 0) / 100,
@@ -626,6 +628,7 @@ export function buildGoalSeekConfig(scenario) {
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
     searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
+    withdrawalMetric: scenario.withdrawalMetric === 'medianYearly' ? 'medianYearly' : 'total',
   };
 }
 

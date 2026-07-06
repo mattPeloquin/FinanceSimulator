@@ -7,7 +7,7 @@ import {
   buildDrilldownPaths,
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
-import { meetsWithdrawalTarget } from '../../core/statistics.js';
+import { meetsWithdrawalTarget, median, isMedianYearlyMetric } from '../../core/statistics.js';
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 
@@ -92,6 +92,9 @@ const surfaceState = {
   lastContext: null,
   shortfallTolerance: 0.05,
   plannedWithdrawn: 0,
+  plannedMedianYearly: 0,
+  onPlanBenchmark: 0,
+  withdrawalMetric: 'total',
 };
 
 async function loadEcharts() {
@@ -163,11 +166,19 @@ function pathDepleted(balances) {
   return balances.some((b, i) => i > 0 && b <= 0);
 }
 
-// Funded path that fell short of the risk-adjusted plan total (same rule as the
-// "Success Rate (within X% of plan)" metric and Goal Seek scoring).
-function pathBelowPlan(totalWithdrawn, plannedTotal, shortfallTolerance) {
-  if (plannedTotal <= 0) return false;
-  return !meetsWithdrawalTarget(totalWithdrawn ?? 0, plannedTotal, shortfallTolerance);
+// Funded path that fell short of the risk-adjusted plan benchmark (same rule as
+// the "Success Rate (within X% of plan)" metric and Goal Seek scoring).
+function pathActualWithdrawal(path, withdrawalMetric) {
+  if (isMedianYearlyMetric(withdrawalMetric)) {
+    if (path.medianYearlyWithdrawal != null) return path.medianYearlyWithdrawal;
+    return median(path.withdrawals || []);
+  }
+  return path.totalWithdrawn ?? 0;
+}
+
+function pathBelowPlan(actualWithdrawn, plannedBenchmark, shortfallTolerance) {
+  if (plannedBenchmark <= 0) return false;
+  return !meetsWithdrawalTarget(actualWithdrawn ?? 0, plannedBenchmark, shortfallTolerance);
 }
 
 function floatThemeForSeries(series) {
@@ -842,24 +853,38 @@ function bindEvents() {
   surfaceState.eventsBound = true;
 }
 
-function buildColumnsFromPaths(surfacePaths, numYears, { shortfallTolerance, plannedWithdrawn } = {}) {
+function buildColumnsFromPaths(surfacePaths, numYears, {
+  shortfallTolerance,
+  plannedWithdrawn,
+  plannedMedianYearly,
+  onPlanBenchmark,
+  withdrawalMetric,
+} = {}) {
   const numCols = surfacePaths.length;
   const numRows = numYears + 1;
   const startBalance = surfacePaths[0] ? surfacePaths[0].balances[0] : 0;
   const zCap = startBalance * Z_CAP_MULTIPLE;
   const tolerance = shortfallTolerance ?? surfaceState.shortfallTolerance ?? 0.05;
-  const plannedTotal = plannedWithdrawn > 0
-    ? plannedWithdrawn
-    : (surfacePaths[0]?.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
+  const metric = withdrawalMetric ?? surfaceState.withdrawalMetric ?? 'total';
+  const plannedTotal = onPlanBenchmark > 0
+    ? onPlanBenchmark
+    : isMedianYearlyMetric(metric)
+      ? (plannedMedianYearly > 0
+        ? plannedMedianYearly
+        : median(surfacePaths[0]?.unadjustedWithdrawals ?? []))
+      : (plannedWithdrawn > 0
+        ? plannedWithdrawn
+        : (surfacePaths[0]?.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0));
 
   const data3D = [];
   const columns = [];
   const depletedCols = [];
   const belowPlanCols = [];
   for (let x = 0; x < numCols; x++) {
-    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn } = surfacePaths[x];
+    const path = surfacePaths[x];
+    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn } = path;
     const depleted = pathDepleted(balances);
-    const belowPlan = !depleted && pathBelowPlan(totalWithdrawn, plannedTotal, tolerance);
+    const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), plannedTotal, tolerance);
     depletedCols.push(depleted);
     belowPlanCols.push(belowPlan);
     const colPoints = [];
@@ -891,6 +916,9 @@ function applySurfaceDataset(surfacePaths, numYears) {
     buildColumnsFromPaths(surfacePaths, numYears, {
       shortfallTolerance: surfaceState.shortfallTolerance,
       plannedWithdrawn: surfaceState.plannedWithdrawn,
+      plannedMedianYearly: surfaceState.plannedMedianYearly,
+      onPlanBenchmark: surfaceState.onPlanBenchmark,
+      withdrawalMetric: surfaceState.withdrawalMetric,
     });
 
   surfaceState.columns = columns;
@@ -990,6 +1018,9 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     surfaceMeta = null,
     shortfallTolerance = 0.05,
     plannedWithdrawn = 0,
+    plannedMedianYearly = 0,
+    onPlanBenchmark = 0,
+    withdrawalMetric = 'total',
   } = context;
 
   surfaceState.viewMode = 'overview';
@@ -999,6 +1030,9 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.surfaceMeta = surfaceMeta;
   surfaceState.shortfallTolerance = shortfallTolerance;
   surfaceState.plannedWithdrawn = plannedWithdrawn;
+  surfaceState.plannedMedianYearly = plannedMedianYearly;
+  surfaceState.onPlanBenchmark = onPlanBenchmark;
+  surfaceState.withdrawalMetric = withdrawalMetric;
   surfaceState.drilldownCenterRank = null;
   surfaceState.drilldownLo = null;
   surfaceState.drilldownHi = null;
@@ -1006,7 +1040,13 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.lastContext = { surfacePaths, numYears, context };
 
   const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
-    buildColumnsFromPaths(surfacePaths, numYears, { shortfallTolerance, plannedWithdrawn });
+    buildColumnsFromPaths(surfacePaths, numYears, {
+      shortfallTolerance,
+      plannedWithdrawn,
+      plannedMedianYearly,
+      onPlanBenchmark,
+      withdrawalMetric,
+    });
 
   surfaceState.columns = columns;
   surfaceState.depletedCols = depletedCols;
