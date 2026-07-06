@@ -581,6 +581,30 @@ describe('deposits from negative withdrawals', () => {
     expect(s.path.balances[1]).toBeCloseTo(1_100_000, 3);
   });
 
+  it('enforces a percentage minimum floor on a specific-list withdrawal', () => {
+    const p = flatParams();
+    p.numYears = 1;
+    p.portfolio.specificWithdrawals = [100_000];
+    p.portfolio.withdrawalFloorSeries = [80_000];
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: 0, bal: 0, adj: -50_000 };
+    p.dynConfig.med = { ret: 0, bal: 0, adj: -50_000 };
+    p.dynConfig.high = { ret: 0, bal: 0, adj: -50_000 };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    // Target would be 50k after adjustment, but 80% floor raises it to 80k.
+    expect(s.path.withdrawals[0]).toBeCloseTo(80_000, 3);
+  });
+
+  it('skips percentage minimum floor on a deposit year', () => {
+    const p = flatParams();
+    p.numYears = 1;
+    p.portfolio.specificWithdrawals = [-100_000];
+    p.portfolio.withdrawalFloorSeries = [0];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(-100_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_100_000, 3);
+  });
+
   it('reuses the last list value for years beyond the pasted list', () => {
     const p = flatParams();
     p.numYears = 4;

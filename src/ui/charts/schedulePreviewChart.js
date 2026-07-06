@@ -8,20 +8,29 @@ import { getChartTheme, chartJsTooltip } from './chartTheme.js';
 // `floorSeries`, when given and it contains any positive value, is drawn as a
 // dashed reference line — a guide for the minimum-withdrawal backstop that
 // sits alongside the schedule without changing the schedule's own values.
-export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null) {
+// `floorStepped` (default true): use Chart.js stepped rendering for flat
+// dollar tiers (Base strategy). Set false for percentage floors that scale
+// with each year's list amount (Specific List) so the line follows the schedule shape.
+function clampToWithdrawals(values) {
+  return values.map((v) => Math.max(0, v));
+}
+
+export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, { floorStepped = true } = {}) {
   const theme = getChartTheme();
   const labels = amounts.map((_, i) => String(i + 1));
-  const showFloor = Array.isArray(floorSeries) && floorSeries.some((v) => v > 0);
+  const displayAmounts = clampToWithdrawals(amounts);
+  const displayFloor = Array.isArray(floorSeries) ? clampToWithdrawals(floorSeries) : null;
+  const showFloor = displayFloor?.some((v) => v > 0);
 
   const datasets = [
     {
       label: 'Withdrawal',
-      data: amounts,
+      data: displayAmounts,
       borderColor: theme.accent,
       backgroundColor: theme.accentFillSoft,
       borderWidth: 2,
       tension: 0.1,
-      pointRadius: amounts.length <= 40 ? 3 : 0,
+      pointRadius: displayAmounts.length <= 40 ? 3 : 0,
       pointHoverRadius: 4,
       fill: true,
       order: 1,
@@ -31,12 +40,12 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null) {
   if (showFloor) {
     datasets.push({
       label: 'Minimum',
-      data: floorSeries,
+      data: displayFloor,
       borderColor: theme.floorLine,
       backgroundColor: 'transparent',
       borderWidth: 1.5,
       borderDash: [4, 3],
-      stepped: 'before',
+      ...(floorStepped ? { stepped: 'before' } : { tension: 0.1 }),
       pointRadius: 0,
       pointHoverRadius: 3,
       fill: false,
@@ -59,6 +68,7 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null) {
         },
         y: {
           beginAtZero: true,
+          min: 0,
           ticks: { maxTicksLimit: 5, font: { size: 9 }, callback: (v) => `$${formatK(v)}`, color: theme.axisTick },
           grid: { color: theme.gridLine },
         },
@@ -80,12 +90,10 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null) {
   });
 }
 
-// Deposits show up as negative years in the schedule — summing directly
-// nets them against the withdrawals, so the total reflects money actually
-// taken out of the portfolio overall.
+// Deposits (negative schedule years) are omitted from the preview chart and total.
 export function renderSchedulePreviewTotal(totalLabelId, amounts) {
   const label = document.getElementById(totalLabelId);
   if (!label) return;
-  const total = amounts.reduce((sum, v) => sum + v, 0);
+  const total = amounts.reduce((sum, v) => sum + (v > 0 ? v : 0), 0);
   label.textContent = `Total: $${formatK(total)}`;
 }

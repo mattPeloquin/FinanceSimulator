@@ -7,6 +7,7 @@ import {
   parseCurrency,
   formatCurrency,
   optionalBalanceThreshold,
+  readDynConfigFromScenario,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
   migrateScenario,
@@ -20,6 +21,15 @@ describe('currency helpers', () => {
     expect(parseCurrency('4,000')).toBe(4000);
     expect(parseCurrency('80')).toBe(80);
     expect(parseCurrency('')).toBe(0);
+  });
+  it('preserves negative values', () => {
+    expect(parseCurrency('-100')).toBe(-100);
+    expect(parseCurrency('-22')).toBe(-22);
+    expect(parseCurrency('0')).toBe(0);
+  });
+  it('strips dollar signs when pasted', () => {
+    expect(parseCurrency('$-100')).toBe(-100);
+    expect(parseCurrency('$1,234')).toBe(1234);
   });
   it('formats numbers with separators', () => {
     expect(formatCurrency(4000)).toBe('4,000');
@@ -69,6 +79,22 @@ describe('buildSimParams', () => {
     expect(p.dynConfig.high.adj).toBe(s.dynHighAdj * MONEY_SCALE);
   });
 
+  it('readDynConfigFromScenario matches buildSimParams dynConfig', () => {
+    const s = defaultScenario();
+    s.dynLowRet = -10;
+    s.dynLowAdj = -100;
+    s.dynMedRet = 5;
+    s.dynMedAdj = -22;
+    s.dynHighRet = 30;
+    s.dynHighAdj = 0;
+    const fromReader = readDynConfigFromScenario(s);
+    const fromParams = buildSimParams(s, { years: [] }).dynConfig;
+    expect(fromReader).toEqual(fromParams);
+    expect(fromReader.low.adj).toBe(-100_000);
+    expect(fromReader.med.adj).toBe(-22_000);
+    expect(fromReader.high.adj).toBe(0);
+  });
+
   it('uses a random seed when none is provided', () => {
     const s = defaultScenario();
     s.randomSeed = '';
@@ -113,14 +139,35 @@ describe('buildSimParams', () => {
     expect(p.portfolio.withdrawalFloorSeries.every((v) => v === 0)).toBe(true);
   });
 
-  it('ignores minimum-withdrawal tiers entirely for a Specific List strategy', () => {
+  it('ignores base minimum-withdrawal tiers for a Specific List strategy', () => {
     const s = defaultScenario();
     s.numYears = 5;
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '80\n85\n90';
     s.withdrawalFloors = [{ amount: 120, years: 2 }, { amount: 80 }];
+    s.specificWithdrawalFloors = [];
     const p = buildSimParams(s, { years: [] });
-    expect(p.portfolio.withdrawalFloorSeries).toEqual([]);
+    expect(p.portfolio.withdrawalFloorSeries.every((v) => v === 0)).toBe(true);
+  });
+
+  it('builds percentage minimum floors for a Specific List strategy', () => {
+    const s = defaultScenario();
+    s.numYears = 3;
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '100\n90\n80';
+    s.specificWithdrawalFloors = [{ pct: 80, years: 1 }, { pct: 60 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.withdrawalFloorSeries).toEqual([80_000, 54_000, 48_000]);
+  });
+
+  it('assigns zero floor to deposit years in a Specific List strategy', () => {
+    const s = defaultScenario();
+    s.numYears = 2;
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '-50\n100';
+    s.specificWithdrawalFloors = [{ pct: 80 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.withdrawalFloorSeries).toEqual([0, 80_000]);
   });
 
   it('includes scaledHistoricalShocks when sample years are provided', () => {
@@ -311,7 +358,7 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('final tier'))).toBe(true);
   });
 
-  it('does not validate minimum-withdrawal tiers for a Specific List strategy', () => {
+  it('does not validate base minimum-withdrawal tiers for a Specific List strategy', () => {
     const s = defaultScenario();
     s.numYears = 10;
     s.withdrawalStrategy = 'specific';
@@ -319,6 +366,16 @@ describe('validateScenario', () => {
     s.withdrawalFloors = [{ amount: 100, years: 10 }, { amount: 80 }];
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('final tier'))).toBe(false);
+  });
+
+  it('flags Specific List minimum tiers that leave no room for the final tier', () => {
+    const s = defaultScenario();
+    s.numYears = 10;
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '80\n85\n90';
+    s.specificWithdrawalFloors = [{ pct: 80, years: 10 }, { pct: 60 }];
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(true);
   });
 
   it('flags an out-of-range plan risk tolerance', () => {

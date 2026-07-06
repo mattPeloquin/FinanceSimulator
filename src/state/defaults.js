@@ -107,6 +107,11 @@ export const SCENARIO_DEFAULTS = {
   // Paste-friendly text; negative = deposit. Leave empty when using 'base'.
   specificWithdrawals: '',
 
+  // Staged minimums as % of each year's Specific List amount.
+  // Intermediate tiers need a year count; last tier covers remaining years.
+  // Empty = no floor (typed amounts used as-is).
+  specificWithdrawalFloors: [],
+
   // Dynamic adjustments
 
   // Master toggle for market-return and balance-based withdrawal adjustments.

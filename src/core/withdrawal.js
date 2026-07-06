@@ -92,3 +92,47 @@ export function buildWithdrawalFloorSeries(tiers, numYears, toDollarsFn) {
   }
   return series;
 }
+
+// Build a per-year minimum-withdrawal percentage series from staged tiers.
+// Intermediate tiers run for their year count; the final tier fills the horizon.
+export function buildWithdrawalFloorPctSeries(tiers, numYears) {
+  if (numYears <= 0) return [];
+  const series = new Array(numYears).fill(0);
+  if (!tiers || tiers.length === 0) return series;
+
+  let yearIndex = 0;
+  for (let i = 0; i < tiers.length - 1; i++) {
+    const pct = tiers[i].pct;
+    const span = Math.max(0, parseInt(tiers[i].years, 10) || 0);
+    for (let k = 0; k < span && yearIndex < numYears; k++) {
+      series[yearIndex++] = pct;
+    }
+  }
+
+  const lastPct = tiers[tiers.length - 1].pct;
+  while (yearIndex < numYears) {
+    series[yearIndex++] = lastPct;
+  }
+  return series;
+}
+
+// Convert Specific List percentage tiers into per-year dollar floors.
+// Each year's floor is that year's list amount times the tier percentage.
+// Deposits (negative list amounts) get no floor so they stay deposits.
+export function buildSpecificWithdrawalFloorSeries(pctTiers, specificAmountsDollars, numYears) {
+  if (numYears <= 0) return [];
+  const pctSeries = buildWithdrawalFloorPctSeries(pctTiers, numYears);
+  const amounts = specificAmountsDollars || [];
+  const series = new Array(numYears).fill(0);
+
+  for (let j = 0; j < numYears; j++) {
+    const listAmount = amounts[j] ?? 0;
+    if (listAmount < 0) {
+      series[j] = 0;
+      continue;
+    }
+    const pct = pctSeries[j] ?? 0;
+    series[j] = pct > 0 ? listAmount * (pct / 100) : 0;
+  }
+  return series;
+}

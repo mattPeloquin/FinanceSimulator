@@ -3,7 +3,7 @@
 // anchors currently in the form.
 import { Chart } from './chartSetup.js';
 import { getDynamicAdjustment } from '../../core/withdrawal.js';
-import { parseCurrency, MONEY_SCALE } from '../../state/scenario.js';
+import { readDynConfigFromDom } from '../../state/scenario.js';
 import { formatK } from '../format.js';
 import { getChartTheme, chartJsTooltip } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
@@ -18,34 +18,40 @@ function isSectionVisible() {
   return wrapper && !wrapper.classList.contains('hidden');
 }
 
-function readDynConfigFromForm() {
-  const ret = (id) => parseFloat(document.getElementById(id)?.value) || 0;
-  const adj = (id) => parseCurrency(document.getElementById(id)?.value) * MONEY_SCALE;
-  return {
-    low: { ret: ret('dynLowRet'), adj: adj('dynLowAdj') },
-    med: { ret: ret('dynMedRet'), adj: adj('dynMedAdj') },
-    high: { ret: ret('dynHighRet'), adj: adj('dynHighAdj') },
-  };
-}
-
-function chartReturnRange(dynConfig) {
+export function chartReturnRange(dynConfig) {
   const { low, high } = dynConfig;
   const span = high.ret - low.ret;
   const pad = span > 0 ? span * 0.1 : 5;
   return { min: low.ret - pad, max: high.ret + pad };
 }
 
-function buildSeries(dynConfig) {
+/** Build preview points for the market-return adjustment curve. */
+export function buildMarketAdjPreviewSeries(dynConfig) {
   const { min, max } = chartReturnRange(dynConfig);
   const points = [];
   for (let i = 0; i <= SAMPLE_POINTS; i++) {
     const nominalReturn = min + ((max - min) * i) / SAMPLE_POINTS;
     points.push({ x: nominalReturn, y: getDynamicAdjustment(nominalReturn, dynConfig) });
   }
+
+  // Ensure exact anchor returns are represented so the curve hits the typed values.
+  for (const ret of [dynConfig.low.ret, dynConfig.med.ret, dynConfig.high.ret]) {
+    points.push({ x: ret, y: getDynamicAdjustment(ret, dynConfig) });
+  }
+
+  points.sort((a, b) => a.x - b.x);
   return points;
 }
 
-function buildChart(canvas, points) {
+export function buildMarketAdjAnchorPoints(dynConfig) {
+  return [
+    { x: dynConfig.low.ret, y: dynConfig.low.adj },
+    { x: dynConfig.med.ret, y: dynConfig.med.adj },
+    { x: dynConfig.high.ret, y: dynConfig.high.adj },
+  ];
+}
+
+function buildChart(canvas, points, anchors) {
   const theme = getChartTheme();
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
@@ -61,6 +67,17 @@ function buildChart(canvas, points) {
           pointRadius: 0,
           pointHoverRadius: 3,
           fill: { target: { value: 0 } },
+        },
+        {
+          label: 'Anchors',
+          data: anchors,
+          borderColor: theme.floorLine,
+          backgroundColor: theme.floorLine,
+          borderWidth: 0,
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          showLine: false,
+          fill: false,
         },
       ],
     },
@@ -93,7 +110,9 @@ function buildChart(canvas, points) {
           displayColors: false,
           callbacks: {
             title: (items) => `Return: ${items[0].parsed.x.toFixed(1)}%`,
-            label: (ctx) => `Adjustment: $${formatK(ctx.parsed.y)}k`,
+            label: (ctx) => (ctx.dataset.label === 'Anchors'
+              ? `Anchor: $${formatK(ctx.parsed.y)}k`
+              : `Adjustment: $${formatK(ctx.parsed.y)}k`),
           },
         },
       },
@@ -110,12 +129,14 @@ function renderSparkline() {
     return;
   }
 
-  const points = buildSeries(readDynConfigFromForm());
+  const dynConfig = readDynConfigFromDom();
+  const points = buildMarketAdjPreviewSeries(dynConfig);
+  const anchors = buildMarketAdjAnchorPoints(dynConfig);
   if (sparkChart) {
     sparkChart.destroy();
     sparkChart = null;
   }
-  sparkChart = buildChart(canvas, points);
+  sparkChart = buildChart(canvas, points, anchors);
 }
 
 export function syncWithdrawalAdjPreview() {

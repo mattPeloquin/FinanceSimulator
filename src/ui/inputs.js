@@ -1,10 +1,10 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom } from '../state/scenario.js';
+import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom } from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
-import { syncWithdrawalPreview, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
+import { syncWithdrawalPreview, syncWithdrawalPreviewFromForm, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
@@ -168,6 +168,9 @@ function syncGoalSeekSectionExpansion() {
   const minDetails = document.getElementById('details-min-withdrawal');
   if (minDetails && strategy !== 'specific') minDetails.open = true;
 
+  const specificMinDetails = document.getElementById('details-specific-min-withdrawal');
+  if (specificMinDetails && strategy === 'specific') specificMinDetails.open = true;
+
   if (document.getElementById('goalSeekIncludeMarketAdjustments')?.checked) {
     const marketDetails = document.getElementById('details-market-adjustment');
     if (marketDetails) marketDetails.open = true;
@@ -205,12 +208,15 @@ export function toggleDynamicAdjustments(enabled) {
   const wrapper = document.getElementById('dynamic-adjustments-wrapper');
   if (enabled) {
     wrapper.classList.remove('hidden');
-    // The sparkline can't render while the section is hidden; draw it now.
-    syncGuardrailPreview();
-    syncWithdrawalAdjPreview();
+    refreshDynamicAdjustmentPreviews();
   } else {
     wrapper.classList.add('hidden');
   }
+}
+
+export function refreshDynamicAdjustmentPreviews() {
+  syncGuardrailPreview();
+  syncWithdrawalAdjPreview();
 }
 
 function formatWithdrawalFloorCurrencyInput(input) {
@@ -256,6 +262,40 @@ export function setupWithdrawalFloorList({ onChange }) {
       notify();
     }
   }, true);
+}
+
+export function setupSpecificWithdrawalFloorList({ onChange }) {
+  const list = document.getElementById('specificWithdrawalFloorsList');
+  const addBtn = document.getElementById('addSpecificWithdrawalFloorTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readSpecificWithdrawalFloorsFromDom();
+    if (tiers.length === 0) {
+      writeSpecificWithdrawalFloorsToDom([{ pct: 80 }]);
+      notify();
+      return;
+    }
+    const last = tiers.pop();
+    tiers.push({ pct: last.pct, years: 1 });
+    tiers.push(last);
+    writeSpecificWithdrawalFloorsToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-specific-withdrawal-floor-tier');
+    if (!btn) return;
+    const tiers = readSpecificWithdrawalFloorsFromDom();
+    tiers.splice(Number(btn.closest('[data-specific-withdrawal-floor-row]')?.dataset.specificWithdrawalFloorRow), 1);
+    writeSpecificWithdrawalFloorsToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('change', notify);
+  list.addEventListener('input', notify);
 }
 
 export function renderYearLabels(years) {
@@ -427,7 +467,10 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
 
   for (const id of ['dynLowRet', 'dynMedRet', 'dynHighRet', 'dynLowAdj', 'dynMedAdj', 'dynHighAdj']) {
     const input = document.getElementById(id);
-    if (input) input.addEventListener('input', syncWithdrawalAdjPreview);
+    if (input) {
+      input.addEventListener('input', syncWithdrawalAdjPreview);
+      input.addEventListener('change', syncWithdrawalAdjPreview);
+    }
   }
   syncWithdrawalAdjPreview();
 
@@ -473,6 +516,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   });
 
   setupWithdrawalFloorList({ onChange: notify });
+  setupSpecificWithdrawalFloorList({ onChange: notify });
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever
   // a tier is typed into, added, or removed. Registered after
@@ -486,6 +530,16 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   const addWithdrawalFloorTierBtn = document.getElementById('addWithdrawalFloorTier');
   if (addWithdrawalFloorTierBtn) {
     addWithdrawalFloorTierBtn.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+
+  const specificWithdrawalFloorsList = document.getElementById('specificWithdrawalFloorsList');
+  if (specificWithdrawalFloorsList) {
+    specificWithdrawalFloorsList.addEventListener('input', syncWithdrawalPreviewFromForm);
+    specificWithdrawalFloorsList.addEventListener('click', syncWithdrawalPreviewFromForm);
+  }
+  const addSpecificWithdrawalFloorTierBtn = document.getElementById('addSpecificWithdrawalFloorTier');
+  if (addSpecificWithdrawalFloorTierBtn) {
+    addSpecificWithdrawalFloorTierBtn.addEventListener('click', syncWithdrawalPreviewFromForm);
   }
 
   setupAccordionResize();

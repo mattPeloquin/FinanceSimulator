@@ -242,14 +242,14 @@ describe('plannedScheduleTotal', () => {
     expect(plannedScheduleTotal(portfolio, 5)).toBe(80_000 + 85_000 + 90_000 + 90_000 + 90_000);
   });
 
-  it('applies minimum-withdrawal floors on top of a specific-list schedule', () => {
+  it('keeps typed amounts as the plan when percentage floors are below 100%', () => {
     const portfolio = {
       strategy: 'specific',
       specificWithdrawals: [50_000, 85_000, 90_000],
-      withdrawalFloorSeries: [70_000, 0, 0],
+      withdrawalFloorSeries: [40_000, 68_000, 72_000], // 80% of each year's amount
     };
-    // year 0: max(50k, 70k floor) = 70k; years 1-2 unchanged.
-    expect(plannedScheduleTotal(portfolio, 3)).toBe(70_000 + 85_000 + 90_000);
+    // Floors are backstops only — the planned schedule stays the typed amounts.
+    expect(plannedScheduleTotal(portfolio, 3)).toBe(50_000 + 85_000 + 90_000);
   });
 });
 

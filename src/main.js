@@ -43,6 +43,7 @@ import {
   toggleWithdrawalStrategy,
   toggleDynamicAdjustments,
   toggleGoalSeekMode,
+  refreshDynamicAdjustmentPreviews,
 } from './ui/inputs.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderResults } from './ui/results.js';
@@ -256,6 +257,8 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
     const ceilingBonusEl = document.getElementById('ceilingBonus');
     if (ceilingBonusEl) ceilingBonusEl.value = Math.round(ceilingBonus * 100);
   }
+
+  refreshDynamicAdjustmentPreviews();
 }
 
 function runGoalSeekSearch() {
@@ -623,6 +626,7 @@ function applyScenario(scenario) {
   toggleWithdrawalStrategy(merged.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
   toggleGoalSeekMode(merged.goalSeekMode ?? false);
+  refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
   // Refresh charts/samples for the range; keep the scenario's own profiles.
   const hasProfiles = merged.usLgGrowthMean != null && merged.usLgGrowthMean !== '';

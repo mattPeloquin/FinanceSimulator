@@ -7,7 +7,7 @@
 
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
-import { buildWithdrawalFloorSeries } from '../core/withdrawal.js';
+import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
@@ -110,7 +110,12 @@ export const ALLOCATION_KEYS = [
 export function parseCurrency(val) {
   if (typeof val === 'number') return val;
   if (val == null || val === '') return 0;
-  return parseFloat(String(val).replace(/,/g, '')) || 0;
+  const normalized = String(val)
+    .replace(/\u2212/g, '-')
+    .replace(/[$,]/g, '')
+    .trim();
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
 /** Convert a $000s scenario value to dollars for the simulation engine. */
@@ -247,6 +252,97 @@ export function writeWithdrawalFloorsToDom(tiers, doc = document) {
   });
 }
 
+function clampPct(value) {
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, 0), 100);
+}
+
+/** Normalize Specific List minimum tiers; empty array means no minimum. */
+export function normalizeSpecificWithdrawalFloors(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [];
+  }
+  return tiers.map((tier, index, arr) => {
+    const pct = clampPct(tier?.pct);
+    const isLast = index === arr.length - 1;
+    if (isLast) return { pct };
+    const years = parseInt(tier?.years, 10);
+    return { pct, years: Number.isFinite(years) && years >= 1 ? years : 1 };
+  });
+}
+
+export function readSpecificWithdrawalFloorsFromDom(doc = document) {
+  const list = doc.getElementById('specificWithdrawalFloorsList');
+  if (!list) return normalizeSpecificWithdrawalFloors(SCENARIO_DEFAULTS.specificWithdrawalFloors);
+
+  const rows = list.querySelectorAll('[data-specific-withdrawal-floor-row]');
+  if (rows.length === 0) return [];
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const pctInput = row.querySelector('[data-specific-floor-pct]');
+    const yearsInput = row.querySelector('[data-specific-floor-years]');
+    const pct = clampPct(pctInput?.value);
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push({ pct });
+    } else {
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({ pct, years: Number.isFinite(years) ? years : null });
+    }
+  });
+  return tiers;
+}
+
+export function writeSpecificWithdrawalFloorsToDom(tiers, doc = document) {
+  const list = doc.getElementById('specificWithdrawalFloorsList');
+  if (!list) return;
+
+  const normalized = normalizeSpecificWithdrawalFloors(tiers);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'flex flex-wrap items-end gap-2 mb-2';
+    row.dataset.specificWithdrawalFloorRow = String(index);
+
+    const pctWrap = doc.createElement('div');
+    pctWrap.className = 'flex-1 min-w-[7rem]';
+    pctWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Minimum</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="number" data-specific-floor-pct min="0" max="100" step="1" class="w-full rounded input-theme p-1 text-sm text-center" value="${tier.pct}">
+        <span class="input-adorn-suffix">%</span>
+      </div>`;
+
+    row.appendChild(pctWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-specific-floor-years min="1" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 1}">`;
+      row.appendChild(yearsWrap);
+    } else if (normalized.length > 1) {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      row.appendChild(labelWrap);
+    }
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-specific-withdrawal-floor-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
+    removeBtn.textContent = 'Remove';
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
+}
+
 export function defaultScenario() {
   return { ...SCENARIO_DEFAULTS };
 }
@@ -272,6 +368,7 @@ export function readScenarioFromDom(doc = document) {
   const strat = doc.querySelector('input[name="withdrawal-strategy"]:checked');
   scenario.withdrawalStrategy = strat ? strat.value : SCENARIO_DEFAULTS.withdrawalStrategy;
   scenario.withdrawalFloors = readWithdrawalFloorsFromDom(doc);
+  scenario.specificWithdrawalFloors = readSpecificWithdrawalFloorsFromDom(doc);
 
   return scenario;
 }
@@ -319,6 +416,10 @@ export function writeScenarioToDom(scenario, doc = document) {
 
   writeWithdrawalFloorsToDom(
     scenario.withdrawalFloors ?? SCENARIO_DEFAULTS.withdrawalFloors,
+    doc,
+  );
+  writeSpecificWithdrawalFloorsToDom(
+    scenario.specificWithdrawalFloors ?? SCENARIO_DEFAULTS.specificWithdrawalFloors,
     doc,
   );
 }
@@ -419,27 +520,31 @@ export function buildSimParams(scenario, samples) {
       floorPenalty: (scenario.floorPenalty || 0) / 100,
       ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
-      // Minimum withdrawal is a Base-strategy guide only — a Specific List's
-      // amounts are typed in directly, so the floor never applies to it.
-      withdrawalFloorSeries: scenario.withdrawalStrategy === 'specific'
-        ? []
-        : buildWithdrawalFloorSeries(
-            normalizeWithdrawalFloors(scenario.withdrawalFloors),
+      withdrawalFloorSeries: (() => {
+        if (scenario.withdrawalStrategy === 'specific') {
+          const specificAmounts = fitSpecificWithdrawalsToHorizon(
+            parseSpecificWithdrawals(scenario.specificWithdrawals),
             scenario.numYears,
-            toDollars,
-          ),
+          );
+          return buildSpecificWithdrawalFloorSeries(
+            normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors),
+            specificAmounts,
+            scenario.numYears,
+          );
+        }
+        return buildWithdrawalFloorSeries(
+          normalizeWithdrawalFloors(scenario.withdrawalFloors),
+          scenario.numYears,
+          toDollars,
+        );
+      })(),
       // Front-loading controls. Same name as the scenario's spendChangePct field,
       // but converted from a percentage to a decimal rate.
       spendChangeRate: (scenario.spendChangePct || 0) / 100,
       goGoBonus: toDollars(scenario.goGoBonus),
       goGoYears: scenario.goGoYears || 0,
     },
-    dynConfig: {
-      enabled: scenario.enableDynamicAdjustments ?? true,
-      low: { ret: scenario.dynLowRet, bal: optionalBalanceThreshold(scenario.dynLowBal), adj: toDollars(scenario.dynLowAdj) },
-      med: { ret: scenario.dynMedRet, bal: optionalBalanceThreshold(scenario.dynMedBal), adj: toDollars(scenario.dynMedAdj) },
-      high: { ret: scenario.dynHighRet, bal: optionalBalanceThreshold(scenario.dynHighBal), adj: toDollars(scenario.dynHighAdj) },
-    },
+    dynConfig: readDynConfigFromScenario(scenario),
     logNormal: {
       usLgGrowth: { mean: num(scenario.usLgGrowthMean) / 100, stdDev: num(scenario.usLgGrowthStdDev) / 100 },
       usLgValue: { mean: num(scenario.usLgValueMean) / 100, stdDev: num(scenario.usLgValueStdDev) / 100 },
@@ -472,6 +577,33 @@ export function planShortfallTolerance(scenario) {
 function num(v) {
   const n = typeof v === 'number' ? v : parseFloat(v);
   return Number.isNaN(n) ? 0 : n;
+}
+
+/** Build engine-ready dynamic adjustment config from a scenario object. */
+export function readDynConfigFromScenario(scenario) {
+  return {
+    enabled: scenario.enableDynamicAdjustments ?? true,
+    low: {
+      ret: num(scenario.dynLowRet),
+      bal: optionalBalanceThreshold(scenario.dynLowBal),
+      adj: toDollars(scenario.dynLowAdj),
+    },
+    med: {
+      ret: num(scenario.dynMedRet),
+      bal: optionalBalanceThreshold(scenario.dynMedBal),
+      adj: toDollars(scenario.dynMedAdj),
+    },
+    high: {
+      ret: num(scenario.dynHighRet),
+      bal: optionalBalanceThreshold(scenario.dynHighBal),
+      adj: toDollars(scenario.dynHighAdj),
+    },
+  };
+}
+
+/** Read dynamic adjustment config from the form — same path as Run Simulation. */
+export function readDynConfigFromDom(doc = document) {
+  return readDynConfigFromScenario(readScenarioFromDom(doc));
 }
 
 // Convert a scenario's Goal Seek fields into the config object consumed by
@@ -575,13 +707,12 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     errors.push(`Year range must be valid and within ${minYear}-${maxYear}.`);
   }
 
-  // Minimum-withdrawal tiers only apply to the Base strategy (see buildSimParams),
-  // so a Specific List scenario shouldn't be blocked by their configuration.
-  const tiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
-  if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && tiers.length > 1) {
+  // Minimum-withdrawal tiers: absolute $ for Base, percentage for Specific List.
+  const baseTiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
+  if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && baseTiers.length > 1) {
     let intermediateYears = 0;
-    for (let i = 0; i < tiers.length - 1; i++) {
-      const years = tiers[i].years;
+    for (let i = 0; i < baseTiers.length - 1; i++) {
+      const years = baseTiers[i].years;
       if (!Number.isFinite(years) || years < 1) {
         errors.push('Each minimum-withdrawal tier (except the last) must span at least 1 year.');
         break;
@@ -590,6 +721,22 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     }
     if (intermediateYears >= scenario.numYears) {
       errors.push('Minimum-withdrawal tiers must leave at least 1 year for the final tier.');
+    }
+  }
+
+  const specificTiers = normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors);
+  if (scenario.withdrawalStrategy === 'specific' && Number.isFinite(scenario.numYears) && specificTiers.length > 1) {
+    let intermediateYears = 0;
+    for (let i = 0; i < specificTiers.length - 1; i++) {
+      const years = specificTiers[i].years;
+      if (!Number.isFinite(years) || years < 1) {
+        errors.push('Each Specific List minimum tier (except the last) must span at least 1 year.');
+        break;
+      }
+      intermediateYears += years;
+    }
+    if (intermediateYears >= scenario.numYears) {
+      errors.push('Specific List minimum tiers must leave at least 1 year for the final tier.');
     }
   }
 
