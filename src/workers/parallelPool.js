@@ -100,8 +100,8 @@ function runChunkOnWorker(worker, params, startIndex, numSimulations) {
 }
 
 export class ParallelPool {
-  constructor(workerUrl, numCores) {
-    this.workerUrl = workerUrl;
+  constructor(WorkerClass, numCores) {
+    this.WorkerClass = WorkerClass;
     this.numCores = Math.max(1, numCores);
     this.workers = [];
   }
@@ -114,7 +114,7 @@ export class ParallelPool {
 
     const chunks = splitIntoChunks(totalSims, Math.min(this.numCores, totalSims));
     while (this.workers.length < chunks.length) {
-      this.workers.push(new Worker(this.workerUrl, { type: 'module' }));
+      this.workers.push(new this.WorkerClass());
     }
 
     try {

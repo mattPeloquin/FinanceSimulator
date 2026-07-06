@@ -9,9 +9,8 @@ import { runMonteCarlo } from '../core/simulation.js';
 import { buildRunResult } from '../core/resultPackaging.js';
 import { runGoalSeek } from '../core/goalSeek.js';
 import { ParallelPool } from './parallelPool.js';
-
-// Vite resolves this to the worker entry in dev and to the bundled worker in production.
-const SUB_WORKER_URL = new URL('./simulation.worker.js', import.meta.url);
+// Nested inline worker: Vite falls back to a data URL when blob sub-workers are blocked (file://).
+import SubWorker from './simulation.worker.js?worker&inline';
 
 function postChunkResult(startIndex, numSimulations, result) {
   self.postMessage(
@@ -55,7 +54,7 @@ self.onmessage = async (e) => {
     return;
   }
 
-  const pool = new ParallelPool(SUB_WORKER_URL, numCores || 1);
+  const pool = new ParallelPool(SubWorker, numCores || 1);
   const simulateAsync = (simParams) => pool.run(simParams);
 
   if (type === 'run') {
