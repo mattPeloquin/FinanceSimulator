@@ -7,6 +7,7 @@ import {
   buildDrilldownPaths,
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
+import { meetsWithdrawalTarget } from '../../core/statistics.js';
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 
@@ -89,6 +90,8 @@ const surfaceState = {
   drilldownLo: null,
   drilldownHi: null,
   lastContext: null,
+  shortfallTolerance: 0.05,
+  plannedWithdrawn: 0,
 };
 
 async function loadEcharts() {
@@ -160,22 +163,11 @@ function pathDepleted(balances) {
   return balances.some((b, i) => i > 0 && b <= 0);
 }
 
-function pathBelowPlan(withdrawals, unadjustedWithdrawals, totalWithdrawn) {
-  if (!withdrawals || !unadjustedWithdrawals) return false;
-
-  const plannedTotal = unadjustedWithdrawals.reduce((sum, w) => sum + w, 0);
-  if ((totalWithdrawn ?? 0) < plannedTotal - 0.01) return true;
-
-  const n = withdrawals.length;
-  if (n === 0) return false;
-
-  let belowThresholdCount = 0;
-  for (let i = 0; i < n; i++) {
-    const planned = unadjustedWithdrawals[i];
-    if (planned <= 0) continue;
-    if (withdrawals[i] < planned * 0.8 - 0.01) belowThresholdCount++;
-  }
-  return belowThresholdCount / n >= 0.20;
+// Funded path that fell short of the risk-adjusted plan total (same rule as the
+// "Success Rate (within X% of plan)" metric and Goal Seek scoring).
+function pathBelowPlan(totalWithdrawn, plannedTotal, shortfallTolerance) {
+  if (plannedTotal <= 0) return false;
+  return !meetsWithdrawalTarget(totalWithdrawn ?? 0, plannedTotal, shortfallTolerance);
 }
 
 function floatThemeForSeries(series) {
@@ -850,11 +842,15 @@ function bindEvents() {
   surfaceState.eventsBound = true;
 }
 
-function buildColumnsFromPaths(surfacePaths, numYears) {
+function buildColumnsFromPaths(surfacePaths, numYears, { shortfallTolerance, plannedWithdrawn } = {}) {
   const numCols = surfacePaths.length;
   const numRows = numYears + 1;
   const startBalance = surfacePaths[0] ? surfacePaths[0].balances[0] : 0;
   const zCap = startBalance * Z_CAP_MULTIPLE;
+  const tolerance = shortfallTolerance ?? surfaceState.shortfallTolerance ?? 0.05;
+  const plannedTotal = plannedWithdrawn > 0
+    ? plannedWithdrawn
+    : (surfacePaths[0]?.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
 
   const data3D = [];
   const columns = [];
@@ -863,7 +859,7 @@ function buildColumnsFromPaths(surfacePaths, numYears) {
   for (let x = 0; x < numCols; x++) {
     const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn } = surfacePaths[x];
     const depleted = pathDepleted(balances);
-    const belowPlan = !depleted && pathBelowPlan(withdrawals, unadjustedWithdrawals, totalWithdrawn);
+    const belowPlan = !depleted && pathBelowPlan(totalWithdrawn, plannedTotal, tolerance);
     depletedCols.push(depleted);
     belowPlanCols.push(belowPlan);
     const colPoints = [];
@@ -892,7 +888,10 @@ function applySurfaceDataset(surfacePaths, numYears) {
   if (!chartInstance) return;
 
   const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
-    buildColumnsFromPaths(surfacePaths, numYears);
+    buildColumnsFromPaths(surfacePaths, numYears, {
+      shortfallTolerance: surfaceState.shortfallTolerance,
+      plannedWithdrawn: surfaceState.plannedWithdrawn,
+    });
 
   surfaceState.columns = columns;
   surfaceState.depletedCols = depletedCols;
@@ -985,13 +984,21 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     }
   }
 
-  const { params = null, seed = 0, surfaceMeta = null } = context;
+  const {
+    params = null,
+    seed = 0,
+    surfaceMeta = null,
+    shortfallTolerance = 0.05,
+    plannedWithdrawn = 0,
+  } = context;
 
   surfaceState.viewMode = 'overview';
   surfaceState.overviewPaths = surfacePaths;
   surfaceState.simParams = params;
   surfaceState.seed = seed;
   surfaceState.surfaceMeta = surfaceMeta;
+  surfaceState.shortfallTolerance = shortfallTolerance;
+  surfaceState.plannedWithdrawn = plannedWithdrawn;
   surfaceState.drilldownCenterRank = null;
   surfaceState.drilldownLo = null;
   surfaceState.drilldownHi = null;
@@ -999,7 +1006,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.lastContext = { surfacePaths, numYears, context };
 
   const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
-    buildColumnsFromPaths(surfacePaths, numYears);
+    buildColumnsFromPaths(surfacePaths, numYears, { shortfallTolerance, plannedWithdrawn });
 
   surfaceState.columns = columns;
   surfaceState.depletedCols = depletedCols;

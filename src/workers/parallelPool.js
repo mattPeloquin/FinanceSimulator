@@ -5,11 +5,17 @@
 import { runMonteCarlo } from '../core/simulation.js';
 
 function splitIntoChunks(total, numWorkers) {
-  const base = Math.floor(total / numWorkers);
-  const remainder = total % numWorkers;
+  const MIN_CHUNK_SIZE = 100;
+  const effectiveWorkers = Math.min(
+    numWorkers,
+    Math.max(1, Math.floor(total / MIN_CHUNK_SIZE))
+  );
+
+  const base = Math.floor(total / effectiveWorkers);
+  const remainder = total % effectiveWorkers;
   const chunks = [];
   let startIndex = 0;
-  for (let i = 0; i < numWorkers; i++) {
+  for (let i = 0; i < effectiveWorkers; i++) {
     const size = base + (i < remainder ? 1 : 0);
     if (size > 0) {
       chunks.push({ startIndex, numSimulations: size });

@@ -70,7 +70,8 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
 }
 
 // Build the full chart-ready result package from a raw runMonteCarlo() output.
-export function buildRunResult(params, result, { shortfallTolerance = 0.05 } = {}) {
+export function buildRunResult(params, result, { shortfallTolerance } = {}) {
+  const tolerance = shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
   const n = result.numSimulations;
   const numYears = params.numYears;
 
@@ -122,9 +123,9 @@ export function buildRunResult(params, result, { shortfallTolerance = 0.05 } = {
     withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(
       result.totalWithdrawn,
       plannedWithdrawn,
-      shortfallTolerance,
+      tolerance,
     ),
-    shortfallTolerance,
+    shortfallTolerance: tolerance,
     medianBalance: median(result.finalBalance),
     medianWithdrawn: median(result.totalWithdrawn),
     plannedWithdrawn,

@@ -87,16 +87,21 @@ export function goalSuccessRate(
   return met / n;
 }
 
+// Whether one run's lifetime withdrawals are within the allowed shortfall of plan.
+export function meetsWithdrawalTarget(totalWithdrawn, plannedWithdrawn, tolerance = 0.05) {
+  if (plannedWithdrawn <= 0) return true;
+  return totalWithdrawn >= plannedWithdrawn * (1 - tolerance);
+}
+
 // Fraction of simulations whose total withdrawn reached at least (1 - tolerance)
 // of the planned schedule total — i.e. within tolerance below target, or above it.
 export function withdrawalTargetSuccessRate(totalWithdrawn, plannedWithdrawn, tolerance = 0.05) {
   const n = totalWithdrawn.length;
   if (n === 0 || plannedWithdrawn <= 0) return null;
 
-  const minimumAcceptable = plannedWithdrawn * (1 - tolerance);
   let metTarget = 0;
   for (let i = 0; i < n; i++) {
-    if (totalWithdrawn[i] >= minimumAcceptable) metTarget++;
+    if (meetsWithdrawalTarget(totalWithdrawn[i], plannedWithdrawn, tolerance)) metTarget++;
   }
   return metTarget / n;
 }

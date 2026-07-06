@@ -20,7 +20,9 @@ const DEFAULT_PAIR_FRACTION_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
 const BASE_BISECTION_MAX_ITERATIONS = 30;
 
 // Bonus-amount candidates, as fractions of the currently-solved base withdrawal.
-const DEFAULT_GOGO_BONUS_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5];
+// Using a finer, lower grid prevents the final bonus from heavily cannibalizing
+// the base and appearing as an unexpectedly high percentage in the final result.
+const DEFAULT_GOGO_BONUS_FRACTIONS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3];
 
 // Each candidate scored via the re-solve scorer costs one inner bisection
 // (this many predicate evaluations at reduced fidelity) plus one confirming
@@ -497,8 +499,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
     if (pinBase) {
       applyCandidate(best);
-      working.portfolio.base = bestBase;
-      solvedBase = working.portfolio.base;
+      // Ensure we don't accidentally overwrite the pinned base (e.g. if the initial target wasn't found)
+      working.portfolio.base = solvedBase;
       return best;
     }
     applyCandidate(foundTarget ? best : currentValue);
@@ -539,8 +541,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
     if (pinBase) {
       applyPair(best[0], best[1]);
-      working.portfolio.base = bestBase;
-      solvedBase = working.portfolio.base;
+      // Ensure we don't accidentally overwrite the pinned base
+      working.portfolio.base = solvedBase;
       return best;
     }
     const winner = foundTarget ? best : currentPair;

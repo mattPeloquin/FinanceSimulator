@@ -151,7 +151,15 @@ function updateProgress(fraction, stage) {
   const bar = document.getElementById('progressBar');
   const text = document.getElementById('loadingText');
   const pct = Math.round(fraction * 100);
-  const coreLabel = currentNumCores === 1 ? '1 core' : `${currentNumCores} cores`;
+  
+  // currentNumCores holds the number of *sub-workers* returned by resolveNumCores.
+  // We add 1 for the Master worker thread for the UI display.
+  const totalThreads = currentNumCores === 1 && document.getElementById('parallelCores').value === 'low' 
+    ? 1 
+    : currentNumCores + 1;
+    
+  const coreLabel = totalThreads === 1 ? '1 core' : `${totalThreads} cores`;
+  
   if (bar) bar.style.width = `${pct}%`;
   if (text) {
     const prefix = stage ? `${stage}… ${pct}%` : `Running simulations… ${pct}%`;
@@ -633,10 +641,17 @@ async function init() {
     if (import.meta.env.DEV) {
       window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     }
-    // Merge over defaults so fields added after an autosave was written (e.g.
-    // smoothWindowPct) still get their default instead of rendering blank.
-    const autosaved = loadAutosave() || {};
-  const initial = { ...defaultScenario(), ...(autosaved.scenario || {}) };
+function getDefaultCoreUsage() {
+  const cores = navigator.hardwareConcurrency || 4;
+  if (cores >= 8) return 'high';
+  if (cores >= 4) return 'med';
+  return 'low';
+}
+
+// Merge over defaults so fields added after an autosave was written (e.g.
+// smoothWindowPct) still get their default instead of rendering blank.
+const autosaved = loadAutosave() || {};
+const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ...(autosaved.scenario || {}) };
     currentSessionName = autosaved.name || '';
     currentSessionDescription = autosaved.description || '';
     

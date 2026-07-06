@@ -361,6 +361,19 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const planRiskTolerancePct = document.getElementById('planRiskTolerancePct');
+  const planRiskTolerancePctSlider = document.getElementById('planRiskTolerancePctSlider');
+  if (planRiskTolerancePct && planRiskTolerancePctSlider) {
+    planRiskTolerancePctSlider.addEventListener('input', (e) => {
+      planRiskTolerancePct.value = e.target.value;
+      notify();
+    });
+    planRiskTolerancePct.addEventListener('input', (e) => {
+      planRiskTolerancePctSlider.value = e.target.value;
+      notify();
+    });
+  }
+
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
       toggleDistMethod(e.target.value);
@@ -452,7 +465,8 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       input.id === 'scaledHistoricalSmoothing' ||
       input.id === 'scaledHistoricalSmoothingSlider' ||
       input.id === 'goalSeekDesiredSuccessPctSlider' ||
-      input.id === 'goalSeekRiskTolerancePctSlider'
+      input.id === 'goalSeekRiskTolerancePctSlider' ||
+      input.id === 'planRiskTolerancePctSlider'
     ) return;
     if (input.id === 'specificWithdrawals') return;
     input.addEventListener('change', notify);

@@ -7,6 +7,7 @@ import {
   closestHistogramBin,
   successRate,
   goalSuccessRate,
+  meetsWithdrawalTarget,
   withdrawalTargetSuccessRate,
   mean,
   median,
@@ -93,6 +94,18 @@ describe('goalSuccessRate', () => {
     const depletionYear = Float64Array.from([41]);
     const totalWithdrawn = Float64Array.from([0]);
     expect(goalSuccessRate(finalBalance, depletionYear, 40, 0, totalWithdrawn, 0, 0.2)).toBe(1);
+  });
+});
+
+describe('meetsWithdrawalTarget', () => {
+  it('accepts withdrawals within tolerance of plan or above it', () => {
+    expect(meetsWithdrawalTarget(800, 1000, 0.2)).toBe(true);
+    expect(meetsWithdrawalTarget(799, 1000, 0.2)).toBe(false);
+    expect(meetsWithdrawalTarget(1100, 1000, 0.2)).toBe(true);
+  });
+
+  it('treats non-positive planned totals as always on plan', () => {
+    expect(meetsWithdrawalTarget(0, 0, 0.2)).toBe(true);
   });
 });
 

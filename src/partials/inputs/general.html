@@ -34,8 +34,8 @@
                     <label for="parallelCores" class="block text-sm font-medium text-theme-body">Core Usage</label>
                     <select id="parallelCores" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
                         <option value="low">Low (1 core)</option>
-                        <option value="med">Medium (half cores)</option>
-                        <option value="high">High (all available cores)</option>
+                        <option value="med">Medium (3 cores)</option>
+                        <option value="high">High (up to 6 cores)</option>
                     </select>
                     <p class="text-xs text-theme-faint mt-1">How many CPU cores to use when running simulations. Higher is faster but uses more of your computer while the run is in progress.</p>
                 </div>
@@ -46,6 +46,14 @@
                         <span class="input-adorn-suffix">%</span>
                     </div>
                     <p class="text-xs text-theme-faint mt-1">Averages a band of runs around each percentile (P5&ndash;P60) to reduce noise. 0 = a single run.</p>
+                </div>
+                <div>
+                    <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
+                    <div class="flex items-center gap-3 mt-1">
+                        <input type="range" id="planRiskTolerancePctSlider" min="0" max="65" step="1" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                        <input type="number" id="planRiskTolerancePct" min="0" max="65" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                    </div>
+                    <p class="text-xs text-theme-faint mt-1">Max lifetime spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate and 3D chart coloring. Goal Seek uses its own Risk Tolerance when enabled.</p>
                 </div>
             </div>
 

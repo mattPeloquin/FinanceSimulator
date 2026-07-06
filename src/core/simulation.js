@@ -229,10 +229,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       unadjustedTarget = baseVal;
     } else {
       baseVal = portfolio.base;
-      // Front-loading: scale the whole target by an annual real-change factor (j=0 in
-      // year one, so the first year is unscaled), then add a flat early-years bonus.
+      // Front-loading: scale the base by an annual real-change factor (j=0 in
+      // year one, so the first year is unscaled). Market adjustments and the 
+      // early-years bonus are flat dollar amounts added *after* the base is scaled.
       const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
-      targetWithdrawal = (portfolio.base + adjAmount) * ageFactor;
+      targetWithdrawal = (portfolio.base * ageFactor) + adjAmount;
       unadjustedTarget = portfolio.base * ageFactor;
       if (j < portfolio.goGoYears) {
         targetWithdrawal += portfolio.goGoBonus;

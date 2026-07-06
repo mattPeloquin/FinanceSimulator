@@ -137,6 +137,15 @@ describe('buildSimParams', () => {
     const p = buildSimParams(s, { years: [] });
     expect(p.scaledHistoricalSmoothing).toBeCloseTo(0.35, 6);
   });
+
+  it('converts plan risk tolerance from percent to a shortfall fraction', () => {
+    const s = defaultScenario();
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.05, 6);
+    s.planRiskTolerancePct = 20;
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.2, 6);
+    s.planRiskTolerancePct = 150;
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.65, 6);
+  });
 });
 
 describe('buildGoalSeekConfig', () => {
@@ -312,6 +321,16 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('final tier'))).toBe(false);
   });
 
+  it('flags an out-of-range plan risk tolerance', () => {
+    const s = defaultScenario();
+    s.planRiskTolerancePct = 66;
+    expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(true);
+    s.planRiskTolerancePct = 0;
+    expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
+    s.planRiskTolerancePct = 65;
+    expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
+  });
+
   it('ignores Goal Seek fields when the mode is off', () => {
     const s = defaultScenario();
     s.goalSeekTargetEndingBalance = -50;
@@ -335,14 +354,14 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('desired success'))).toBe(true);
   });
 
-  it('flags a desired success percentage outside the 50-99 range when Goal Seek is on', () => {
+  it('flags a desired success percentage outside the 65-99 range when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
-    s.goalSeekDesiredSuccessPct = 49;
+    s.goalSeekDesiredSuccessPct = 64;
     expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(true);
     s.goalSeekDesiredSuccessPct = 100;
     expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(true);
-    s.goalSeekDesiredSuccessPct = 50;
+    s.goalSeekDesiredSuccessPct = 65;
     expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(false);
     s.goalSeekDesiredSuccessPct = 99;
     expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(false);
@@ -356,14 +375,14 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('risk tolerance'))).toBe(true);
   });
 
-  it('flags a risk tolerance outside the 0-50 range when Goal Seek is on', () => {
+  it('flags a risk tolerance outside the 0-65 range when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
-    s.goalSeekRiskTolerancePct = 51;
+    s.goalSeekRiskTolerancePct = 66;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(true);
     s.goalSeekRiskTolerancePct = 0;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
-    s.goalSeekRiskTolerancePct = 50;
+    s.goalSeekRiskTolerancePct = 65;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
   });
 

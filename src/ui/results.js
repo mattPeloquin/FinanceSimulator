@@ -57,17 +57,12 @@ export function renderResults(result, params, goalSeekSummary) {
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
   if (onPlanLabel) {
-    onPlanLabel.textContent =
-      goalSeekSummary != null
-        ? `Success Rate (within ${tolerancePct}% of plan)`
-        : 'Success Rate (on plan)';
+    onPlanLabel.textContent = `Success Rate (within ${tolerancePct}% of plan)`;
   }
   const onPlanCard = onPlanLabel?.closest('.rounded-lg');
   if (onPlanCard) {
     onPlanCard.title =
-      goalSeekSummary != null
-        ? `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`
-        : 'Share of runs whose total withdrawn reached at least 95% of the planned schedule';
+      `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
 
   setText('successRate', formatPercent(result.successRate));
@@ -112,6 +107,8 @@ export function renderResults(result, params, goalSeekSummary) {
     params,
     seed: result.seed,
     surfaceMeta: result.surfaceMeta,
+    shortfallTolerance: result.shortfallTolerance ?? 0.05,
+    plannedWithdrawn: result.plannedWithdrawn,
   }).catch((err) => {
     console.error('3D chart failed to render:', err);
   });

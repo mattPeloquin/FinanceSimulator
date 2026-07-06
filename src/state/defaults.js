@@ -23,6 +23,11 @@ export const SCENARIO_DEFAULTS = {
   // 0 = show a single run at that rank; higher = smoother, less noisy curves.
   smoothWindowPct: 1,
 
+  // Max lifetime spending shortfall vs. plan (%) when scoring regular runs.
+  // Drives the "on plan" success rate and 3D below-plan coloring.
+  // Valid UI range: 0–65. Goal Seek uses its own Risk Tolerance when enabled.
+  planRiskTolerancePct: 5,
+
   // Expected length of consecutive-year runs (resampling) or AR(1) smoothing
   // strength (log-normal). Valid UI range: 1–6. 1 = fully independent years.
   blockSize: 3,
@@ -175,6 +180,6 @@ export const SCENARIO_DEFAULTS = {
   goalSeekNumSimulations: 500,
 
   // How aggressively to use CPU cores during simulation runs.
-  // Options: 'low' (1 core), 'med' (half), 'high' (all available).
+  // Options: 'low' (1 core), 'med' (3 cores), 'high' (up to 6 cores).
   parallelCores: 'high',
 };

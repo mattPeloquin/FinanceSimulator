@@ -32,6 +32,7 @@ const FIELDS = [
   field('numSimulations', 'numSimulations', 'int'),
   field('randomSeed', 'randomSeed', 'string'),
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
+  field('planRiskTolerancePct', 'planRiskTolerancePct', 'float'),
 
   field('startYear', 'startYear', 'int'),
   field('endYear', 'endYear', 'int'),
@@ -311,6 +312,10 @@ export function writeScenarioToDom(scenario, doc = document) {
   if (goalSeekRiskSlider && scenario.goalSeekRiskTolerancePct != null) {
     goalSeekRiskSlider.value = scenario.goalSeekRiskTolerancePct;
   }
+  const planRiskSlider = doc.getElementById('planRiskTolerancePctSlider');
+  if (planRiskSlider && scenario.planRiskTolerancePct != null) {
+    planRiskSlider.value = scenario.planRiskTolerancePct;
+  }
 
   writeWithdrawalFloorsToDom(
     scenario.withdrawalFloors ?? SCENARIO_DEFAULTS.withdrawalFloors,
@@ -453,8 +458,15 @@ export function buildSimParams(scenario, samples) {
       Math.max(num(scenario.scaledHistoricalSmoothing) / 100, 0),
       1,
     ),
+    // Max allowed lifetime spending shortfall vs. plan when packaging results.
+    shortfallTolerance: planShortfallTolerance(scenario),
     samples,
   };
+}
+
+/** Fraction 0–0.65 from the advanced "Plan Risk Tolerance" setting. */
+export function planShortfallTolerance(scenario) {
+  return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.65);
 }
 
 function num(v) {
@@ -502,6 +514,10 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     scenario.numSimulations > MAX_NUM_SIMULATIONS
   ) {
     errors.push(`Number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
+  }
+  const planRisk = scenario.planRiskTolerancePct;
+  if (!Number.isFinite(planRisk) || planRisk < 0 || planRisk > 65) {
+    errors.push('Plan risk tolerance must be between 0 and 65.');
   }
   if (
     scenario.goalSeekMode &&
@@ -583,12 +599,12 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       errors.push('Goal Seek target ending balance must be zero or a positive amount.');
     }
     const desired = scenario.goalSeekDesiredSuccessPct;
-    if (!Number.isFinite(desired) || desired < 50 || desired > 99) {
-      errors.push('Goal Seek desired success % must be between 50 and 99.');
+    if (!Number.isFinite(desired) || desired < 65 || desired > 99) {
+      errors.push('Goal Seek desired success % must be between 65 and 99.');
     }
     const riskTolerance = scenario.goalSeekRiskTolerancePct;
-    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 50) {
-      errors.push('Goal Seek risk tolerance must be between 0 and 50.');
+    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 65) {
+      errors.push('Goal Seek risk tolerance must be between 0 and 65.');
     }
     if (scenario.withdrawalStrategy === 'specific') {
       // With a Specific List, each year's amount is fixed as typed — Goal Seek
