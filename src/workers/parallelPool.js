@@ -31,7 +31,7 @@ function splitIntoChunks(total, numWorkers) {
 
 function stitchMonteCarloResults(params, chunkResults) {
   const totalSims = params.numSimulations;
-  const { numYears } = params;
+  const maxYears = params.maxYears ?? params.numYears;
   const baseSeed = params.seed >>> 0;
 
   const avgReturn = new Float64Array(totalSims);
@@ -40,20 +40,23 @@ function stitchMonteCarloResults(params, chunkResults) {
   const medianYearlyWithdrawal = new Float64Array(totalSims);
   const earlyWithdrawn = new Float64Array(totalSims);
   const depletionYear = new Float64Array(totalSims);
-  const allYearsReturns = new Float64Array(totalSims * numYears);
+  const horizonYears = new Int32Array(totalSims);
+  const allYearsReturns = new Float64Array(totalSims * maxYears);
+  allYearsReturns.fill(NaN);
 
   for (const chunk of chunkResults) {
-    const { startIndex, numSimulations, avgReturn: a, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, allYearsReturns: yr } = chunk;
+    const { startIndex, numSimulations, avgReturn: a, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr } = chunk;
     avgReturn.set(a, startIndex);
     finalBalance.set(fb, startIndex);
     totalWithdrawn.set(tw, startIndex);
     medianYearlyWithdrawal.set(myw, startIndex);
     earlyWithdrawn.set(ew, startIndex);
     depletionYear.set(dy, startIndex);
+    horizonYears.set(hy, startIndex);
     for (let i = 0; i < numSimulations; i++) {
       allYearsReturns.set(
-        yr.subarray(i * numYears, (i + 1) * numYears),
-        (startIndex + i) * numYears,
+        yr.subarray(i * maxYears, (i + 1) * maxYears),
+        (startIndex + i) * maxYears,
       );
     }
   }
@@ -67,6 +70,7 @@ function stitchMonteCarloResults(params, chunkResults) {
     medianYearlyWithdrawal,
     earlyWithdrawn,
     depletionYear,
+    horizonYears,
     allYearsReturns,
   };
 }
@@ -78,7 +82,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
       if (msg.type === 'chunkDone') {
         port.removeEventListener('message', onMessage);
         port.removeEventListener('messageerror', onError);
-        const { avgReturn, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, allYearsReturns } = msg.buffers;
+        const { avgReturn, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
           numSimulations: msg.numSimulations,
@@ -88,6 +92,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
           medianYearlyWithdrawal: new Float64Array(medianYearlyWithdrawal),
           earlyWithdrawn: new Float64Array(earlyWithdrawn),
           depletionYear: new Float64Array(depletionYear),
+          horizonYears: new Int32Array(horizonYears),
           allYearsReturns: new Float64Array(allYearsReturns),
         });
       } else if (msg.type === 'error') {
