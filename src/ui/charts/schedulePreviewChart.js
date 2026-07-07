@@ -4,6 +4,7 @@
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
 import { getChartTheme, chartJsTooltip } from './chartTheme.js';
+import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
 
 // `floorSeries`, when given and it contains any positive value, is drawn as a
 // dashed reference line — a guide for the minimum-withdrawal backstop that
@@ -15,12 +16,16 @@ function clampToWithdrawals(values) {
   return values.map((v) => Math.max(0, v));
 }
 
-export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, { floorStepped = true } = {}) {
+export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, { floorStepped = true, giftAmounts = null } = {}) {
   const theme = getChartTheme();
   const labels = amounts.map((_, i) => String(i + 1));
   const displayAmounts = clampToWithdrawals(amounts);
   const displayFloor = Array.isArray(floorSeries) ? clampToWithdrawals(floorSeries) : null;
   const showFloor = displayFloor?.some((v) => v > 0);
+  const giftOverlay = Array.isArray(giftAmounts)
+    ? buildGiftOverlaySeries(displayAmounts, giftAmounts)
+    : null;
+  const showGift = giftOverlay?.some((v) => v != null);
 
   const datasets = [
     {
@@ -53,6 +58,23 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, {
     });
   }
 
+  if (showGift) {
+    datasets.push({
+      label: 'Gift',
+      data: giftOverlay,
+      borderColor: theme.giftLine,
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderDash: [2, 2],
+      tension: 0.1,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      fill: false,
+      order: 2,
+      spanGaps: false,
+    });
+  }
+
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: { labels, datasets },
@@ -80,9 +102,11 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, {
           displayColors: false,
           callbacks: {
             title: (items) => `Year ${items[0].label}`,
-            label: (ctx) => (ctx.dataset.label === 'Minimum'
-              ? `Minimum: ${formatK(ctx.parsed.y)}k`
-              : `Withdrawal: ${formatK(ctx.parsed.y)}k`),
+            label: (ctx) => {
+              if (ctx.dataset.label === 'Minimum') return `Minimum: ${formatK(ctx.parsed.y)}k`;
+              if (ctx.dataset.label === 'Gift') return `Gift ceiling: ${formatK(ctx.parsed.y)}k`;
+              return `Withdrawal: ${formatK(ctx.parsed.y)}k`;
+            },
           },
         },
       },

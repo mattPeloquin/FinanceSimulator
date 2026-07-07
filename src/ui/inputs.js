@@ -1,6 +1,6 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom } from '../state/scenario.js';
+import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom } from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
@@ -118,15 +118,21 @@ export function toggleDistMethod(method) {
 export function toggleWithdrawalStrategy(strategy) {
   const baseSection = document.getElementById('strategy-base-section');
   const specificSection = document.getElementById('strategy-specific-section');
+  const basePreview = document.getElementById('base-schedule-preview');
+  const specificPreview = document.getElementById('specific-schedule-preview');
   if (strategy === 'specific') {
     baseSection.classList.add('hidden');
     specificSection.classList.remove('hidden');
+    basePreview?.classList.add('hidden');
+    specificPreview?.classList.remove('hidden');
     const textarea = document.getElementById('specificWithdrawals');
     if (textarea) syncWithdrawalPreview(textarea.value);
     destroyBaseWithdrawalPreviewChart();
   } else {
     baseSection.classList.remove('hidden');
     specificSection.classList.add('hidden');
+    basePreview?.classList.remove('hidden');
+    specificPreview?.classList.add('hidden');
     destroyWithdrawalPreviewChart();
     syncBaseWithdrawalPreview();
   }
@@ -296,6 +302,46 @@ export function setupSpecificWithdrawalFloorList({ onChange }) {
 
   list.addEventListener('change', notify);
   list.addEventListener('input', notify);
+}
+
+export function setupGiftingTierList({ onChange }) {
+  const list = document.getElementById('giftingTiersList');
+  const addBtn = document.getElementById('addGiftingTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readGiftingTiersFromDom();
+    if (tiers.length === 0) {
+      writeGiftingTiersToDom([{ amount: 0, balance: 0 }]);
+      notify();
+      return;
+    }
+    const last = tiers.pop();
+    tiers.push({ amount: last.amount, balance: last.balance, years: 1 });
+    tiers.push(last);
+    writeGiftingTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-gifting-tier');
+    if (!btn) return;
+    const tiers = readGiftingTiersFromDom();
+    tiers.splice(Number(btn.closest('[data-gifting-tier-row]')?.dataset.giftingTierRow), 1);
+    writeGiftingTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('change', notify);
+
+  list.addEventListener('blur', (e) => {
+    if (e.target.matches('[data-gift-amount], [data-gift-balance]')) {
+      formatWithdrawalFloorCurrencyInput(e.target);
+      notify();
+    }
+  }, true);
 }
 
 export function renderYearLabels(years) {
@@ -517,6 +563,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
 
   setupWithdrawalFloorList({ onChange: notify });
   setupSpecificWithdrawalFloorList({ onChange: notify });
+  setupGiftingTierList({ onChange: notify });
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever
   // a tier is typed into, added, or removed. Registered after
@@ -540,6 +587,25 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   const addSpecificWithdrawalFloorTierBtn = document.getElementById('addSpecificWithdrawalFloorTier');
   if (addSpecificWithdrawalFloorTierBtn) {
     addSpecificWithdrawalFloorTierBtn.addEventListener('click', syncWithdrawalPreviewFromForm);
+  }
+
+  const giftingTiersList = document.getElementById('giftingTiersList');
+  if (giftingTiersList) {
+    giftingTiersList.addEventListener('input', () => {
+      syncBaseWithdrawalPreview();
+      syncWithdrawalPreviewFromForm();
+    });
+    giftingTiersList.addEventListener('click', () => {
+      syncBaseWithdrawalPreview();
+      syncWithdrawalPreviewFromForm();
+    });
+  }
+  const addGiftingTierBtn = document.getElementById('addGiftingTier');
+  if (addGiftingTierBtn) {
+    addGiftingTierBtn.addEventListener('click', () => {
+      syncBaseWithdrawalPreview();
+      syncWithdrawalPreviewFromForm();
+    });
   }
 
   setupAccordionResize();

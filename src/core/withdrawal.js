@@ -119,6 +119,53 @@ export function buildWithdrawalFloorPctSeries(tiers, numYears) {
 // Convert Specific List percentage tiers into per-year dollar floors.
 // Each year's floor is that year's list amount times the tier percentage.
 // Deposits (negative list amounts) get no floor so they stay deposits.
+// Build a per-year gifting schedule from staged tiers ($000s in tiers).
+// Each entry carries the gift amount and the balance threshold that must be
+// exceeded (after growth and the regular withdrawal) before the gift is paid.
+// Intermediate tiers run for their year count; the final tier fills the horizon.
+export function buildGiftingSeries(tiers, numYears, toDollarsFn) {
+  if (numYears <= 0) return [];
+  const emptyEntry = { amount: 0, balanceThreshold: 0 };
+  const series = new Array(numYears).fill(null);
+  if (!tiers || tiers.length === 0) {
+    return series.map(() => ({ ...emptyEntry }));
+  }
+
+  let yearIndex = 0;
+  for (let i = 0; i < tiers.length - 1; i++) {
+    const amount = toDollarsFn(tiers[i].amount);
+    const balanceThreshold = toDollarsFn(tiers[i].balance);
+    const span = Math.max(0, parseInt(tiers[i].years, 10) || 0);
+    for (let k = 0; k < span && yearIndex < numYears; k++) {
+      series[yearIndex++] = { amount, balanceThreshold };
+    }
+  }
+
+  const last = tiers[tiers.length - 1];
+  const lastAmount = toDollarsFn(last.amount);
+  const lastBalance = toDollarsFn(last.balance);
+  while (yearIndex < numYears) {
+    series[yearIndex++] = { amount: lastAmount, balanceThreshold: lastBalance };
+  }
+  return series;
+}
+
+// Build per-year gift ceiling values for the schedule preview chart.
+// Shows baseline + gift amount where the tier gift is positive; null otherwise.
+export function buildGiftOverlaySeries(baselineAmounts, giftAmounts) {
+  const baseline = baselineAmounts || [];
+  const gifts = giftAmounts || [];
+  const len = Math.max(baseline.length, gifts.length);
+  const series = new Array(len).fill(null);
+  for (let j = 0; j < len; j++) {
+    const gift = gifts[j] ?? 0;
+    if (gift > 0) {
+      series[j] = Math.max(0, baseline[j] ?? 0) + gift;
+    }
+  }
+  return series;
+}
+
 export function buildSpecificWithdrawalFloorSeries(pctTiers, specificAmountsDollars, numYears) {
   if (numYears <= 0) return [];
   const pctSeries = buildWithdrawalFloorPctSeries(pctTiers, numYears);

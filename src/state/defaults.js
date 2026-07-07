@@ -104,6 +104,10 @@ export const SCENARIO_DEFAULTS = {
   // the last tier applies to all remaining years. Empty = no floor.
   withdrawalFloors: [{ amount: 100 }],
 
+  // Staged gifting ($000s gift + balance threshold). Intermediate tiers need a
+  // year count; the last tier applies to all remaining years. Empty = no gifting.
+  giftingTiers: [],
+
   // Front-loading (only when withdrawalStrategy is 'base')
 
   // Annual real % change applied to the whole withdrawal (negative = decline).

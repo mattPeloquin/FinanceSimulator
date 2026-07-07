@@ -32,6 +32,8 @@ function buildChartTheme(mode) {
     // Dashed reference line for the minimum-withdrawal guide overlaid on the
     // Base + Spending schedule preview.
     floorLine: hex('status.danger'),
+    // Thin dotted line for the gift ceiling above the planned withdrawal.
+    giftLine: hex('status.success'),
   };
 }
 

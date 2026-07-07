@@ -5,8 +5,8 @@
 // any market/balance guardrail adjustments are layered on at run time.
 // Shares its chart look with the Specific List preview (see
 // schedulePreviewChart.js).
-import { parseCurrency, MONEY_SCALE, toDollars, normalizeWithdrawalFloors, readWithdrawalFloorsFromDom } from '../../state/scenario.js';
-import { buildWithdrawalFloorSeries } from '../../core/withdrawal.js';
+import { parseCurrency, MONEY_SCALE, toDollars, normalizeWithdrawalFloors, readWithdrawalFloorsFromDom, normalizeGiftingTiers, readGiftingTiersFromDom } from '../../state/scenario.js';
+import { buildWithdrawalFloorSeries, buildGiftingSeries } from '../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
 import { onThemeChange } from '../theme.js';
 
@@ -14,8 +14,8 @@ let previewChart = null;
 let pendingFrame = null;
 
 function isSectionVisible() {
-  const section = document.getElementById('strategy-base-section');
-  return section && !section.classList.contains('hidden');
+  const preview = document.getElementById('base-schedule-preview');
+  return preview && !preview.classList.contains('hidden');
 }
 
 export function destroyBaseWithdrawalPreviewChart() {
@@ -72,11 +72,17 @@ function renderPreview() {
     toDollars,
   );
   const amounts = buildSchedule({ ...scheduleInputs, floorSeries });
+  const giftingSeries = buildGiftingSeries(
+    normalizeGiftingTiers(readGiftingTiersFromDom()),
+    scheduleInputs.numYears,
+    toDollars,
+  );
+  const giftAmounts = giftingSeries.map((entry) => entry.amount);
   if (previewChart) {
     previewChart.destroy();
     previewChart = null;
   }
-  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries);
+  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries, { giftAmounts });
   renderSchedulePreviewTotal('baseWithdrawalPreviewTotal', amounts);
 }
 

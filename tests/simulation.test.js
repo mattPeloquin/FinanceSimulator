@@ -708,3 +708,129 @@ describe('variable horizon', () => {
     expect(sawFinite).toBe(true);
   });
 });
+
+describe('tiered gifting', () => {
+  function giftingParams(overrides = {}) {
+    return {
+      numYears: 2,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 3_000_000,
+        base: 100_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendChangeRate: 0,
+        goGoBonus: 0,
+        goGoYears: 0,
+        withdrawalFloorSeries: [0, 0],
+        giftingSeries: [
+          { amount: 50_000, balanceThreshold: 2_000_000 },
+          { amount: 50_000, balanceThreshold: 2_000_000 },
+        ],
+      },
+      dynConfig: {
+        enabled: false,
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  it('adds a gift when balance exceeds the threshold and the plan was fully met', () => {
+    const s = simulatePath(giftingParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(150_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(2_850_000, 3);
+  });
+
+  it('skips the gift when balance does not exceed the threshold', () => {
+    const p = giftingParams();
+    p.portfolio.start = 2_050_000;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(100_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_950_000, 3);
+  });
+
+  it('skips the gift when guardrail scaling cuts spending below the plan', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.start = 2_500_000;
+    p.portfolio.floorBalance = 3_000_000;
+    p.portfolio.floorPenalty = 0.5;
+    p.dynConfig.enabled = true;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(91_666.667, 2);
+    expect(s.path.unadjustedWithdrawals[0]).toBeCloseTo(100_000, 3);
+  });
+
+  it('caps the gift at the remaining balance', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.start = 130_000;
+    p.portfolio.base = 100_000;
+    p.portfolio.giftingSeries = [{ amount: 50_000, balanceThreshold: 10_000 }];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(130_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(0, 3);
+  });
+
+  it('applies staged gifting tiers by year index', () => {
+    const p = giftingParams();
+    p.portfolio.giftingSeries = [
+      { amount: 30_000, balanceThreshold: 1_000_000 },
+      { amount: 10_000, balanceThreshold: 1_000_000 },
+    ];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(130_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(110_000, 3);
+  });
+
+  it('applies gifting under the Specific List strategy', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.strategy = 'specific';
+    p.portfolio.specificWithdrawals = [80_000];
+    p.portfolio.giftingSeries = [{ amount: 20_000, balanceThreshold: 2_000_000 }];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(100_000, 3);
+  });
+
+  it('applies gifting in deposit years when the post-deposit balance exceeds the threshold', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.strategy = 'specific';
+    p.portfolio.specificWithdrawals = [-50_000];
+    p.portfolio.start = 2_500_000;
+    p.portfolio.giftingSeries = [{ amount: 30_000, balanceThreshold: 2_000_000 }];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(-20_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(2_520_000, 3);
+  });
+
+  it('defers gifting during zero-gift placeholder tiers', () => {
+    const p = giftingParams({ numYears: 4 });
+    p.portfolio.giftingSeries = [
+      { amount: 0, balanceThreshold: 0 },
+      { amount: 0, balanceThreshold: 0 },
+      { amount: 50_000, balanceThreshold: 2_000_000 },
+      { amount: 50_000, balanceThreshold: 2_000_000 },
+    ];
+    const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
+    expect(w[0]).toBeCloseTo(100_000, 3);
+    expect(w[1]).toBeCloseTo(100_000, 3);
+    expect(w[2]).toBeCloseTo(150_000, 3);
+    expect(w[3]).toBeCloseTo(150_000, 3);
+  });
+});

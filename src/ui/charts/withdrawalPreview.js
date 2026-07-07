@@ -6,8 +6,11 @@ import {
   normalizeSpecificWithdrawalFloors,
   parseSpecificWithdrawals,
   readSpecificWithdrawalFloorsFromDom,
+  normalizeGiftingTiers,
+  readGiftingTiersFromDom,
+  toDollars,
 } from '../../state/scenario.js';
-import { buildSpecificWithdrawalFloorSeries } from '../../core/withdrawal.js';
+import { buildSpecificWithdrawalFloorSeries, buildGiftingSeries } from '../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
 import { onThemeChange } from '../theme.js';
 
@@ -15,10 +18,11 @@ let previewChart = null;
 let pendingFrame = null;
 let lastAmounts = null;
 let lastFloorSeries = null;
+let lastGiftAmounts = null;
 
 function isSectionVisible() {
-  const section = document.getElementById('strategy-specific-section');
-  return section && !section.classList.contains('hidden');
+  const preview = document.getElementById('specific-schedule-preview');
+  return preview && !preview.classList.contains('hidden');
 }
 
 function readPreviewData(raw) {
@@ -29,7 +33,13 @@ function readPreviewData(raw) {
     amounts,
     numYears,
   );
-  return { amounts, floorSeries };
+  const giftingSeries = buildGiftingSeries(
+    normalizeGiftingTiers(readGiftingTiersFromDom()),
+    numYears,
+    toDollars,
+  );
+  const giftAmounts = giftingSeries.map((entry) => entry.amount);
+  return { amounts, floorSeries, giftAmounts };
 }
 
 export function destroyWithdrawalPreviewChart() {
@@ -43,14 +53,15 @@ export function destroyWithdrawalPreviewChart() {
   }
   lastAmounts = null;
   lastFloorSeries = null;
+  lastGiftAmounts = null;
 }
 
-function renderPreview(amounts, floorSeries) {
+function renderPreview(amounts, floorSeries, giftAmounts) {
   const canvas = document.getElementById('specificWithdrawalsChart');
   if (!canvas || !isSectionVisible()) return;
 
   if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
-    pendingFrame = requestAnimationFrame(() => renderPreview(amounts, floorSeries));
+    pendingFrame = requestAnimationFrame(() => renderPreview(amounts, floorSeries, giftAmounts));
     return;
   }
 
@@ -59,27 +70,28 @@ function renderPreview(amounts, floorSeries) {
     previewChart = null;
   }
 
-  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries, { floorStepped: false });
+  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries, { floorStepped: false, giftAmounts });
   renderSchedulePreviewTotal('specificWithdrawalsChartTotal', amounts);
 }
 
-export function updateWithdrawalPreviewChart(amounts, floorSeries = null) {
+export function updateWithdrawalPreviewChart(amounts, floorSeries = null, giftAmounts = null) {
   lastAmounts = amounts;
   lastFloorSeries = floorSeries;
+  lastGiftAmounts = giftAmounts;
   if (!isSectionVisible()) return;
 
   if (pendingFrame) cancelAnimationFrame(pendingFrame);
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = requestAnimationFrame(() => {
       pendingFrame = null;
-      renderPreview(amounts, floorSeries);
+      renderPreview(amounts, floorSeries, giftAmounts);
     });
   });
 }
 
 export function syncWithdrawalPreview(raw) {
-  const { amounts, floorSeries } = readPreviewData(raw);
-  updateWithdrawalPreviewChart(amounts, floorSeries);
+  const { amounts, floorSeries, giftAmounts } = readPreviewData(raw);
+  updateWithdrawalPreviewChart(amounts, floorSeries, giftAmounts);
 }
 
 export function syncWithdrawalPreviewFromForm() {
@@ -94,5 +106,5 @@ export function resizeWithdrawalPreviewChart() {
 }
 
 onThemeChange(() => {
-  if (lastAmounts && isSectionVisible()) renderPreview(lastAmounts, lastFloorSeries);
+  if (lastAmounts && isSectionVisible()) renderPreview(lastAmounts, lastFloorSeries, lastGiftAmounts);
 });

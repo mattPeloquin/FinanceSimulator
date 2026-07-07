@@ -310,6 +310,18 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       balance -= actualWithdrawal;
     }
 
+    // Tiered gifting: give only when this year's spending fully met the plan
+    // (no guardrail cut, balance covered the target) and the balance left after
+    // the regular withdrawal still exceeds the tier's threshold. Deposit years
+    // (negative targets) always meet the plan, so only the balance check applies.
+    const gift = portfolio.giftingSeries?.[j];
+    const metPlan = targetWithdrawal < 0 || actualWithdrawal >= unadjustedTarget;
+    if (gift && gift.amount > 0 && metPlan && balance > gift.balanceThreshold) {
+      const actualGift = Math.min(balance, gift.amount);
+      balance -= actualGift;
+      actualWithdrawal += actualGift;
+    }
+
     totalWithdrawn += actualWithdrawal;
     yearlyWithdrawals[j] = actualWithdrawal;
     if (earlyWindow > 0 && j < earlyWindow) {

@@ -13,6 +13,9 @@ import {
   readDynConfigFromScenario,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
+  normalizeGiftingTiers,
+  readGiftingTiersFromDom,
+  writeGiftingTiersToDom,
   migrateScenario,
   MONEY_SCALE,
   SCENARIO_DEFAULTS,
@@ -161,6 +164,26 @@ describe('buildSimParams', () => {
     s.specificWithdrawalFloors = [{ pct: 80, years: 1 }, { pct: 60 }];
     const p = buildSimParams(s, { years: [] });
     expect(p.portfolio.withdrawalFloorSeries).toEqual([80_000, 54_000, 48_000]);
+  });
+
+  it('builds a per-year gifting series from tiers', () => {
+    const s = defaultScenario();
+    s.numYears = 4;
+    s.giftingTiers = [{ amount: 25, balance: 2000, years: 2 }, { amount: 10, balance: 1500 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.giftingSeries).toEqual([
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 10_000, balanceThreshold: 1_500_000 },
+      { amount: 10_000, balanceThreshold: 1_500_000 },
+    ]);
+  });
+
+  it('applies no gifting when all tiers are removed', () => {
+    const s = defaultScenario();
+    s.giftingTiers = [];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.giftingSeries.every((entry) => entry.amount === 0 && entry.balanceThreshold === 0)).toBe(true);
   });
 
   it('assigns zero floor to deposit years in a Specific List strategy', () => {
@@ -379,6 +402,29 @@ describe('validateScenario', () => {
     s.specificWithdrawalFloors = [{ pct: 80, years: 10 }, { pct: 60 }];
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(true);
+  });
+
+  it('flags gifting tiers that leave no room for the final tier', () => {
+    const s = defaultScenario();
+    s.numYears = 10;
+    s.giftingTiers = [{ amount: 25, balance: 2000, years: 10 }, { amount: 10, balance: 1500 }];
+    const errors = validateScenario(s, range);
+    expect(errors.some((e) => e.includes('Gifting tiers'))).toBe(true);
+  });
+
+  it('allows zero-gift placeholder tiers but requires balance when gift is positive', () => {
+    const s = defaultScenario();
+    s.giftingTiers = [{ amount: 0, balance: 0, years: 5 }, { amount: 25, balance: 2000 }];
+    expect(validateScenario(s, range)).toEqual([]);
+    s.giftingTiers = [{ amount: 25, balance: 0 }];
+    expect(validateScenario(s, range).some((e) => e.includes('positive balance threshold'))).toBe(true);
+  });
+
+  it('normalizes gifting tiers with default year spans', () => {
+    expect(normalizeGiftingTiers([{ amount: 25, balance: 2000, years: 3 }, { amount: 10, balance: 1500 }])).toEqual([
+      { amount: 25, balance: 2000, years: 3 },
+      { amount: 10, balance: 1500 },
+    ]);
   });
 
   it('flags an out-of-range plan risk tolerance', () => {

@@ -7,7 +7,7 @@
 
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
-import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries } from '../core/withdrawal.js';
+import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
@@ -346,6 +346,103 @@ export function writeSpecificWithdrawalFloorsToDom(tiers, doc = document) {
   });
 }
 
+/** Normalize gifting tiers; empty array means no gifting. */
+export function normalizeGiftingTiers(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [];
+  }
+  return tiers.map((tier, index, arr) => {
+    const amount = parseCurrency(tier?.amount);
+    const balance = parseCurrency(tier?.balance);
+    const isLast = index === arr.length - 1;
+    if (isLast) return { amount, balance };
+    const years = parseInt(tier?.years, 10);
+    return { amount, balance, years: Number.isFinite(years) && years >= 1 ? years : 1 };
+  });
+}
+
+export function readGiftingTiersFromDom(doc = document) {
+  const list = doc.getElementById('giftingTiersList');
+  if (!list) return normalizeGiftingTiers(SCENARIO_DEFAULTS.giftingTiers);
+
+  const rows = list.querySelectorAll('[data-gifting-tier-row]');
+  if (rows.length === 0) return [];
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const amountInput = row.querySelector('[data-gift-amount]');
+    const balanceInput = row.querySelector('[data-gift-balance]');
+    const yearsInput = row.querySelector('[data-gift-years]');
+    const amount = parseCurrency(amountInput?.value);
+    const balance = parseCurrency(balanceInput?.value);
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push({ amount, balance });
+    } else {
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({ amount, balance, years: Number.isFinite(years) ? years : null });
+    }
+  });
+  return tiers;
+}
+
+export function writeGiftingTiersToDom(tiers, doc = document) {
+  const list = doc.getElementById('giftingTiersList');
+  if (!list) return;
+
+  const normalized = normalizeGiftingTiers(tiers);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'flex flex-wrap items-end gap-2 mb-2';
+    row.dataset.giftingTierRow = String(index);
+
+    const amountWrap = doc.createElement('div');
+    amountWrap.className = 'flex-1 min-w-[7rem]';
+    amountWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Gift</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" data-gift-amount class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.amount)}">
+        <span class="input-adorn-suffix">000s</span>
+      </div>`;
+    row.appendChild(amountWrap);
+
+    const balanceWrap = doc.createElement('div');
+    balanceWrap.className = 'flex-1 min-w-[7rem]';
+    balanceWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Balance &gt;</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" data-gift-balance class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.balance)}">
+        <span class="input-adorn-suffix">000s</span>
+      </div>`;
+    row.appendChild(balanceWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-gift-years min="1" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 1}">`;
+      row.appendChild(yearsWrap);
+    } else if (normalized.length > 1) {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      row.appendChild(labelWrap);
+    }
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-gifting-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
+    removeBtn.textContent = 'Remove';
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
+}
+
 export function defaultScenario() {
   return { ...SCENARIO_DEFAULTS };
 }
@@ -392,6 +489,7 @@ export function readScenarioFromDom(doc = document) {
   scenario.withdrawalStrategy = strat ? strat.value : SCENARIO_DEFAULTS.withdrawalStrategy;
   scenario.withdrawalFloors = readWithdrawalFloorsFromDom(doc);
   scenario.specificWithdrawalFloors = readSpecificWithdrawalFloorsFromDom(doc);
+  scenario.giftingTiers = readGiftingTiersFromDom(doc);
 
   return scenario;
 }
@@ -443,6 +541,10 @@ export function writeScenarioToDom(scenario, doc = document) {
   );
   writeSpecificWithdrawalFloorsToDom(
     scenario.specificWithdrawalFloors ?? SCENARIO_DEFAULTS.specificWithdrawalFloors,
+    doc,
+  );
+  writeGiftingTiersToDom(
+    scenario.giftingTiers ?? SCENARIO_DEFAULTS.giftingTiers,
     doc,
   );
 }
@@ -581,6 +683,11 @@ export function buildSimParams(scenario, samples) {
       spendChangeRate: (scenario.spendChangePct || 0) / 100,
       goGoBonus: toDollars(scenario.goGoBonus),
       goGoYears: scenario.goGoYears || 0,
+      giftingSeries: buildGiftingSeries(
+        normalizeGiftingTiers(scenario.giftingTiers),
+        maxYears,
+        toDollars,
+      ),
     },
     dynConfig: readDynConfigFromScenario(scenario),
     logNormal: {
@@ -794,6 +901,36 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     }
     if (intermediateYears >= minHorizon) {
       errors.push('Specific List minimum tiers must leave at least 1 year for the final tier.');
+    }
+  }
+
+  const giftingTiers = normalizeGiftingTiers(scenario.giftingTiers);
+  if (Number.isFinite(minHorizon) && giftingTiers.length > 1) {
+    let intermediateYears = 0;
+    for (let i = 0; i < giftingTiers.length - 1; i++) {
+      const years = giftingTiers[i].years;
+      if (!Number.isFinite(years) || years < 1) {
+        errors.push('Each gifting tier (except the last) must span at least 1 year.');
+        break;
+      }
+      intermediateYears += years;
+    }
+    if (intermediateYears >= minHorizon) {
+      errors.push('Gifting tiers must leave at least 1 year for the final tier.');
+    }
+  }
+  for (const tier of giftingTiers) {
+    if (!Number.isFinite(tier.amount) || tier.amount < 0) {
+      errors.push('Each gifting tier must have a zero or positive gift amount.');
+      break;
+    }
+    if (!Number.isFinite(tier.balance) || tier.balance < 0) {
+      errors.push('Each gifting tier must have a zero or positive balance threshold.');
+      break;
+    }
+    if (tier.amount > 0 && tier.balance <= 0) {
+      errors.push('Gifting tiers with a positive gift amount need a positive balance threshold.');
+      break;
     }
   }
 

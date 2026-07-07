@@ -3,6 +3,8 @@ import {
   buildWithdrawalFloorSeries,
   buildWithdrawalFloorPctSeries,
   buildSpecificWithdrawalFloorSeries,
+  buildGiftingSeries,
+  buildGiftOverlaySeries,
   getDynamicAdjustment,
   resolveAdjustment,
 } from '../src/core/withdrawal.js';
@@ -77,6 +79,62 @@ describe('buildSpecificWithdrawalFloorSeries', () => {
     expect(buildSpecificWithdrawalFloorSeries(tiers, [-50_000, 100_000], 2)).toEqual([
       0, 80_000,
     ]);
+  });
+});
+
+describe('buildGiftingSeries', () => {
+  it('returns zero entries when tiers are empty', () => {
+    expect(buildGiftingSeries([], 3, toDollars)).toEqual([
+      { amount: 0, balanceThreshold: 0 },
+      { amount: 0, balanceThreshold: 0 },
+      { amount: 0, balanceThreshold: 0 },
+    ]);
+  });
+
+  it('applies a single tier across the full horizon', () => {
+    expect(buildGiftingSeries([{ amount: 25, balance: 2000 }], 3, toDollars)).toEqual([
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+    ]);
+  });
+
+  it('walks intermediate tiers then fills with the final tier', () => {
+    const tiers = [
+      { amount: 30, balance: 2500, years: 2 },
+      { amount: 20, balance: 2000, years: 1 },
+      { amount: 10, balance: 1500 },
+    ];
+    expect(buildGiftingSeries(tiers, 5, toDollars)).toEqual([
+      { amount: 30_000, balanceThreshold: 2_500_000 },
+      { amount: 30_000, balanceThreshold: 2_500_000 },
+      { amount: 20_000, balanceThreshold: 2_000_000 },
+      { amount: 10_000, balanceThreshold: 1_500_000 },
+      { amount: 10_000, balanceThreshold: 1_500_000 },
+    ]);
+  });
+
+  it('stops assigning intermediate tiers at the horizon', () => {
+    const tiers = [{ amount: 25, balance: 2000, years: 10 }, { amount: 10, balance: 1000 }];
+    expect(buildGiftingSeries(tiers, 3, toDollars)).toEqual([
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000 },
+    ]);
+  });
+});
+
+describe('buildGiftOverlaySeries', () => {
+  it('returns null for years with zero gift amount', () => {
+    expect(buildGiftOverlaySeries([100_000, 90_000], [0, 25_000])).toEqual([null, 115_000]);
+  });
+
+  it('adds gift amount to the baseline withdrawal', () => {
+    expect(buildGiftOverlaySeries([100_000], [50_000])).toEqual([150_000]);
+  });
+
+  it('uses zero baseline for deposit years', () => {
+    expect(buildGiftOverlaySeries([-50_000, 80_000], [30_000, 20_000])).toEqual([30_000, 100_000]);
   });
 });
 
