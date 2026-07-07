@@ -29,7 +29,7 @@ function splitIntoChunks(total, numWorkers) {
   return chunks;
 }
 
-function stitchMonteCarloResults(params, chunkResults) {
+export function stitchMonteCarloResults(params, chunkResults) {
   const totalSims = params.numSimulations;
   const maxYears = params.maxYears ?? params.numYears;
   const baseSeed = params.seed >>> 0;

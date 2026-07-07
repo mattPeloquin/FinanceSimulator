@@ -68,6 +68,7 @@ describe('runMonteCarlo determinism', () => {
     expect(Array.from(a.finalBalance)).toEqual(Array.from(b.finalBalance));
     expect(Array.from(a.totalWithdrawn)).toEqual(Array.from(b.totalWithdrawn));
     expect(Array.from(a.medianYearlyWithdrawal)).toEqual(Array.from(b.medianYearlyWithdrawal));
+    expect(Array.from(a.horizonYears)).toEqual(Array.from(b.horizonYears));
     expect(Array.from(a.allYearsReturns)).toEqual(Array.from(b.allYearsReturns));
   });
 
