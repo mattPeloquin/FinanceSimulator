@@ -10,6 +10,7 @@ import {
 import { meetsWithdrawalTarget, median, isMedianYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
+import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
 
 let echartsModule = null;
 let chartInstance = null;
@@ -280,6 +281,31 @@ function zAxisLabel(formatter) {
   return { show: true, color: theme.axisLabel, fontSize: 9, margin: 4, formatter };
 }
 
+function largeWithdrawalLegendOptions(theme) {
+  return {
+    position: 'top',
+    labels: {
+      color: theme.legend,
+      boxWidth: 36,
+      boxHeight: 2,
+      padding: 12,
+      generateLabels(chart) {
+        const defaults = Chart.defaults.plugins.legend.labels.generateLabels;
+        return defaults.call(this, chart).map((label) => {
+          const dataset = chart.data.datasets[label.datasetIndex];
+          return {
+            ...label,
+            fillStyle: 'transparent',
+            strokeStyle: dataset.borderColor,
+            lineWidth: Math.max(dataset.borderWidth ?? 2, 1.5),
+            lineDash: dataset.borderDash ?? [],
+          };
+        });
+      },
+    },
+  };
+}
+
 function applySurfaceTheme() {
   if (!chartInstance || !surfaceState.columns.length) return;
   const theme = getChartTheme();
@@ -301,14 +327,21 @@ function applySurfaceTheme() {
     floatPanel.style.borderBottomColor = theme.floatPanelBorder;
   }
   if (floatTitle) floatTitle.style.color = theme.floatTitleText;
-  if (floatChart) {
+  if (floatChart && surfaceState.pinnedCol != null) {
+    const series = extractWithdrawalSeries(surfaceState.pinnedCol);
+    if (series) syncWithdrawalLineChart(floatChart, series);
+  } else if (floatChart) {
     Object.assign(floatChart.options, floatChartOptions());
     floatChart.update('none');
   }
-  if (largeChart) {
+  if (largeChart && surfaceState.largeChartCol != null) {
+    const series = extractWithdrawalSeries(surfaceState.largeChartCol);
+    if (series) syncWithdrawalLineChart(largeChart, series, { large: true });
+  } else if (largeChart) {
     Object.assign(largeChart.options.scales.x.ticks, { color: theme.axisTick });
     Object.assign(largeChart.options.scales.y.ticks, { color: theme.axisTick, callback: (v) => formatK(v) });
     Object.assign(largeChart.options.scales.y.title, { color: theme.axisTitle });
+    Object.assign(largeChart.options.plugins.legend.labels, { color: theme.legend });
     largeChart.update('none');
   }
   if (largeBalanceChart && balanceChartSeries) {
@@ -368,26 +401,56 @@ function ensureFloatPanel() {
   container.appendChild(floatPanel);
 }
 
-function getTooltipLines(col, dataIndex) {
+function withdrawalPointDetails(col, dataIndex) {
   const points = surfaceState.columns[col];
-  if (!points) return [];
+  if (!points) return null;
   const p = points[dataIndex + 1];
-  if (!p) return [];
+  if (!p) return null;
   const vals = pointValue(p);
-  const y = vals[1];
-  const ret = vals[3];
-  const bal = vals[4];
-  const wd = vals[5];
-  const unadj = vals[8];
+  return {
+    year: vals[1],
+    ret: vals[3],
+    bal: vals[4],
+    wd: vals[5],
+    unadj: vals[8],
+  };
+}
+
+function formatWithdrawnLine(wd, unadj) {
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
+  return `Withdrawn: ${formatK(wd)}${deltaStr}`;
+}
+
+function withdrawalDetailTailLines(details) {
+  if (!details) return [];
   return [
-    `Year: ${y}`,
-    `Withdrawn: ${formatK(wd)}${deltaStr}`,
-    `Original Plan: ${formatK(unadj)}`,
-    `Balance: ${formatK(bal)}`,
-    `Market Return: ${(ret * 100).toFixed(1)}%`
+    `Balance: ${formatK(details.bal)}`,
+    `Market Return: ${(details.ret * 100).toFixed(1)}%`,
   ];
+}
+
+function withdrawalChartTooltipCallbacks(colKey) {
+  const colAt = () => surfaceState[colKey];
+  return {
+    title: (items) => (items[0] ? `Year ${items[0].label}` : null),
+    afterTitle: (items) => {
+      if (!items[0]) return [];
+      const details = withdrawalPointDetails(colAt(), items[0].dataIndex);
+      return details ? [formatWithdrawnLine(details.wd, details.unadj)] : [];
+    },
+    label: (ctx) => {
+      const value = formatK(ctx.parsed.y);
+      if (ctx.dataset.label === 'Minimum') return `Minimum: ${value}`;
+      if (ctx.dataset.label === 'Gift') return `Gift ceiling: ${value}`;
+      if (ctx.dataset.label === 'Original Plan') return `Original Plan: ${value}`;
+      return null;
+    },
+    afterBody: (items) => {
+      if (!items[0]) return [];
+      return withdrawalDetailTailLines(withdrawalPointDetails(colAt(), items[0].dataIndex));
+    },
+  };
 }
 
 // Pull the year-by-year withdrawal series out of one pinned column's points.
@@ -428,6 +491,68 @@ function extractWithdrawalSeries(col) {
   };
 }
 
+// Minimum-withdrawal and gift-ceiling reference lines for a sample-run chart,
+// sliced to the path length and styled like the schedule preview sparklines.
+function planOverlaySlice(length) {
+  const portfolio = surfaceState.simParams?.portfolio;
+  if (!portfolio || length <= 0) {
+    return { floorSeries: null, giftAmounts: null, floorStepped: true };
+  }
+  return {
+    floorSeries: portfolio.withdrawalFloorSeries?.slice(0, length) ?? null,
+    giftAmounts: portfolio.giftingSeries?.map((entry) => entry.amount).slice(0, length) ?? null,
+    floorStepped: portfolio.strategy !== 'specific',
+  };
+}
+
+function buildWithdrawalOverlayDatasets(series, { large = false } = {}) {
+  const theme = getChartTheme();
+  const { floorSeries, giftAmounts, floorStepped } = planOverlaySlice(series.labels.length);
+  const datasets = [];
+
+  const displayFloor = Array.isArray(floorSeries)
+    ? floorSeries.map((v) => Math.max(0, v ?? 0))
+    : null;
+  if (displayFloor?.some((v) => v > 0)) {
+    datasets.push({
+      label: 'Minimum',
+      data: displayFloor,
+      borderColor: theme.floorLine,
+      backgroundColor: 'transparent',
+      borderWidth: large ? 1.5 : 1,
+      borderDash: [4, 3],
+      ...(floorStepped ? { stepped: 'before' } : { tension: 0.1 }),
+      pointRadius: 0,
+      pointHoverRadius: large ? 4 : 3,
+      fill: false,
+      order: 0,
+    });
+  }
+
+  const baseline = series.unadjustedData.map((v) => Math.max(0, v));
+  const giftOverlay = Array.isArray(giftAmounts)
+    ? buildGiftOverlaySeries(baseline, giftAmounts)
+    : null;
+  if (giftOverlay?.some((v) => v != null)) {
+    datasets.push({
+      label: 'Gift',
+      data: giftOverlay,
+      borderColor: theme.giftLine,
+      backgroundColor: 'transparent',
+      borderWidth: large ? 1.5 : 1,
+      borderDash: [2, 2],
+      tension: 0.1,
+      pointRadius: 0,
+      pointHoverRadius: large ? 4 : 3,
+      fill: false,
+      order: 2,
+      spanGaps: false,
+    });
+  }
+
+  return datasets;
+}
+
 // Chart.js datasets comparing the original withdrawal plan against what was
 // actually withdrawn. Shared by the small float panel and the large dialog;
 // `large` just scales line and point sizes up.
@@ -446,6 +571,7 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
       backgroundColor: theme.planFill,
       pointRadius: 0,
       pointHoverRadius: 0,
+      order: 1,
     },
     {
       label: 'Actual Withdrawal',
@@ -463,8 +589,23 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
       pointBackgroundColor: floatTheme.point,
       pointBorderColor: '#fff',
       pointBorderWidth: 1,
+      order: 3,
     },
+    ...buildWithdrawalOverlayDatasets(series, { large }),
   ];
+}
+
+function syncWithdrawalLineChart(chart, series, { large = false } = {}) {
+  if (!chart || !series) return;
+  chart.data.labels = series.labels;
+  chart.data.datasets = withdrawalComparisonDatasets(series, { large });
+  const theme = floatThemeForSeries(series);
+  const actualDataset = chart.data.datasets.find((ds) => ds.label === 'Actual Withdrawal');
+  if (actualDataset) {
+    actualDataset.borderColor = theme.line;
+    actualDataset.pointBackgroundColor = theme.point;
+  }
+  chart.update(large ? undefined : 'none');
 }
 
 function floatChartOptions() {
@@ -492,13 +633,7 @@ function floatChartOptions() {
         displayColors: false,
         bodyFont: { size: 9 },
         padding: 4,
-        callbacks: {
-          title: () => null,
-          label: (ctx) => {
-            if (ctx.datasetIndex !== 1) return null;
-            return getTooltipLines(surfaceState.pinnedCol, ctx.dataIndex);
-          },
-        },
+        callbacks: withdrawalChartTooltipCallbacks('pinnedCol'),
       },
     },
   };
@@ -507,7 +642,8 @@ function floatChartOptions() {
 function applyFloatChartTheme(series) {
   if (!floatChart) return;
   const theme = floatThemeForSeries(series);
-  const dsActual = floatChart.data.datasets[1];
+  const dsActual = floatChart.data.datasets.find((ds) => ds.label === 'Actual Withdrawal');
+  if (!dsActual) return;
   dsActual.borderColor = theme.line;
   dsActual.pointBackgroundColor = theme.point;
 }
@@ -560,11 +696,8 @@ function showFloatWithdrawal(col) {
   floatTitle.style.color = '';
 
   if (floatChart) {
-    floatChart.data.labels = series.labels;
-    floatChart.data.datasets[0].data = series.unadjustedData;
-    floatChart.data.datasets[1].data = series.actualData;
+    syncWithdrawalLineChart(floatChart, series);
     applyFloatChartTheme(series);
-    floatChart.update('none');
   } else {
     floatChart = new Chart(floatCanvas.getContext('2d'), {
       type: 'line',
@@ -658,12 +791,7 @@ function openLargeWithdrawalChart(col) {
   const theme = floatThemeForSeries(series);
 
   if (largeChart) {
-    largeChart.data.labels = series.labels;
-    largeChart.data.datasets[0].data = series.unadjustedData;
-    largeChart.data.datasets[1].data = series.actualData;
-    largeChart.data.datasets[1].borderColor = theme.line;
-    largeChart.data.datasets[1].pointBackgroundColor = theme.point;
-    largeChart.update();
+    syncWithdrawalLineChart(largeChart, series, { large: true });
   } else {
     const chartTheme = getChartTheme();
     largeChart = new Chart(canvas.getContext('2d'), {
@@ -687,16 +815,10 @@ function openLargeWithdrawalChart(col) {
           },
         },
         plugins: {
-          legend: { position: 'top', labels: { color: chartTheme.legend } },
+          legend: largeWithdrawalLegendOptions(chartTheme),
           tooltip: {
             displayColors: false,
-            callbacks: {
-              title: () => null,
-              label: (ctx) => {
-                if (ctx.datasetIndex !== 1) return null;
-                return getTooltipLines(surfaceState.largeChartCol, ctx.dataIndex);
-              },
-            },
+            callbacks: withdrawalChartTooltipCallbacks('largeChartCol'),
           },
         },
         onHover: (_evt, activeElements) => {
@@ -705,6 +827,11 @@ function openLargeWithdrawalChart(col) {
         },
       },
     });
+    const actualDataset = largeChart.data.datasets.find((ds) => ds.label === 'Actual Withdrawal');
+    if (actualDataset) {
+      actualDataset.borderColor = theme.line;
+      actualDataset.pointBackgroundColor = theme.point;
+    }
   }
 
   if (largeBalanceChart) {

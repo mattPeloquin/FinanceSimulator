@@ -5,6 +5,7 @@
 // and be unit-tested directly.
 
 import { goalSuccessRate, median, isMedianYearlyMetric } from './statistics.js';
+import { buildBaseWithdrawalSchedule } from './withdrawal.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
 const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: 0, stepPct: 5 };
@@ -55,13 +56,17 @@ function roundDownToThousand(value) {
   return Math.floor(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
 }
 
-// Sum the unadjusted withdrawal schedule (base × age factor + bonus, with
-// minimum-withdrawal floors), or the fixed per-year specific-list amounts
+// Sum the unadjusted withdrawal schedule (base × compounding tiers + extras,
+// with minimum-withdrawal floors), or the fixed per-year specific-list amounts
 // when that strategy is in use. Deterministic — mirrors simulatePath's
 // unadjustedTarget logic without running a simulation.
 export function plannedScheduleTotal(portfolio, numYears) {
   const isSpecific = portfolio.strategy === 'specific';
   let total = 0;
+  const baseSchedule = isSpecific
+    ? null
+    : buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, numYears);
+
   for (let j = 0; j < numYears; j++) {
     let unadjustedTarget;
     if (isSpecific) {
@@ -69,15 +74,7 @@ export function plannedScheduleTotal(portfolio, numYears) {
       // the plan as-is, before any market/balance adjustment is layered on.
       unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
     } else {
-      const baseVal = portfolio.base;
-      const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
-      unadjustedTarget = portfolio.base * ageFactor;
-      if (j < (portfolio.goGoYears || 0)) {
-        unadjustedTarget += portfolio.goGoBonus || 0;
-      }
-      if (baseVal >= 0 && unadjustedTarget < 0) {
-        unadjustedTarget = 0;
-      }
+      unadjustedTarget = baseSchedule[j];
     }
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
     if (unadjustedTarget >= 0 && yearFloor > 0) {
@@ -92,20 +89,17 @@ export function plannedScheduleTotal(portfolio, numYears) {
 // when scoring runs by median yearly spending instead of lifetime total.
 export function plannedScheduleMedianYearly(portfolio, numYears) {
   const yearlyAmounts = [];
+  const isSpecific = portfolio.strategy === 'specific';
+  const baseSchedule = isSpecific
+    ? null
+    : buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, numYears);
+
   for (let j = 0; j < numYears; j++) {
     let unadjustedTarget;
-    if (portfolio.strategy === 'specific') {
+    if (isSpecific) {
       unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
     } else {
-      const baseVal = portfolio.base;
-      const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
-      unadjustedTarget = portfolio.base * ageFactor;
-      if (j < (portfolio.goGoYears || 0)) {
-        unadjustedTarget += portfolio.goGoBonus || 0;
-      }
-      if (baseVal >= 0 && unadjustedTarget < 0) {
-        unadjustedTarget = 0;
-      }
+      unadjustedTarget = baseSchedule[j];
     }
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
     if (unadjustedTarget >= 0 && yearFloor > 0) {
@@ -256,7 +250,7 @@ function cloneParams(params) {
 }
 
 function hasIncludedLevers(config) {
-  return !!(config.includeGoGoYears || config.includeMarketAdjustments || config.includeBalanceOverrides);
+  return !!(config.includeSpendingOverTime || config.includeMarketAdjustments || config.includeBalanceOverrides);
 }
 
 // Cost (in evaluations) of scoring one candidate via the re-solve scorer: an
@@ -286,7 +280,7 @@ function estimateEvalBudget(params, config) {
   const candidateCost = perCandidateCost(config);
 
   const perRoundLeverCost =
-    (config.includeGoGoYears ? bonusGridLen * candidateCost : 0) +
+    (config.includeSpendingOverTime ? bonusGridLen * candidateCost : 0) +
     (config.includeMarketAdjustments
       ? (marketDownAdjLen + marketMedAdjLen + marketUpAdjLen + floorMultiplesLen + 2 * ceilingMultiplesLen) * candidateCost
       : 0) +
@@ -317,7 +311,7 @@ function estimateEvalBudget(params, config) {
 //   desiredSuccessRate       fraction 0..1
 //   shortfallTolerance       fraction 0..1 — max lifetime spending shortfall vs plan
 //   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
-//   includeGoGoYears           bool — covers goGoBonus
+//   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/Med/HighAdj AND dynLow/Med/HighBal
 //   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
 //   searchNumSimulations       optional override of the reduced sim count
@@ -342,14 +336,34 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // Rough total, just for a smoothly-advancing progress bar (not exact).
   const estimatedEvalBudget = estimateEvalBudget(params, config);
 
-  // While Bonus Years is included in the search, the plan is scored by how
-  // much can be spent PER YEAR during those bonus years (not the lifetime
-  // total) — that's what makes the search actually front-load spending
+  // While Spending Over Time is included in the search, the plan is scored by
+  // how much can be spent PER YEAR during the first tier's year span (not the
+  // lifetime total) — that's what makes the search actually front-load spending
   // instead of staying indifferent between an early dollar and a late one.
-  // Outside that lever, or once it's resolved back to 0 bonus years, the
-  // objective falls back to the familiar median lifetime total.
+  // Outside that lever, or once it's resolved back to 0 extra, the objective
+  // falls back to the familiar median lifetime total.
+  function spendingBonusSpan() {
+    if (!config.includeSpendingOverTime) return 0;
+    return config.spendingFirstTierYears ?? 0;
+  }
+
+  function applySpendingBonus(value) {
+    const series = working.portfolio.spendingOverTimeSeries;
+    if (!series || series.length === 0) return;
+    const span = spendingBonusSpan() || series.length;
+    for (let j = 0; j < span && j < series.length; j++) {
+      series[j] = { ...series[j], extra: value };
+    }
+  }
+
+  function readSpendingBonus() {
+    const series = working.portfolio.spendingOverTimeSeries;
+    if (!series || series.length === 0) return 0;
+    return series[0]?.extra ?? 0;
+  }
+
   function currentEarlyWindow() {
-    return config.includeGoGoYears ? working.portfolio.goGoYears : 0;
+    return spendingBonusSpan();
   }
 
   function computeObjective(result, window) {
@@ -411,8 +425,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // around whatever those fields already contained, and Phase 2's search for
   // that same lever would just rediscover the boundary Phase 1 just used —
   // i.e. it would always "converge" back to the value that was already there.
-  if (config.includeGoGoYears) {
-    working.portfolio.goGoBonus = 0;
+  if (config.includeSpendingOverTime) {
+    applySpendingBonus(0);
   }
   if (config.includeMarketAdjustments) {
     working.dynConfig.low.adj = 0;
@@ -632,15 +646,15 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // after every single candidate so protective/aggressive settings are scored
   // by what they actually buy, not by how they look with the base left fixed.
   async function tuneLeversOnce() {
-    if (config.includeGoGoYears) {
+    if (config.includeSpendingOverTime) {
       const bonusGrid = buildBonusGrid(solvedBase, config.goGoBonusFractions);
-      working.portfolio.goGoBonus = await pickBestCandidateWithResolve(
+      await pickBestCandidateWithResolve(
         bonusGrid,
         (value) => {
-          working.portfolio.goGoBonus = value;
+          applySpendingBonus(value);
         },
-        'Tuning early-years bonus',
-        working.portfolio.goGoBonus,
+        'Tuning spending-over-time extra',
+        readSpendingBonus(),
       );
     }
 
@@ -746,8 +760,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // round made no difference so the loop can stop before hitting maxRounds.
   function captureLeverSnapshot() {
     const snapshot = {};
-    if (config.includeGoGoYears) {
-      snapshot.goGoBonus = working.portfolio.goGoBonus;
+    if (config.includeSpendingOverTime) {
+      snapshot.spendingOverTimeBonus = readSpendingBonus();
     }
     if (config.includeMarketAdjustments) {
       snapshot.dynLowAdj = working.dynConfig.low.adj;
@@ -833,8 +847,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     baseWithdrawal: finalBase,
     pinnedBase: pinBase || undefined,
     roundsUsed,
-    goGoBonus: config.includeGoGoYears ? working.portfolio.goGoBonus : undefined,
-    spendChangeRate: working.portfolio.spendChangeRate,
+    spendingOverTimeBonus: config.includeSpendingOverTime ? readSpendingBonus() : undefined,
     marketAdjustments: config.includeMarketAdjustments
       ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
       : undefined,

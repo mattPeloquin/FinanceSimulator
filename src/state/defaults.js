@@ -110,14 +110,13 @@ export const SCENARIO_DEFAULTS = {
 
   // Front-loading (only when withdrawalStrategy is 'base')
 
-  // Annual real % change applied to the whole withdrawal (negative = decline).
-  spendChangePct: -2,
-
-  // Flat bonus added to withdrawal during the first goGoYears ($000s).
-  goGoBonus: 50,
-
-  // Number of early years that receive goGoBonus.
-  goGoYears: 15,
+  // Staged spending-over-time tiers: annual real % change, extra withdrawal,
+  // and year count. Intermediate tiers need a year count; the last tier
+  // applies to all remaining years. Empty normalizes to one flat tier.
+  spendingOverTimeTiers: [
+    { changePct: -2, extra: 50, years: 15 },
+    { changePct: -2, extra: 0 },
+  ],
 
   // Year-by-year withdrawal list. Used when withdrawalStrategy is 'specific'.
   // Paste-friendly text; negative = deposit. Leave empty when using 'base'.
@@ -191,7 +190,7 @@ export const SCENARIO_DEFAULTS = {
   goalSeekIncludeBaseWithdrawal: true,
 
   // Which additional levers the search is allowed to tune (checkboxes).
-  goalSeekIncludeGoGoYears: false,
+  goalSeekIncludeSpendingOverTime: false,
   goalSeekIncludeMarketAdjustments: false,
   goalSeekIncludeBalanceOverrides: false,
 

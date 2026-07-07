@@ -61,9 +61,30 @@ describe('migrateScenario', () => {
     expect(v3.withdrawalFloors).toEqual([{ amount: 100 }]);
     expect(v3.withdrawalFloor).toBeUndefined();
   });
-  it('leaves v3 scenarios unchanged', () => {
-    const s = { startBalance: 4000, withdrawalFloors: [{ amount: 80 }] };
-    expect(migrateScenario(s, 3)).toEqual(s);
+  it('converts v3 front-loading fields to spendingOverTimeTiers', () => {
+    const v3 = {
+      startBalance: 4000,
+      withdrawalFloors: [{ amount: 80 }],
+      spendChangePct: -2,
+      goGoBonus: 50,
+      goGoYears: 15,
+    };
+    const v4 = migrateScenario(v3, 3);
+    expect(v4.spendingOverTimeTiers).toEqual([
+      { changePct: -2, extra: 50, years: 15 },
+      { changePct: -2, extra: 0 },
+    ]);
+    expect(v4.spendChangePct).toBeUndefined();
+    expect(v4.goGoBonus).toBeUndefined();
+    expect(v4.goGoYears).toBeUndefined();
+  });
+  it('leaves v4 scenarios unchanged', () => {
+    const s = {
+      startBalance: 4000,
+      withdrawalFloors: [{ amount: 80 }],
+      spendingOverTimeTiers: [{ changePct: 0, extra: 0 }],
+    };
+    expect(migrateScenario(s, 4)).toEqual(s);
   });
 });
 
@@ -227,12 +248,12 @@ describe('buildGoalSeekConfig', () => {
     s.goalSeekTargetEndingBalance = 500;
     s.goalSeekDesiredSuccessPct = 85;
     s.goalSeekRiskTolerancePct = 20;
-    s.goalSeekIncludeGoGoYears = true;
+    s.goalSeekIncludeSpendingOverTime = true;
     const config = buildGoalSeekConfig(s);
     expect(config.targetEndingBalance).toBe(500 * MONEY_SCALE);
     expect(config.desiredSuccessRate).toBeCloseTo(0.85, 6);
     expect(config.shortfallTolerance).toBeCloseTo(0.2, 6);
-    expect(config.includeGoGoYears).toBe(true);
+    expect(config.includeSpendingOverTime).toBe(true);
     expect(config.includeMarketAdjustments).toBe(false);
     expect(config.includeBalanceOverrides).toBe(false);
   });
@@ -260,15 +281,15 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).pinBaseWithdrawal).toBe(true);
   });
 
-  it('forces pinBaseWithdrawal and disables go-go years for a specific-list strategy', () => {
+  it('forces pinBaseWithdrawal and disables spending-over-time for a specific-list strategy', () => {
     const s = defaultScenario();
     s.withdrawalStrategy = 'specific';
     s.goalSeekIncludeBaseWithdrawal = true;
-    s.goalSeekIncludeGoGoYears = true;
+    s.goalSeekIncludeSpendingOverTime = true;
     s.goalSeekIncludeMarketAdjustments = true;
     const config = buildGoalSeekConfig(s);
     expect(config.pinBaseWithdrawal).toBe(true);
-    expect(config.includeGoGoYears).toBe(false);
+    expect(config.includeSpendingOverTime).toBe(false);
     expect(config.includeMarketAdjustments).toBe(true);
   });
 });

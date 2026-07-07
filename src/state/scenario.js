@@ -7,12 +7,12 @@
 
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
-import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries } from '../core/withdrawal.js';
+import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -56,9 +56,6 @@ const FIELDS = [
   field('ceilingBalance', 'ceilingBalance', 'currency'),
   field('ceilingBonus', 'ceilingBonus', 'float'),
 
-  field('spendChangePct', 'spendChangePct', 'float'),
-  field('goGoBonus', 'goGoBonus', 'currency'),
-  field('goGoYears', 'goGoYears', 'int'),
   field('specificWithdrawals', 'specificWithdrawals', 'string'),
 
   field('enableDynamicAdjustments', 'enableDynamicAdjustments', 'boolean'),
@@ -92,7 +89,7 @@ const FIELDS = [
   field('goalSeekDesiredSuccessPct', 'goalSeekDesiredSuccessPct', 'float'),
   field('goalSeekRiskTolerancePct', 'goalSeekRiskTolerancePct', 'float'),
   field('goalSeekIncludeBaseWithdrawal', 'goalSeekIncludeBaseWithdrawal', 'boolean'),
-  field('goalSeekIncludeGoGoYears', 'goalSeekIncludeGoGoYears', 'boolean'),
+  field('goalSeekIncludeSpendingOverTime', 'goalSeekIncludeSpendingOverTime', 'boolean'),
   field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
   field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
   field('goalSeekNumSimulations', 'goalSeekNumSimulations', 'int'),
@@ -160,6 +157,29 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
       migrated.withdrawalFloors = legacyFloor > 0 ? [{ amount: legacyFloor }] : [];
     }
     delete migrated.withdrawalFloor;
+  }
+
+  if (schemaVersion < 4) {
+    if (migrated.spendingOverTimeTiers == null) {
+      const changePct = migrated.spendChangePct ?? 0;
+      const extra = parseCurrency(migrated.goGoBonus);
+      const years = parseInt(migrated.goGoYears, 10);
+      if (Number.isFinite(years) && years > 0) {
+        migrated.spendingOverTimeTiers = [
+          { changePct, extra, years },
+          { changePct, extra: 0 },
+        ];
+      } else {
+        migrated.spendingOverTimeTiers = [{ changePct, extra: 0 }];
+      }
+    }
+    delete migrated.spendChangePct;
+    delete migrated.goGoBonus;
+    delete migrated.goGoYears;
+    if (migrated.goalSeekIncludeSpendingOverTime == null && migrated.goalSeekIncludeGoGoYears != null) {
+      migrated.goalSeekIncludeSpendingOverTime = migrated.goalSeekIncludeGoGoYears;
+    }
+    delete migrated.goalSeekIncludeGoGoYears;
   }
 
   if (migrated.goalSeekIncludeBaseWithdrawal == null && migrated.goalSeekPinBaseWithdrawal != null) {
@@ -443,6 +463,121 @@ export function writeGiftingTiersToDom(tiers, doc = document) {
   });
 }
 
+/** Normalize spending-over-time tiers; empty array becomes one flat tier. */
+export function normalizeSpendingOverTimeTiers(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [{ changePct: 0, extra: 0 }];
+  }
+  return tiers.map((tier, index, arr) => {
+    const changePct = typeof tier?.changePct === 'number' ? tier.changePct : parseFloat(tier?.changePct) || 0;
+    const extra = parseCurrency(tier?.extra);
+    const isLast = index === arr.length - 1;
+    if (isLast) return { changePct, extra };
+    const years = parseInt(tier?.years, 10);
+    return { changePct, extra, years: Number.isFinite(years) && years >= 0 ? years : 0 };
+  });
+}
+
+/** Year span of the first tier when multiple tiers exist; null for a single tier. */
+export function spendingFirstTierYearsFromTiers(tiers) {
+  const normalized = normalizeSpendingOverTimeTiers(tiers);
+  if (normalized.length <= 1) return null;
+  const years = parseInt(normalized[0].years, 10);
+  return Number.isFinite(years) && years >= 0 ? years : 0;
+}
+
+export function readSpendingOverTimeTiersFromDom(doc = document) {
+  const list = doc.getElementById('spendingOverTimeTiersList');
+  if (!list) return normalizeSpendingOverTimeTiers(SCENARIO_DEFAULTS.spendingOverTimeTiers);
+
+  const rows = list.querySelectorAll('[data-spending-tier-row]');
+  if (rows.length === 0) return [{ changePct: 0, extra: 0 }];
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const changeInput = row.querySelector('[data-spending-change]');
+    const extraInput = row.querySelector('[data-spending-extra]');
+    const yearsInput = row.querySelector('[data-spending-years]');
+    const changePct = parseFloat(changeInput?.value);
+    const extra = parseCurrency(extraInput?.value);
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push({ changePct: Number.isFinite(changePct) ? changePct : 0, extra });
+    } else {
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({
+        changePct: Number.isFinite(changePct) ? changePct : 0,
+        extra,
+        years: Number.isFinite(years) ? years : null,
+      });
+    }
+  });
+  return tiers;
+}
+
+export function writeSpendingOverTimeTiersToDom(tiers, doc = document) {
+  const list = doc.getElementById('spendingOverTimeTiersList');
+  if (!list) return;
+
+  const normalized = normalizeSpendingOverTimeTiers(tiers);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'flex flex-wrap items-end gap-2 mb-2';
+    row.dataset.spendingTierRow = String(index);
+
+    const changeWrap = doc.createElement('div');
+    changeWrap.className = 'w-24';
+    changeWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Annual Change</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="number" data-spending-change step="0.5" class="w-full rounded input-theme p-1 text-sm text-center" value="${tier.changePct ?? 0}">
+        <span class="input-adorn-suffix">%</span>
+      </div>`;
+    row.appendChild(changeWrap);
+
+    const extraWrap = doc.createElement('div');
+    extraWrap.className = 'flex-1 min-w-[7rem]';
+    extraWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Extra Withdrawal</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" data-spending-extra class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.extra)}">
+        <span class="input-adorn-suffix">000s</span>
+      </div>`;
+    row.appendChild(extraWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-spending-years min="0" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 0}">`;
+      row.appendChild(yearsWrap);
+    } else if (normalized.length > 1) {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      row.appendChild(labelWrap);
+    }
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-spending-over-time-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
+    removeBtn.textContent = 'Remove';
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
+}
+
+/** Write Goal Seek's discovered first-tier extra withdrawal back into the form. */
+export function writeFirstSpendingTierExtra(dollars, doc = document) {
+  const input = doc.querySelector('[data-spending-tier-row="0"] [data-spending-extra]');
+  if (input) input.value = formatCurrency(dollars / MONEY_SCALE);
+}
+
 export function defaultScenario() {
   return { ...SCENARIO_DEFAULTS };
 }
@@ -490,6 +625,7 @@ export function readScenarioFromDom(doc = document) {
   scenario.withdrawalFloors = readWithdrawalFloorsFromDom(doc);
   scenario.specificWithdrawalFloors = readSpecificWithdrawalFloorsFromDom(doc);
   scenario.giftingTiers = readGiftingTiersFromDom(doc);
+  scenario.spendingOverTimeTiers = readSpendingOverTimeTiersFromDom(doc);
 
   return scenario;
 }
@@ -545,6 +681,10 @@ export function writeScenarioToDom(scenario, doc = document) {
   );
   writeGiftingTiersToDom(
     scenario.giftingTiers ?? SCENARIO_DEFAULTS.giftingTiers,
+    doc,
+  );
+  writeSpendingOverTimeTiersToDom(
+    scenario.spendingOverTimeTiers ?? SCENARIO_DEFAULTS.spendingOverTimeTiers,
     doc,
   );
 }
@@ -678,11 +818,11 @@ export function buildSimParams(scenario, samples) {
           toDollars,
         );
       })(),
-      // Front-loading controls. Same name as the scenario's spendChangePct field,
-      // but converted from a percentage to a decimal rate.
-      spendChangeRate: (scenario.spendChangePct || 0) / 100,
-      goGoBonus: toDollars(scenario.goGoBonus),
-      goGoYears: scenario.goGoYears || 0,
+      spendingOverTimeSeries: buildSpendingOverTimeSeries(
+        normalizeSpendingOverTimeTiers(scenario.spendingOverTimeTiers),
+        maxYears,
+        toDollars,
+      ),
       giftingSeries: buildGiftingSeries(
         normalizeGiftingTiers(scenario.giftingTiers),
         maxYears,
@@ -758,16 +898,19 @@ export function readDynConfigFromDom(doc = document) {
 export function buildGoalSeekConfig(scenario) {
   // A Specific List has no single scalar "base" to search — each year's
   // amount is typed in directly — so Goal Seek always keeps it fixed and
-  // only tunes the Market/Balance adjustment levers on top of it. Go-Go
-  // years (bonus front-loading) has no effect on the specific-list engine
-  // path, so it's never searched here either.
+  // only tunes the Market/Balance adjustment levers on top of it. Spending
+  // over time has no effect on the specific-list engine path, so it's never
+  // searched here either.
   const isSpecific = scenario.withdrawalStrategy === 'specific';
   return {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
     shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 1),
     pinBaseWithdrawal: isSpecific ? true : !scenario.goalSeekIncludeBaseWithdrawal,
-    includeGoGoYears: isSpecific ? false : !!scenario.goalSeekIncludeGoGoYears,
+    includeSpendingOverTime: isSpecific ? false : !!scenario.goalSeekIncludeSpendingOverTime,
+    spendingFirstTierYears: isSpecific
+      ? null
+      : spendingFirstTierYearsFromTiers(scenario.spendingOverTimeTiers),
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
     searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
@@ -904,6 +1047,22 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     }
   }
 
+  const spendingTiers = normalizeSpendingOverTimeTiers(scenario.spendingOverTimeTiers);
+  if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(minHorizon) && spendingTiers.length > 1) {
+    let intermediateYears = 0;
+    for (let i = 0; i < spendingTiers.length - 1; i++) {
+      const years = spendingTiers[i].years;
+      if (!Number.isFinite(years) || years < 0) {
+        errors.push('Each spending-over-time tier (except the last) must have a zero or positive year count.');
+        break;
+      }
+      intermediateYears += years;
+    }
+    if (intermediateYears >= minHorizon) {
+      errors.push('Spending-over-time tiers must leave at least 1 year for the final tier.');
+    }
+  }
+
   const giftingTiers = normalizeGiftingTiers(scenario.giftingTiers);
   if (Number.isFinite(minHorizon) && giftingTiers.length > 1) {
     let intermediateYears = 0;
@@ -961,7 +1120,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
         errors.push('When the base withdrawal is not included in the search, it must be a positive amount.');
       }
       const hasLever =
-        scenario.goalSeekIncludeGoGoYears
+        scenario.goalSeekIncludeSpendingOverTime
         || scenario.goalSeekIncludeMarketAdjustments
         || scenario.goalSeekIncludeBalanceOverrides;
       if (!hasLever) {

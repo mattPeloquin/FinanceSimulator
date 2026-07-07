@@ -1,6 +1,6 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom } from '../state/scenario.js';
+import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom, readSpendingOverTimeTiersFromDom, writeSpendingOverTimeTiersToDom } from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
@@ -146,10 +146,16 @@ export function toggleWithdrawalStrategy(strategy) {
 // thresholds AND their cut/boost rates.
 const GOAL_SEEK_LEVER_FIELDS = {
   goalSeekIncludeBaseWithdrawal: ['baseWithdrawal'],
-  goalSeekIncludeGoGoYears: ['goGoBonus'],
   goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynMedAdj', 'dynHighAdj', 'dynLowBal', 'dynMedBal', 'dynHighBal'],
   goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
 };
+
+// Gray out (or restore) the first spending-over-time tier's extra field when
+// Goal Seek is allowed to tune it.
+export function toggleSpendingBonusSearchable(included) {
+  const input = document.querySelector('[data-spending-tier-row="0"] [data-spending-extra]');
+  if (input) input.disabled = included;
+}
 
 // Gray out (or restore) the fields a search lever has taken over. Included
 // fields are disabled — Goal Seek will choose their values — and left
@@ -177,6 +183,11 @@ function syncGoalSeekSectionExpansion() {
   const specificMinDetails = document.getElementById('details-specific-min-withdrawal');
   if (specificMinDetails && strategy === 'specific') specificMinDetails.open = true;
 
+  if (document.getElementById('goalSeekIncludeSpendingOverTime')?.checked) {
+    const spendingDetails = document.getElementById('details-spending-over-time');
+    if (spendingDetails) spendingDetails.open = true;
+  }
+
   if (document.getElementById('goalSeekIncludeMarketAdjustments')?.checked) {
     const marketDetails = document.getElementById('details-market-adjustment');
     if (marketDetails) marketDetails.open = true;
@@ -203,6 +214,11 @@ export function toggleGoalSeekMode(enabled) {
     const included = enabled && !!checkbox?.checked;
     toggleFieldSearchable(fieldIds, included);
   }
+
+  const spendingWrap = document.getElementById('goalSeekIncludeSpendingOverTimeWrap');
+  if (spendingWrap) spendingWrap.style.display = enabled ? '' : 'none';
+  const spendingCheckbox = document.getElementById('goalSeekIncludeSpendingOverTime');
+  toggleSpendingBonusSearchable(enabled && !!spendingCheckbox?.checked);
 
   const runButton = document.getElementById('runButton');
   if (runButton) runButton.textContent = enabled ? 'Find Best Plan' : 'Run Simulation';
@@ -302,6 +318,47 @@ export function setupSpecificWithdrawalFloorList({ onChange }) {
 
   list.addEventListener('change', notify);
   list.addEventListener('input', notify);
+}
+
+export function setupSpendingOverTimeTierList({ onChange }) {
+  const list = document.getElementById('spendingOverTimeTiersList');
+  const addBtn = document.getElementById('addSpendingOverTimeTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readSpendingOverTimeTiersFromDom();
+    if (tiers.length === 0) {
+      writeSpendingOverTimeTiersToDom([{ changePct: 0, extra: 0 }]);
+      notify();
+      return;
+    }
+    const last = tiers.pop();
+    tiers.push({ changePct: last.changePct, extra: last.extra, years: 1 });
+    tiers.push(last);
+    writeSpendingOverTimeTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-spending-over-time-tier');
+    if (!btn) return;
+    const tiers = readSpendingOverTimeTiersFromDom();
+    tiers.splice(Number(btn.closest('[data-spending-tier-row]')?.dataset.spendingTierRow), 1);
+    writeSpendingOverTimeTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('change', notify);
+  list.addEventListener('input', notify);
+
+  list.addEventListener('blur', (e) => {
+    if (e.target.matches('[data-spending-extra]')) {
+      formatWithdrawalFloorCurrencyInput(e.target);
+      notify();
+    }
+  }, true);
 }
 
 export function setupGiftingTierList({ onChange }) {
@@ -491,6 +548,14 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const spendingCheckbox = document.getElementById('goalSeekIncludeSpendingOverTime');
+  if (spendingCheckbox) {
+    spendingCheckbox.addEventListener('change', (e) => {
+      toggleSpendingBonusSearchable(e.target.checked);
+      notify();
+    });
+  }
+
   for (const [checkboxId, fieldIds] of Object.entries(GOAL_SEEK_LEVER_FIELDS)) {
     const checkbox = document.getElementById(checkboxId);
     if (!checkbox) continue;
@@ -520,7 +585,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   }
   syncWithdrawalAdjPreview();
 
-  for (const id of ['baseWithdrawal', 'spendChangePct', 'goGoBonus', 'goGoYears', 'numYears']) {
+  for (const id of ['baseWithdrawal', 'numYears']) {
     const input = document.getElementById(id);
     if (input) input.addEventListener('input', syncBaseWithdrawalPreview);
   }
@@ -563,12 +628,23 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
 
   setupWithdrawalFloorList({ onChange: notify });
   setupSpecificWithdrawalFloorList({ onChange: notify });
+  setupSpendingOverTimeTierList({ onChange: notify });
   setupGiftingTierList({ onChange: notify });
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever
   // a tier is typed into, added, or removed. Registered after
   // setupWithdrawalFloorList so its DOM rebuild (add/remove tier) has already
   // happened by the time this runs.
+  const spendingOverTimeTiersList = document.getElementById('spendingOverTimeTiersList');
+  if (spendingOverTimeTiersList) {
+    spendingOverTimeTiersList.addEventListener('input', syncBaseWithdrawalPreview);
+    spendingOverTimeTiersList.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+  const addSpendingOverTimeTierBtn = document.getElementById('addSpendingOverTimeTier');
+  if (addSpendingOverTimeTierBtn) {
+    addSpendingOverTimeTierBtn.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+
   const withdrawalFloorsList = document.getElementById('withdrawalFloorsList');
   if (withdrawalFloorsList) {
     withdrawalFloorsList.addEventListener('input', syncBaseWithdrawalPreview);

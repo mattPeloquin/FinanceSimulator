@@ -33,7 +33,8 @@ function buildChartTheme(mode) {
     // Base + Spending schedule preview.
     floorLine: hex('status.danger'),
     // Thin dotted line for the gift ceiling above the planned withdrawal.
-    giftLine: hex('status.success'),
+    // Softer than status.success so it reads as a guide, not a bright highlight.
+    giftLine: mode === 'dark' ? '#5d9a6a' : hex('percentile.p40'),
   };
 }
 

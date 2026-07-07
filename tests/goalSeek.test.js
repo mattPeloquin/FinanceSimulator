@@ -15,6 +15,12 @@ import {
   buildPerRunPlanBenchmarks,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
+import { buildSpendingOverTimeSeries } from '../src/core/withdrawal.js';
+
+const dollars = (k) => k;
+function spendingSeries(numYears, tiers) {
+  return buildSpendingOverTimeSeries(tiers, numYears, dollars);
+}
 
 const simulateAsync = (params) => Promise.resolve(runMonteCarlo(params));
 
@@ -174,9 +180,10 @@ function makeParams(overrides = {}) {
       ceilingBalance: Infinity,
       ceilingBonus: 0,
       withdrawalFloorSeries: new Array(25).fill(0),
-      spendChangeRate: 0,
-      goGoBonus: 20_000,
-      goGoYears: 5,
+      spendingOverTimeSeries: spendingSeries(25, [
+        { changePct: 0, extra: 20_000, years: 5 },
+        { changePct: 0, extra: 0 },
+      ]),
     },
     dynConfig: {
       enabled: true,
@@ -209,9 +216,7 @@ describe('buildPerRunPlanBenchmarks', () => {
     const portfolio = {
       strategy: 'base',
       base: 100_000,
-      spendChangeRate: 0,
-      goGoBonus: 0,
-      goGoYears: 0,
+      spendingOverTimeSeries: spendingSeries(30, [{ changePct: 0, extra: 0 }]),
       withdrawalFloorSeries: new Array(30).fill(0),
     };
     const horizons = Int32Array.from([25, 25, 30, 30, 28]);
@@ -226,9 +231,10 @@ describe('plannedScheduleTotal', () => {
   it('sums base withdrawals with front-loading and bonus years', () => {
     const portfolio = {
       base: 100_000,
-      spendChangeRate: 0,
-      goGoBonus: 20_000,
-      goGoYears: 2,
+      spendingOverTimeSeries: spendingSeries(5, [
+        { changePct: 0, extra: 20_000, years: 2 },
+        { changePct: 0, extra: 0 },
+      ]),
       withdrawalFloorSeries: new Array(5).fill(0),
     };
     // years 0-1: 120k each, years 2-4: 100k each = 540k
@@ -238,9 +244,7 @@ describe('plannedScheduleTotal', () => {
   it('applies spend-change rate and minimum-withdrawal floors', () => {
     const portfolio = {
       base: 100_000,
-      spendChangeRate: -0.02,
-      goGoBonus: 0,
-      goGoYears: 0,
+      spendingOverTimeSeries: spendingSeries(5, [{ changePct: -2, extra: 0 }]),
       withdrawalFloorSeries: [120_000, 120_000, 0, 0, 0],
     };
     // year 0: max(100k, 120k) = 120k; year 1: max(98k, 120k) = 120k; rest decline
@@ -254,9 +258,10 @@ describe('plannedScheduleTotal', () => {
       specificWithdrawals: [80_000, 85_000, 90_000, 90_000, 90_000],
       // These would change the total if the (unused) base-strategy formula were applied.
       base: 999_000,
-      spendChangeRate: 0.5,
-      goGoBonus: 500_000,
-      goGoYears: 5,
+      spendingOverTimeSeries: spendingSeries(5, [
+        { changePct: 50, extra: 500_000, years: 5 },
+        { changePct: 0, extra: 0 },
+      ]),
       withdrawalFloorSeries: new Array(5).fill(0),
     };
     expect(plannedScheduleTotal(portfolio, 5)).toBe(80_000 + 85_000 + 90_000 + 90_000 + 90_000);
@@ -277,9 +282,10 @@ describe('plannedScheduleMedianYearly', () => {
   it('returns the median of the unadjusted per-year schedule', () => {
     const portfolio = {
       base: 100_000,
-      spendChangeRate: 0,
-      goGoBonus: 20_000,
-      goGoYears: 2,
+      spendingOverTimeSeries: spendingSeries(5, [
+        { changePct: 0, extra: 20_000, years: 2 },
+        { changePct: 0, extra: 0 },
+      ]),
       withdrawalFloorSeries: new Array(5).fill(0),
     };
     // years 0-1: 120k, years 2-4: 100k -> median = 100k
@@ -313,7 +319,7 @@ describe('runGoalSeek', () => {
     const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 800,
@@ -336,7 +342,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 800,
@@ -354,7 +360,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 50_000_000, // unreachable from a $1000 starting balance
       desiredSuccessRate: 0.9,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -368,15 +374,14 @@ describe('runGoalSeek', () => {
       portfolio: {
         ...makeParams().portfolio,
         base: 150_000,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
         withdrawalFloorSeries: new Array(25).fill(minWithdrawal),
       },
     });
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.5,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 800,
@@ -392,7 +397,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -402,7 +407,7 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(true);
     expect(summary.baseWithdrawal % 1000 === 0).toBe(true);
-    expect(summary.goGoBonus % 1000 === 0).toBe(true);
+    expect(summary.spendingOverTimeBonus % 1000 === 0).toBe(true);
     for (const value of Object.values(summary.marketAdjustments)) {
       expect(value % 1000 === 0).toBe(true);
     }
@@ -420,7 +425,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -428,7 +433,7 @@ describe('runGoalSeek', () => {
       ...FAST_LEVER_GRIDS,
     });
     expect(summary.feasible).toBe(true);
-    expect(summary.goGoBonus).toBeGreaterThanOrEqual(0);
+    expect(summary.spendingOverTimeBonus).toBeGreaterThanOrEqual(0);
   });
 
   it('tunes market adjustments and their balance override thresholds together', async () => {
@@ -436,7 +441,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: true,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -457,7 +462,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -487,14 +492,13 @@ describe('runGoalSeek', () => {
       portfolio: {
         ...makeParams().portfolio,
         start: 1_500_000,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
       },
     });
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
@@ -517,7 +521,7 @@ describe('runGoalSeek', () => {
     const baseParams = makeParams({
       numYears: 30,
       numSimulations: 600,
-      portfolio: { ...makeParams().portfolio, start: 1_500_000, goGoBonus: 0, goGoYears: 0 },
+      portfolio: { ...makeParams().portfolio, start: 1_500_000, spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]) },
     });
     const sharedConfig = {
       targetEndingBalance: 0,
@@ -530,13 +534,13 @@ describe('runGoalSeek', () => {
 
     const withoutGuardrails = await seek(baseParams, {
       ...sharedConfig,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
     });
     const withGuardrails = await seek(baseParams, {
       ...sharedConfig,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
     });
@@ -549,13 +553,13 @@ describe('runGoalSeek', () => {
   // The early-years objective: when Bonus Years is included in the search,
   // the achieved objective (average annual withdrawal during the bonus-year
   // window) should be reported, and the window should reflect whatever
-  // goGoYears the search actually converged on.
+  // first-tier year span the search actually converged on.
   it('optimizes for average annual spending during the bonus-year window when Bonus Years is included', async () => {
     const params = makeParams({ numYears: 20, numSimulations: 500 });
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 500,
@@ -564,12 +568,12 @@ describe('runGoalSeek', () => {
     });
 
     expect(summary.feasible).toBe(true);
-    if (summary.goGoBonus > 0) {
+    if (summary.spendingOverTimeBonus > 0) {
       expect(summary.earlyYearsWindow).toBeGreaterThan(0);
       expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
     } else {
       // Bonus resolved to zero — search falls back to the lifetime-total
-      // objective even though goGoYears may still be set on the portfolio.
+      // objective even though the first tier's year span may still be set on the portfolio.
       expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
     }
   });
@@ -579,7 +583,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 800,
@@ -593,7 +597,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -610,7 +614,7 @@ describe('runGoalSeek', () => {
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -629,7 +633,7 @@ describe('runGoalSeek', () => {
     const baseConfig = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -651,7 +655,7 @@ describe('runGoalSeek', () => {
     await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -669,7 +673,7 @@ describe('runGoalSeek', () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: true,
+      includeSpendingOverTime: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -677,19 +681,35 @@ describe('runGoalSeek', () => {
       ...FAST_LEVER_GRIDS,
     };
 
-    const resultA = await seek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 200_000 } }), config);
-    const resultB = await seek(makeParams({ portfolio: { ...makeParams().portfolio, goGoBonus: 2_000 } }), config);
+    const resultA = await seek(makeParams({
+      portfolio: {
+        ...makeParams().portfolio,
+        spendingOverTimeSeries: spendingSeries(25, [
+          { changePct: 0, extra: 200_000, years: 5 },
+          { changePct: 0, extra: 0 },
+        ]),
+      },
+    }), config);
+    const resultB = await seek(makeParams({
+      portfolio: {
+        ...makeParams().portfolio,
+        spendingOverTimeSeries: spendingSeries(25, [
+          { changePct: 0, extra: 2_000, years: 5 },
+          { changePct: 0, extra: 0 },
+        ]),
+      },
+    }), config);
 
     expect(resultA.summary.feasible).toBe(true);
     expect(resultB.summary.feasible).toBe(true);
-    expect(resultA.summary.goGoBonus).toBe(resultB.summary.goGoBonus);
+    expect(resultA.summary.spendingOverTimeBonus).toBe(resultB.summary.spendingOverTimeBonus);
   });
 
   it('finds the same base withdrawal regardless of pre-existing market/balance settings', async () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 300,
@@ -720,12 +740,12 @@ describe('runGoalSeek', () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 600,
-      portfolio: { ...makeParams().portfolio, start: 1_500_000, goGoBonus: 0, goGoYears: 0 },
+      portfolio: { ...makeParams().portfolio, start: 1_500_000, spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]) },
     });
     const shared = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
@@ -748,7 +768,7 @@ describe('runGoalSeek', () => {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       shortfallTolerance: 0.25,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
@@ -768,8 +788,7 @@ describe('runGoalSeek', () => {
         ...makeParams().portfolio,
         start: 2_000_000,
         base: pinnedBase,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
       },
     });
     const { params: finalParams, summary } = await seek(params, {
@@ -777,7 +796,7 @@ describe('runGoalSeek', () => {
       desiredSuccessRate: 0.7,
       shortfallTolerance: 0.3,
       pinBaseWithdrawal: true,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
@@ -801,8 +820,7 @@ describe('runGoalSeek', () => {
         ...makeParams().portfolio,
         start: 2_000_000,
         base: 500_000,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
       },
     });
     const { summary } = await seek(params, {
@@ -810,7 +828,7 @@ describe('runGoalSeek', () => {
       desiredSuccessRate: 0.9,
       shortfallTolerance: 0.05,
       pinBaseWithdrawal: true,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
       searchNumSimulations: 500,
@@ -836,8 +854,7 @@ describe('runGoalSeek', () => {
         strategy: 'specific',
         specificWithdrawals,
         start: 2_000_000,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
       },
     });
     const { params: finalParams, summary } = await seek(params, {
@@ -845,7 +862,7 @@ describe('runGoalSeek', () => {
       desiredSuccessRate: 0.7,
       shortfallTolerance: 0.3,
       pinBaseWithdrawal: true,
-      includeGoGoYears: false,
+      includeSpendingOverTime: false,
       includeMarketAdjustments: true,
       includeBalanceOverrides: true,
       searchNumSimulations: 600,

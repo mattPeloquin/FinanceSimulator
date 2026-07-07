@@ -3,7 +3,7 @@
 
 import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
 import { median } from './statistics.js';
-import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
+import { resolveAdjustment, balanceScaleMultiplier, buildBaseWithdrawalSchedule } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
@@ -130,6 +130,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const fittedWithdrawals =
     portfolio.strategy === 'specific'
       ? fitSpecificWithdrawalsToHorizon(portfolio.specificWithdrawals || [], horizonYears)
+      : null;
+
+  const baseSchedule =
+    portfolio.strategy !== 'specific'
+      ? buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, horizonYears)
       : null;
 
   // Log-normal setup (only used when distMethod === 'lognormal').
@@ -265,16 +270,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       unadjustedTarget = baseVal;
     } else {
       baseVal = portfolio.base;
-      // Front-loading: scale the base by an annual real-change factor (j=0 in
-      // year one, so the first year is unscaled). Market adjustments and the 
-      // early-years bonus are flat dollar amounts added *after* the base is scaled.
-      const ageFactor = (1 + (portfolio.spendChangeRate || 0)) ** j;
-      targetWithdrawal = (portfolio.base * ageFactor) + adjAmount;
-      unadjustedTarget = portfolio.base * ageFactor;
-      if (j < portfolio.goGoYears) {
-        targetWithdrawal += portfolio.goGoBonus;
-        unadjustedTarget += portfolio.goGoBonus;
-      }
+      unadjustedTarget = baseSchedule[j];
+      targetWithdrawal = unadjustedTarget + adjAmount;
     }
 
     // Balance-based spending scale: smoothly cut the whole withdrawal as the

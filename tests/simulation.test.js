@@ -3,6 +3,12 @@ import { simulatePath, runMonteCarlo, regeneratePath } from '../src/core/simulat
 import { createRng, deriveSeed } from '../src/core/rng.js';
 import { successRate } from '../src/core/statistics.js';
 import { computeProfiles, computeStandardizedYears } from '../src/core/history.js';
+import { buildSpendingOverTimeSeries } from '../src/core/withdrawal.js';
+
+const dollars = (k) => k;
+function spendingSeries(numYears, tiers) {
+  return buildSpendingOverTimeSeries(tiers, numYears, dollars);
+}
 
 const baseDynConfig = {
   low: { ret: -15, bal: 1_000_000, adj: 0 },
@@ -348,7 +354,7 @@ describe('front-loaded spending', () => {
       portfolio: {
         start: 1e9, base: 100_000, floorBalance: 0, floorPenalty: 0,
         ceilingBalance: Infinity, ceilingBonus: 0,
-        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
       },
       dynConfig: {
         low: { ret: -100, bal: 0, adj: 0 },
@@ -366,7 +372,7 @@ describe('front-loaded spending', () => {
 
   it('declines withdrawals over time with a negative annual real change', () => {
     const p = flatParams();
-    p.portfolio.spendChangeRate = -0.1;
+    p.portfolio.spendingOverTimeSeries = spendingSeries(10, [{ changePct: -10, extra: 0 }]);
     const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
     expect(w[0]).toBeCloseTo(100_000, 3);
     expect(w[1]).toBeCloseTo(90_000, 3);
@@ -375,8 +381,10 @@ describe('front-loaded spending', () => {
 
   it('adds a flat bonus only during the early years', () => {
     const p = flatParams();
-    p.portfolio.goGoBonus = 50_000;
-    p.portfolio.goGoYears = 3;
+    p.portfolio.spendingOverTimeSeries = spendingSeries(10, [
+      { changePct: 0, extra: 50_000, years: 3 },
+      { changePct: 0, extra: 0 },
+    ]);
     const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
     expect(w[0]).toBeCloseTo(150_000, 3);
     expect(w[2]).toBeCloseTo(150_000, 3);
@@ -424,7 +432,7 @@ describe('early-years withdrawal window (Goal Seek objective)', () => {
       portfolio: {
         start: 1e9, base: 100_000, floorBalance: 0, floorPenalty: 0,
         ceilingBalance: Infinity, ceilingBonus: 0,
-        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
       },
       dynConfig: {
         low: { ret: -100, bal: 0, adj: 0 },
@@ -444,8 +452,10 @@ describe('early-years withdrawal window (Goal Seek objective)', () => {
 
   it('counts a flat bonus toward the early window when it falls inside it', () => {
     const p = flatParams({ earlyYearsWindow: 3 });
-    p.portfolio.goGoBonus = 50_000;
-    p.portfolio.goGoYears = 3;
+    p.portfolio.spendingOverTimeSeries = spendingSeries(10, [
+      { changePct: 0, extra: 50_000, years: 3 },
+      { changePct: 0, extra: 0 },
+    ]);
     const s = simulatePath(p, createRng(deriveSeed(1, 0)), false);
     expect(s.earlyWithdrawn).toBeCloseTo(450_000, 3);
   });
@@ -486,7 +496,7 @@ describe('balance-based spending scale', () => {
       portfolio: {
         start: 1_000_000, base: 100_000, floorBalance: 2_000_000, floorPenalty: 0.5,
         ceilingBalance: Infinity, ceilingBonus: 0,
-        spendChangeRate: 0, goGoBonus: 0, goGoYears: 0, withdrawalFloorSeries: [0],
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]), withdrawalFloorSeries: [0],
       },
       dynConfig: {
         enabled: true,
@@ -554,9 +564,7 @@ describe('deposits from negative withdrawals', () => {
         floorPenalty: 0,
         ceilingBalance: Infinity,
         ceilingBonus: 0,
-        spendChangeRate: 0,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
         withdrawalFloorSeries: [0, 0],
       },
       dynConfig: { enabled: false, low: { ret: 0, bal: 0, adj: 0 }, med: { ret: 0, bal: 0, adj: 0 }, high: { ret: 0, bal: 0, adj: 0 } },
@@ -733,9 +741,7 @@ describe('tiered gifting', () => {
         floorPenalty: 0,
         ceilingBalance: Infinity,
         ceilingBonus: 0,
-        spendChangeRate: 0,
-        goGoBonus: 0,
-        goGoYears: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
         withdrawalFloorSeries: [0, 0],
         giftingSeries: [
           { amount: 50_000, balanceThreshold: 2_000_000 },

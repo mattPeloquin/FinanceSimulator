@@ -1,12 +1,27 @@
 // Live sparkline of the "Base + Spending Over Time" withdrawal schedule:
-// the base annual withdrawal, front-loaded by the annual real change and
-// boosted by the early-years bonus, then clamped up to the staged minimum-
-// withdrawal floor (mirroring simulatePath's unadjustedTarget), all before
-// any market/balance guardrail adjustments are layered on at run time.
+// the base annual withdrawal, staged by spending-over-time tiers, then
+// clamped up to the staged minimum-withdrawal floor (mirroring simulatePath's
+// unadjustedTarget), all before any market/balance guardrail adjustments are
+// layered on at run time.
 // Shares its chart look with the Specific List preview (see
 // schedulePreviewChart.js).
-import { parseCurrency, MONEY_SCALE, toDollars, normalizeWithdrawalFloors, readWithdrawalFloorsFromDom, normalizeGiftingTiers, readGiftingTiersFromDom } from '../../state/scenario.js';
-import { buildWithdrawalFloorSeries, buildGiftingSeries } from '../../core/withdrawal.js';
+import {
+  parseCurrency,
+  MONEY_SCALE,
+  toDollars,
+  normalizeWithdrawalFloors,
+  readWithdrawalFloorsFromDom,
+  normalizeGiftingTiers,
+  readGiftingTiersFromDom,
+  normalizeSpendingOverTimeTiers,
+  readSpendingOverTimeTiersFromDom,
+} from '../../state/scenario.js';
+import {
+  buildWithdrawalFloorSeries,
+  buildGiftingSeries,
+  buildSpendingOverTimeSeries,
+  buildBaseWithdrawalSchedule,
+} from '../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
 import { onThemeChange } from '../theme.js';
 
@@ -32,26 +47,18 @@ export function destroyBaseWithdrawalPreviewChart() {
 function readScheduleInputsFromForm() {
   const numYears = parseInt(document.getElementById('numYears')?.value, 10) || 40;
   const base = parseCurrency(document.getElementById('baseWithdrawal')?.value) * MONEY_SCALE;
-  const spendChangeRate = (parseFloat(document.getElementById('spendChangePct')?.value) || 0) / 100;
-  const goGoBonus = parseCurrency(document.getElementById('goGoBonus')?.value) * MONEY_SCALE;
-  const goGoYears = parseInt(document.getElementById('goGoYears')?.value, 10) || 0;
-  return { numYears, base, spendChangeRate, goGoBonus, goGoYears };
+  const spendingTiers = normalizeSpendingOverTimeTiers(readSpendingOverTimeTiersFromDom());
+  const spendingSeries = buildSpendingOverTimeSeries(spendingTiers, numYears, toDollars);
+  return { numYears, base, spendingSeries };
 }
 
-// Mirrors simulatePath's unadjustedTarget formula for the base strategy:
-// each year scales the base by the annual real-change rate, adds a flat
-// bonus for the first `goGoYears` years, then adheres to that year's
-// minimum-withdrawal floor (if any) — same order of operations as the engine.
-function buildSchedule({ numYears, base, spendChangeRate, goGoBonus, goGoYears, floorSeries }) {
-  const amounts = [];
+function buildSchedule({ numYears, base, spendingSeries, floorSeries }) {
+  const amounts = buildBaseWithdrawalSchedule(base, spendingSeries, numYears);
   for (let j = 0; j < numYears; j++) {
-    const ageFactor = (1 + spendChangeRate) ** j;
-    let amount = base * ageFactor;
-    if (j < goGoYears) amount += goGoBonus;
-    if (base >= 0 && amount < 0) amount = 0;
     const yearFloor = floorSeries?.[j] ?? 0;
-    if (amount >= 0 && yearFloor > 0) amount = Math.max(amount, yearFloor);
-    amounts.push(amount);
+    if (amounts[j] >= 0 && yearFloor > 0) {
+      amounts[j] = Math.max(amounts[j], yearFloor);
+    }
   }
   return amounts;
 }

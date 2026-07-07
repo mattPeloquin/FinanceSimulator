@@ -14,6 +14,7 @@ import {
   formatCurrency,
   MONEY_SCALE,
   SCENARIO_DEFAULTS,
+  writeFirstSpendingTierExtra,
 } from './state/scenario.js';
 import {
   saveAutosave,
@@ -258,8 +259,8 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
     setCurrencyField('baseWithdrawal', summary.baseWithdrawal);
   }
 
-  if (summary.goGoBonus !== undefined) {
-    setCurrencyField('goGoBonus', summary.goGoBonus);
+  if (summary.spendingOverTimeBonus !== undefined) {
+    writeFirstSpendingTierExtra(summary.spendingOverTimeBonus);
   }
 
   if (summary.marketAdjustments) {

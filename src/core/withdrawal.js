@@ -116,9 +116,59 @@ export function buildWithdrawalFloorPctSeries(tiers, numYears) {
   return series;
 }
 
-// Convert Specific List percentage tiers into per-year dollar floors.
-// Each year's floor is that year's list amount times the tier percentage.
-// Deposits (negative list amounts) get no floor so they stay deposits.
+// Build a per-year spending-over-time schedule from staged tiers.
+// Each entry carries the annual real change rate (decimal) and a flat extra
+// withdrawal (dollars) added on top of the compounding base. Intermediate
+// tiers run for their year count; the final tier fills the horizon.
+export function buildSpendingOverTimeSeries(tiers, numYears, toDollarsFn) {
+  if (numYears <= 0) return [];
+  const emptyEntry = { changeRate: 0, extra: 0 };
+  const series = new Array(numYears).fill(null);
+  if (!tiers || tiers.length === 0) {
+    return series.map(() => ({ ...emptyEntry }));
+  }
+
+  let yearIndex = 0;
+  for (let i = 0; i < tiers.length - 1; i++) {
+    const changeRate = (tiers[i].changePct || 0) / 100;
+    const extra = toDollarsFn(tiers[i].extra);
+    const span = Math.max(0, parseInt(tiers[i].years, 10) || 0);
+    for (let k = 0; k < span && yearIndex < numYears; k++) {
+      series[yearIndex++] = { changeRate, extra };
+    }
+  }
+
+  const last = tiers[tiers.length - 1];
+  const lastChangeRate = (last.changePct || 0) / 100;
+  const lastExtra = toDollarsFn(last.extra);
+  while (yearIndex < numYears) {
+    series[yearIndex++] = { changeRate: lastChangeRate, extra: lastExtra };
+  }
+  return series;
+}
+
+// Walk the spending-over-time series to produce each year's unadjusted base
+// withdrawal: year 0 is unscaled; each later year multiplies the running
+// growth factor by (1 + that year's tier rate), then adds the tier's flat
+// extra. Clamped to 0 when the base amount is non-negative.
+export function buildBaseWithdrawalSchedule(base, spendingSeries, numYears) {
+  if (numYears <= 0) return [];
+  const series = spendingSeries || [];
+  const amounts = new Array(numYears);
+  let growthFactor = 1;
+
+  for (let j = 0; j < numYears; j++) {
+    const entry = series[j] ?? { changeRate: 0, extra: 0 };
+    if (j > 0) {
+      growthFactor *= 1 + entry.changeRate;
+    }
+    let amount = base * growthFactor + entry.extra;
+    if (base >= 0 && amount < 0) amount = 0;
+    amounts[j] = amount;
+  }
+  return amounts;
+}
+
 // Build a per-year gifting schedule from staged tiers ($000s in tiers).
 // Each entry carries the gift amount and the balance threshold that must be
 // exceeded (after growth and the regular withdrawal) before the gift is paid.

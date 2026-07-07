@@ -5,6 +5,8 @@ import {
   buildSpecificWithdrawalFloorSeries,
   buildGiftingSeries,
   buildGiftOverlaySeries,
+  buildSpendingOverTimeSeries,
+  buildBaseWithdrawalSchedule,
   getDynamicAdjustment,
   resolveAdjustment,
 } from '../src/core/withdrawal.js';
@@ -79,6 +81,87 @@ describe('buildSpecificWithdrawalFloorSeries', () => {
     expect(buildSpecificWithdrawalFloorSeries(tiers, [-50_000, 100_000], 2)).toEqual([
       0, 80_000,
     ]);
+  });
+});
+
+describe('buildSpendingOverTimeSeries', () => {
+  const dollars = (k) => k;
+
+  it('returns zero entries when tiers are empty', () => {
+    expect(buildSpendingOverTimeSeries([], 3, dollars)).toEqual([
+      { changeRate: 0, extra: 0 },
+      { changeRate: 0, extra: 0 },
+      { changeRate: 0, extra: 0 },
+    ]);
+  });
+
+  it('applies a single tier across the full horizon', () => {
+    expect(buildSpendingOverTimeSeries([{ changePct: -2, extra: 50_000 }], 3, dollars)).toEqual([
+      { changeRate: -0.02, extra: 50_000 },
+      { changeRate: -0.02, extra: 50_000 },
+      { changeRate: -0.02, extra: 50_000 },
+    ]);
+  });
+
+  it('walks intermediate tiers then fills with the final tier', () => {
+    const tiers = [
+      { changePct: -2, extra: 50_000, years: 2 },
+      { changePct: -1, extra: 10_000, years: 1 },
+      { changePct: 0, extra: 0 },
+    ];
+    expect(buildSpendingOverTimeSeries(tiers, 5, dollars)).toEqual([
+      { changeRate: -0.02, extra: 50_000 },
+      { changeRate: -0.02, extra: 50_000 },
+      { changeRate: -0.01, extra: 10_000 },
+      { changeRate: 0, extra: 0 },
+      { changeRate: 0, extra: 0 },
+    ]);
+  });
+});
+
+describe('buildBaseWithdrawalSchedule', () => {
+  it('matches single-tier compounding (1 + r) ** j', () => {
+    const series = [
+      { changeRate: -0.1, extra: 0 },
+      { changeRate: -0.1, extra: 0 },
+      { changeRate: -0.1, extra: 0 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 3);
+    expect(amounts[0]).toBeCloseTo(100_000, 3);
+    expect(amounts[1]).toBeCloseTo(90_000, 3);
+    expect(amounts[2]).toBeCloseTo(81_000, 3);
+  });
+
+  it('adds staged extra withdrawals per tier', () => {
+    const series = [
+      { changeRate: 0, extra: 50_000 },
+      { changeRate: 0, extra: 50_000 },
+      { changeRate: 0, extra: 0 },
+      { changeRate: 0, extra: 0 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 4);
+    expect(amounts[0]).toBeCloseTo(150_000, 3);
+    expect(amounts[1]).toBeCloseTo(150_000, 3);
+    expect(amounts[2]).toBeCloseTo(100_000, 3);
+  });
+
+  it('compounds continuously across tiers with different rates', () => {
+    const series = [
+      { changeRate: 0.02, extra: 0 },
+      { changeRate: 0.02, extra: 0 },
+      { changeRate: -0.01, extra: 0 },
+      { changeRate: -0.01, extra: 0 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 4);
+    expect(amounts[0]).toBeCloseTo(100_000, 3);
+    expect(amounts[1]).toBeCloseTo(102_000, 3);
+    expect(amounts[2]).toBeCloseTo(100_980, 3);
+    expect(amounts[3]).toBeCloseTo(99_970.2, 1);
+  });
+
+  it('clamps negative amounts to zero when base is non-negative', () => {
+    const series = [{ changeRate: 0, extra: -50_000 }];
+    expect(buildBaseWithdrawalSchedule(10_000, series, 1)[0]).toBe(0);
   });
 });
 
