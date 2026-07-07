@@ -441,6 +441,7 @@ function withdrawalChartTooltipCallbacks(colKey) {
     },
     label: (ctx) => {
       const value = formatK(ctx.parsed.y);
+      if (ctx.dataset.label === 'Actual Withdrawal') return `Actual Withdrawal: ${value}`;
       if (ctx.dataset.label === 'Minimum') return `Minimum: ${value}`;
       if (ctx.dataset.label === 'Gift') return `Gift ceiling: ${value}`;
       if (ctx.dataset.label === 'Original Plan') return `Original Plan: ${value}`;

@@ -34,6 +34,8 @@ const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'u
 const REQUIRED_IDS = [
   'runButton',
   'resultsSection',
+  'goalSeekWarning',
+  'goalSeekWarningMessage',
   'loadingIndicator',
   'loadingText',
   'progressBar',
@@ -69,6 +71,7 @@ const REQUIRED_IDS = [
   'successRate',
   'withdrawalTargetSuccessRate',
   'medianBalance',
+  'medianReturn',
   'medianWithdrawn',
   'plannedWithdrawn',
   'guardrailPreviewChart',

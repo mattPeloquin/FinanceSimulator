@@ -466,9 +466,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
 
   if (!feasibleAtMinBase) {
     return {
-      params: { ...params },
+      params: { ...working, numSimulations: params.numSimulations },
       summary: {
         feasible: false,
+        baseWithdrawal: baseLowerBound,
         reason: baseLowerBound > 0
           ? 'Even a base withdrawal at the highest minimum-withdrawal tier cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.'
           : 'Even a $0 base withdrawal cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.',
@@ -827,12 +828,34 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       : `Your pinned base withdrawal of $${Math.round(finalBase / DOLLAR_ROUNDING).toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`;
 
     return {
-      params: { ...params },
+      params: { ...working, numSimulations: params.numSimulations },
       summary: {
         feasible: false,
         pinnedBase: true,
         baseWithdrawal: finalBase,
+        spendingOverTimeBonus: config.includeSpendingOverTime ? readSpendingBonus() : undefined,
+        marketAdjustments: config.includeMarketAdjustments
+          ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
+          : undefined,
+        marketBalanceOverrides: config.includeMarketAdjustments
+          ? { low: working.dynConfig.low.bal, med: working.dynConfig.med.bal, high: working.dynConfig.high.bal }
+          : undefined,
+        balanceAdjustment: config.includeBalanceOverrides
+          ? {
+              floorBalance: working.portfolio.floorBalance,
+              ceilingBalance: Number.isFinite(working.portfolio.ceilingBalance)
+                ? working.portfolio.ceilingBalance
+                : null,
+              floorPenalty: working.portfolio.floorPenalty,
+              ceilingBonus: working.portfolio.ceilingBonus,
+            }
+          : undefined,
+        shortfallTolerance,
+        plannedScheduleTotal: plannedTotal,
         achievedSuccessRate: finalMetrics.successRateAchieved,
+        achievedMedianTotalWithdrawn: finalMetrics.medianTotalWithdrawn,
+        achievedMedianYearlyWithdrawn: finalMetrics.medianYearlyWithdrawn,
+        achievedObjectiveValue: finalMetrics.objectiveValue,
         reason,
         evaluationCount: evalCount,
       },

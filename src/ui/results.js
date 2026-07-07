@@ -100,7 +100,21 @@ function applyMetricLabels(useMedianYearly, horizonVariable) {
   }
 }
 
-export function renderResults(result, params) {
+function setGoalSeekWarning(message) {
+  const banner = document.getElementById('goalSeekWarning');
+  const text = document.getElementById('goalSeekWarningMessage');
+  if (!banner || !text) return;
+  if (message) {
+    text.textContent = message;
+    banner.classList.remove('hidden');
+  } else {
+    text.textContent = '';
+    banner.classList.add('hidden');
+  }
+}
+
+export function renderResults(result, params, { goalSeekWarning } = {}) {
+  setGoalSeekWarning(goalSeekWarning ?? null);
   const useMedianYearly = isMedianYearlyMetric(result.withdrawalMetric);
   const plannedBenchmark = result.onPlanBenchmark ?? (useMedianYearly ? result.plannedMedianYearly : result.plannedWithdrawn);
   const medianActual = useMedianYearly ? result.medianYearlyWithdrawn : result.medianWithdrawn;
@@ -127,6 +141,7 @@ export function renderResults(result, params) {
     result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate),
   );
   setText('medianBalance', formatK(result.medianBalance));
+  setText('medianReturn', formatPercent(result.returnSummary.median));
   setText('medianWithdrawn', formatK(medianActual));
   setSecondaryMetric('medianWithdrawnSecondary', secondaryActual);
   setText('plannedWithdrawn', formatK(plannedBenchmark));

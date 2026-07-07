@@ -1017,65 +1017,45 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   // Minimum-withdrawal tiers: absolute $ for Base, percentage for Specific List.
   const baseTiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
   if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && baseTiers.length > 1) {
-    let intermediateYears = 0;
     for (let i = 0; i < baseTiers.length - 1; i++) {
       const years = baseTiers[i].years;
       if (!Number.isFinite(years) || years < 1) {
         errors.push('Each minimum-withdrawal tier (except the last) must span at least 1 year.');
         break;
       }
-      intermediateYears += years;
-    }
-    if (intermediateYears >= minHorizon) {
-      errors.push('Minimum-withdrawal tiers must leave at least 1 year for the final tier.');
     }
   }
 
   const specificTiers = normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors);
   if (scenario.withdrawalStrategy === 'specific' && Number.isFinite(minHorizon) && specificTiers.length > 1) {
-    let intermediateYears = 0;
     for (let i = 0; i < specificTiers.length - 1; i++) {
       const years = specificTiers[i].years;
       if (!Number.isFinite(years) || years < 1) {
         errors.push('Each Specific List minimum tier (except the last) must span at least 1 year.');
         break;
       }
-      intermediateYears += years;
-    }
-    if (intermediateYears >= minHorizon) {
-      errors.push('Specific List minimum tiers must leave at least 1 year for the final tier.');
     }
   }
 
   const spendingTiers = normalizeSpendingOverTimeTiers(scenario.spendingOverTimeTiers);
   if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(minHorizon) && spendingTiers.length > 1) {
-    let intermediateYears = 0;
     for (let i = 0; i < spendingTiers.length - 1; i++) {
       const years = spendingTiers[i].years;
       if (!Number.isFinite(years) || years < 0) {
         errors.push('Each spending-over-time tier (except the last) must have a zero or positive year count.');
         break;
       }
-      intermediateYears += years;
-    }
-    if (intermediateYears >= minHorizon) {
-      errors.push('Spending-over-time tiers must leave at least 1 year for the final tier.');
     }
   }
 
   const giftingTiers = normalizeGiftingTiers(scenario.giftingTiers);
   if (Number.isFinite(minHorizon) && giftingTiers.length > 1) {
-    let intermediateYears = 0;
     for (let i = 0; i < giftingTiers.length - 1; i++) {
       const years = giftingTiers[i].years;
       if (!Number.isFinite(years) || years < 1) {
         errors.push('Each gifting tier (except the last) must span at least 1 year.');
         break;
       }
-      intermediateYears += years;
-    }
-    if (intermediateYears >= minHorizon) {
-      errors.push('Gifting tiers must leave at least 1 year for the final tier.');
     }
   }
   for (const tier of giftingTiers) {

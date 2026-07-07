@@ -14,8 +14,6 @@ import {
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
   normalizeGiftingTiers,
-  readGiftingTiersFromDom,
-  writeGiftingTiersToDom,
   migrateScenario,
   MONEY_SCALE,
   SCENARIO_DEFAULTS,
@@ -397,12 +395,12 @@ describe('validateScenario', () => {
     expect(validateScenario(s, range)).toEqual([]);
   });
 
-  it('flags minimum-withdrawal tiers that leave no room for the final tier', () => {
+  it('allows minimum-withdrawal tiers that exceed the simulation horizon', () => {
     const s = defaultScenario();
     s.numYears = 10;
     s.withdrawalFloors = [{ amount: 100, years: 10 }, { amount: 80 }];
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('final tier'))).toBe(true);
+    expect(errors.some((e) => e.includes('final tier'))).toBe(false);
   });
 
   it('does not validate base minimum-withdrawal tiers for a Specific List strategy', () => {
@@ -415,22 +413,22 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('final tier'))).toBe(false);
   });
 
-  it('flags Specific List minimum tiers that leave no room for the final tier', () => {
+  it('allows Specific List minimum tiers that exceed the simulation horizon', () => {
     const s = defaultScenario();
     s.numYears = 10;
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '80\n85\n90';
     s.specificWithdrawalFloors = [{ pct: 80, years: 10 }, { pct: 60 }];
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(true);
+    expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(false);
   });
 
-  it('flags gifting tiers that leave no room for the final tier', () => {
+  it('allows gifting tiers that exceed the simulation horizon', () => {
     const s = defaultScenario();
     s.numYears = 10;
     s.giftingTiers = [{ amount: 25, balance: 2000, years: 10 }, { amount: 10, balance: 1500 }];
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('Gifting tiers'))).toBe(true);
+    expect(errors.some((e) => e.includes('Gifting tiers'))).toBe(false);
   });
 
   it('allows zero-gift placeholder tiers but requires balance when gift is positive', () => {

@@ -823,7 +823,7 @@ describe('runGoalSeek', () => {
         spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
       },
     });
-    const { summary } = await seek(params, {
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.9,
       shortfallTolerance: 0.05,
@@ -840,6 +840,9 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(false);
     expect(summary.pinnedBase).toBe(true);
     expect(summary.baseWithdrawal).toBe(500_000);
+    expect(summary.balanceAdjustment).toBeDefined();
+    expect(summary.achievedSuccessRate).toBeLessThan(0.9);
+    expect(finalParams.portfolio.base).toBe(500_000);
     expect(summary.reason).toMatch(/pinned base withdrawal/i);
   });
 

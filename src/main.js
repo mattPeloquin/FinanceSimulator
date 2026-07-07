@@ -314,15 +314,13 @@ function runGoalSeekSearch() {
       setLoading(false);
       terminateWorkers();
 
-      if (!msg.goalSeekSummary.feasible) {
-        showAlert(msg.goalSeekSummary.reason || 'Goal Seek could not find a plan meeting your target.', 'Goal not reachable');
-        return;
-      }
-
       applyGoalSeekSummaryToDom(msg.goalSeekSummary, scenario.withdrawalStrategy);
       scheduleAutosave();
       document.getElementById('resultsSection').classList.remove('hidden');
-      renderResults(msg.result, params);
+      const goalSeekWarning = msg.goalSeekSummary.feasible
+        ? null
+        : msg.goalSeekSummary.reason || 'Goal Seek could not find a plan meeting your target.';
+      renderResults(msg.result, msg.finalParams ?? params, { goalSeekWarning });
     } else if (msg.type === 'error') {
       setLoading(false);
       showAlert(`Goal Seek error: ${msg.message}`);

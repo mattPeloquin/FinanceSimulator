@@ -94,11 +94,6 @@ self.onmessage = async (e) => {
         onProgress: (stage, fraction) => self.postMessage({ type: 'progress', stage, fraction }),
       });
 
-      if (!summary.feasible) {
-        self.postMessage({ type: 'done', result: null, goalSeekSummary: summary });
-        return;
-      }
-
       const confirmation = await pool.run(finalParams, {
         onProgress: (fraction) =>
           self.postMessage({ type: 'progress', stage: 'Confirming final plan', fraction }),
@@ -109,6 +104,7 @@ self.onmessage = async (e) => {
           shortfallTolerance: goalSeekConfig.shortfallTolerance ?? 0.05,
         }),
         goalSeekSummary: summary,
+        finalParams,
       });
     } catch (err) {
       self.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });

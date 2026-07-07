@@ -183,7 +183,7 @@ To use it:
 
 1. Turn on the **Goal Seek** switch near the bottom of the form (above the Run button).
 2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out), a **Desired Success %** (how sure you want to be that the plan works), and a **Risk Tolerance** (how much of your planned lifetime spending you're willing to give up in bad markets — 0% means stay on plan; higher values allow a bigger headline plan with more guardrail belt-tightening when markets are rough).
-3. Under **Base Annual Withdrawal**, leave **Include in search** checked (default) to let Goal Seek find the best base amount, or uncheck it to keep your typed base fixed and search only the other levers — you'll need at least one other "Include in search" lever checked. If the goal isn't reachable at your fixed base, the simulator will say so.
+3. Under **Base Annual Withdrawal**, leave **Include in search** checked (default) to let Goal Seek find the best base amount, or uncheck it to keep your typed base fixed and search only the other levers — you'll need at least one other "Include in search" lever checked. If the goal isn't reachable at your fixed base, the simulator still shows the closest plan it found, with a warning at the top of the results.
    - Using the **Specific List** strategy instead? Goal Seek always keeps every year's typed amount exactly as you entered it and searches only the **Market adjustment** and **Balance adjustment** levers below — check at least one of those.
 4. Optionally, check **Include in search** on any other settings you'd like Goal Seek to tune:
    - **Spending Over Time** — the first tier's extra withdrawal (annual change % and years stay as you typed). When this is checked, Goal Seek switches its goal: instead of maximizing your lifetime total, it maximizes how much you can spend **per year during the first tier's years**, so it favors more aggressive front-loading.
@@ -195,7 +195,7 @@ To use it:
 
 **Minimum withdrawals still protect essentials:** under the Base + Spending Over Time strategy, staged minimum-withdrawal tiers (set above the spending schedule, whose chart curve rises to meet them automatically) are a hard per-year floor — Goal Seek's risk tolerance only governs how far below the *full planned schedule* lifetime spending is allowed to fall in bad markets, not how low any single year can go. With a **Specific List**, optional percentage minimum tiers work the same way as a backstop (each year's floor is a % of what you typed) — Goal Seek keeps your list fixed and only tunes the Market and Balance adjustment levers, but any percentage minimums you set still apply during the search.
 
-If your target is impossible to reach (e.g. the ending balance is unrealistically high for your starting balance and horizon), the simulator will tell you so instead of showing a misleading answer — try lowering the target or the desired success percentage.
+If your target is impossible to reach (e.g. the ending balance is unrealistically high for your starting balance and horizon), the simulator still shows the closest plan it found, with a warning at the top of the results — try lowering the target or the desired success percentage.
 
 Turn the switch back off any time to return to typing in your own numbers and running a normal simulation — the values Goal Seek found stay right where you'd expect.
 
