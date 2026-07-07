@@ -9,8 +9,14 @@
 
 export const SCENARIO_DEFAULTS = {
 
-  // Years to simulate. Valid range: 1–100 (enforced at run time).
+  // Years to simulate (endpoint / target horizon). Valid range: 1–100.
   numYears: 35,
+
+  // Optional Monte Carlo range: years above/below the endpoint treated as
+  // 2-sigma bounds (0 = fixed horizon). Each run draws a whole-year horizon
+  // inside [numYears - minus, numYears + plus].
+  horizonPlusYears: 0,
+  horizonMinusYears: 0,
 
   // Monte Carlo paths to run. Valid range: 1–100,000. More = smoother stats, slower run.
   numSimulations: 10000,
@@ -29,9 +35,10 @@ export const SCENARIO_DEFAULTS = {
   planRiskTolerancePct: 5,
 
   // How runs are ranked and scored against the plan. Options:
-  //   'total'        — lifetime total withdrawn (default)
+  //   'auto'         — total for fixed horizon, median/yr when range is enabled (default)
+  //   'total'        — lifetime total withdrawn
   //   'medianYearly' — median withdrawal per year (horizon-independent)
-  withdrawalMetric: 'total',
+  withdrawalMetric: 'auto',
 
   // Expected length of consecutive-year runs (resampling) or AR(1) smoothing
   // strength (log-normal). Valid UI range: 1–6. 1 = fully independent years.

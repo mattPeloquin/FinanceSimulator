@@ -55,6 +55,7 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
   const paths = ranks.map((rank) => {
     const simIndex = rankW[rank];
     const re = regeneratePath(params, seed, simIndex);
+    const h = re.horizonYears;
     return {
       balances: re.path.balances,
       returns: re.path.returns,
@@ -63,6 +64,7 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
       totalWithdrawn: re.totalWithdrawn,
       medianYearlyWithdrawal: re.medianYearlyWithdrawal,
       avgReturn: re.avgReturn,
+      horizonYears: h,
     };
   });
   return { paths, lo, hi, centerRank };

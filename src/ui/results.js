@@ -3,7 +3,7 @@ import { formatK, formatPercent } from './format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
 import { drawDistributionChart, drawAllYearsDistributionChart } from './charts/distribution.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
-import { isMedianYearlyMetric, median } from '../core/statistics.js';
+import { isMedianYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
 
@@ -40,7 +40,7 @@ function setDelta(id, delta) {
 // Show which year the shown End Balance belongs to. Normally that's the last
 // year of the horizon, but if the path's money ran out early, show that year
 // (in red) instead — e.g. "ran out year 23".
-function setEndYear(id, balances, numYears) {
+function setEndYear(id, balances, numYears, horizonYears) {
   const el = document.getElementById(id);
   if (!el) return;
   let depletedYear = null;
@@ -55,32 +55,58 @@ function setEndYear(id, balances, numYears) {
     el.textContent = `ran out year ${depletedYear}`;
     el.classList.add('text-theme-danger');
   } else {
-    el.textContent = `year ${numYears}`;
+    const endYear = horizonYears ?? numYears;
+    el.textContent = `year ${endYear}`;
     el.classList.add('text-theme-faint');
   }
 }
 
-function applyMetricLabels(useMedianYearly) {
+function setSecondaryMetric(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = formatK(value);
+}
+
+function applyMetricLabels(useMedianYearly, horizonVariable) {
+  const { primary, secondary } = withdrawalMetricLabels(useMedianYearly);
   setText(
     'medianWithdrawnLabel',
     useMedianYearly ? 'Median Withdrawal / Year' : 'Median Total Withdrawn',
   );
+  setText('medianWithdrawnSecondaryLabel', secondary);
   setText(
     'plannedWithdrawnLabel',
     useMedianYearly ? 'Planned Median / Year' : 'Planned Total Withdrawal',
   );
+  setText('plannedWithdrawnSecondaryLabel', secondary);
   setText(
     'outcomesDescription',
     useMedianYearly
       ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
       : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
   );
+  const horizonNote = horizonVariable ? ' Horizons vary across runs.' : '';
+  const descEl = document.getElementById('outcomesDescription');
+  if (descEl && horizonNote) descEl.textContent += horizonNote;
+
+  const deltaTitle = useMedianYearly
+    ? 'Difference from the planned median per year'
+    : 'Difference from the planned withdrawal total';
+  for (const key of PERCENTILE_KEYS) {
+    setText(`${key}WdLabel`, primary);
+    setText(`${key}WdSecondaryLabel`, secondary);
+    const deltaEl = document.getElementById(`${key}Delta`);
+    if (deltaEl) deltaEl.title = deltaTitle;
+  }
 }
 
 export function renderResults(result, params) {
   const useMedianYearly = isMedianYearlyMetric(result.withdrawalMetric);
   const plannedBenchmark = result.onPlanBenchmark ?? (useMedianYearly ? result.plannedMedianYearly : result.plannedWithdrawn);
   const medianActual = useMedianYearly ? result.medianYearlyWithdrawn : result.medianWithdrawn;
+  const secondaryActual = useMedianYearly ? result.medianWithdrawn : result.medianYearlyWithdrawn;
+  const secondaryPlanned = useMedianYearly ? result.plannedWithdrawn : result.plannedMedianYearly;
+  const chartYears = result.maxYears ?? result.numYears;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
   if (onPlanLabel) {
@@ -93,7 +119,7 @@ export function renderResults(result, params) {
       : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
 
-  applyMetricLabels(useMedianYearly);
+  applyMetricLabels(useMedianYearly, result.horizonVariable);
 
   setText('successRate', formatPercent(result.successRate));
   setText(
@@ -102,19 +128,23 @@ export function renderResults(result, params) {
   );
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianWithdrawn', formatK(medianActual));
+  setSecondaryMetric('medianWithdrawnSecondary', secondaryActual);
   setText('plannedWithdrawn', formatK(plannedBenchmark));
+  setSecondaryMetric('plannedWithdrawnSecondary', secondaryPlanned);
 
   for (const key of PERCENTILE_KEYS) {
     const p = result.percentiles[key];
-    const actual = useMedianYearly ? percentileWithdrawal(p.path) : p.totalWithdrawn;
+    const actual = useMedianYearly ? (p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path)) : p.totalWithdrawn;
+    const secondary = useMedianYearly ? p.totalWithdrawn : (p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path));
     setText(`${key}Wd`, formatK(actual));
+    setSecondaryMetric(`${key}WdSecondary`, secondary);
     setDelta(`${key}Delta`, actual - plannedBenchmark);
     setText(`${key}Bal`, formatK(p.finalBalance));
-    setEndYear(`${key}EndYear`, p.path.balances, result.numYears);
+    setEndYear(`${key}EndYear`, p.path.balances, result.numYears, p.horizonYears);
     setText(`${key}Ret`, formatPercent(p.avgReturn));
   }
 
-  drawTimelineCharts(result.percentiles, result.numYears);
+  drawTimelineCharts(result.percentiles, chartYears);
 
   const rs = result.returnSummary;
   setText('returnMean', formatPercent(rs.mean));
@@ -134,7 +164,7 @@ export function renderResults(result, params) {
   drawAllYearsDistributionChart(result.allYearsHistogram, result.allYearsSummary);
 
   // 3D chart loads its heavy libs lazily; don't block the rest of the render.
-  drawSurfaceChart(result.surfacePaths, result.numYears, {
+  drawSurfaceChart(result.surfacePaths, chartYears, {
     params,
     seed: result.seed,
     surfaceMeta: result.surfaceMeta,
@@ -143,6 +173,7 @@ export function renderResults(result, params) {
     plannedMedianYearly: result.plannedMedianYearly,
     onPlanBenchmark: plannedBenchmark,
     withdrawalMetric: result.withdrawalMetric ?? 'total',
+    horizonVariable: !!result.horizonVariable,
   }).catch((err) => {
     console.error('3D chart failed to render:', err);
   });

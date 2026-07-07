@@ -5,7 +5,7 @@
 Welcome to the Sequence-of-Returns Finance Simulator! This is a powerful, interactive tool that helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market.
 
 
-## 🚀 Why is this so easy to deploy?
+## Why is this so easy to deploy?
 
 This entire simulator is engineered to bundle into a **single, self-contained HTML file**.
 
@@ -16,7 +16,7 @@ This entire simulator is engineered to bundle into a **single, self-contained HT
 ---
 
 
-## 🛠️ Setting Up Your Dev Environment
+## Setting Up Your Dev Environment
 
 You don't need to be a software engineer to modify this app! You just need a few basic tools installed on your computer.
 
@@ -47,7 +47,7 @@ You don't need to be a software engineer to modify this app! You just need a few
 
 
 
-## ✨ Extending the Code by "Vibe Coding"
+## Extending the Code
 
 You do not need to know how to code to add new features to this app. Instead, you can use **Vibe Coding**—where you use natural language to tell an AI what you want, and the AI handles the complex syntax and logic.
 
@@ -94,7 +94,7 @@ This will bundle your entire app into a single `index.html` file located in the 
 
 
 
-## 🧠 How the Simulator Works (Logical Design & Flow)
+## How the Simulator Works (Logical Design & Flow)
 
 This section explains what actually happens "under the hood" when you press **Run Simulation** — from your inputs, through the math, to the charts on screen. It's useful background reading if you want to vibe-code changes to the engine or the visuals.
 
@@ -135,7 +135,11 @@ When you click **Run Simulation**, the scenario is validated (allocation must to
 
 The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. The progress bar also shows how many CPU cores are being used. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
 
-On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Goal Seek benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 6 cores: 1 master + 5 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster. The same panel has **Withdrawal Success Metric** — choose whether runs are ranked and scored by **total lifetime withdrawal** (default) or **median withdrawal per year** (better when simulated horizons may differ). **Plan Risk Tolerance** sets how far below plan a run can fall and still count as "on plan" in the results and 3D chart (Goal Seek uses its own **Risk Tolerance** when enabled).
+On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Goal Seek benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 6 cores: 1 master + 5 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster.
+
+**Uncertain end date:** next to **Years to simulate (endpoint)**, you can optionally enter **+ years** and **− years** to model a retirement horizon that might run shorter or longer. Each simulation picks its own timeline inside that range (treated as very likely bounds). Leave both at **0** for a fixed horizon.
+
+The same panel has **Withdrawal Success Metric** — choose **Auto** (recommended: total withdrawal for a fixed horizon, median per year when a range is set), or force **total lifetime withdrawal** or **median withdrawal per year**. Results show both metrics; the one you pick drives ranking, on-plan scoring, and the 3D chart coloring. **Plan Risk Tolerance** sets how far below plan a run can fall and still count as "on plan" in the results and 3D chart (Goal Seek uses its own **Risk Tolerance** when enabled).
 
 The core engine (`src/core/simulation.js`) simulates one "possible future" at a time. For each simulated year it:
 
@@ -157,7 +161,7 @@ Once all simulations finish, the worker (`src/core/statistics.js`) computes:
 
 - **Success Rate (not depleted)** — the share of futures where your portfolio never ran out of money.
 - **Success Rate (on plan)** — a separate metric shown next to it: the share of futures whose withdrawals reached at least your acceptable shortfall below the planned schedule (default: within 5%; adjustable under **Advanced simulation settings** → **Plan Risk Tolerance**). When **Withdrawal Success Metric** is set to median per year, this compares each run's median yearly withdrawal to the planned median instead of lifetime totals.
-- **Median end balance** and either **median total withdrawn** or **median withdrawal per year** across all runs (depending on the metric you chose).
+- **Median end balance** and either **median total withdrawn** or **median withdrawal per year** across all runs (depending on the metric you chose), with the other metric shown underneath.
 - A **ranking of every simulation** by your chosen withdrawal metric, used to identify the 10th through 60th percentile outcomes ("cautionary" through "above average"). Each percentile card is actually a *smoothed average of a small band of neighboring runs* (controlled by the smoothing input), so results don't jump around noisily between runs.
 - A **histogram** of average annual real returns across all simulations, with summary cards above it (mean, median, worst, best, and spread) and colored reference bars for the median, P5, P95, and mean ± one standard deviation. A second histogram below it shows the same stats for every individual year real return used in the simulation.
 

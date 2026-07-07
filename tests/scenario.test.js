@@ -4,6 +4,9 @@ import {
   buildSimParams,
   buildGoalSeekConfig,
   validateScenario,
+  resolveWithdrawalMetric,
+  isHorizonVariable,
+  computeMaxYears,
   parseCurrency,
   formatCurrency,
   optionalBalanceThreshold,
@@ -517,5 +520,47 @@ describe('history helpers', () => {
     ];
     const shocks = computeStandardizedYears(records);
     expect(shocks.every((row) => row.every((z) => z === 0))).toBe(true);
+  });
+});
+
+describe('variable horizon and withdrawal metric', () => {
+  it('detects when a +/- range is enabled', () => {
+    expect(isHorizonVariable({ horizonPlusYears: 0, horizonMinusYears: 0 })).toBe(false);
+    expect(isHorizonVariable({ horizonPlusYears: 3, horizonMinusYears: 0 })).toBe(true);
+  });
+
+  it('resolves auto metric from horizon mode', () => {
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'auto', horizonPlusYears: 0, horizonMinusYears: 0 })).toBe('total');
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'auto', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('medianYearly');
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'total', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('total');
+  });
+
+  it('buildSimParams uses maxYears for specific-withdrawal fitting', () => {
+    const s = defaultScenario();
+    s.numYears = 30;
+    s.horizonPlusYears = 5;
+    s.specificWithdrawals = '80, 85, 90';
+    const samples = { years: getSampleYears(1960, 2025) };
+    const p = buildSimParams(s, samples);
+    expect(p.maxYears).toBe(35);
+    expect(p.portfolio.specificWithdrawals).toHaveLength(35);
+    expect(p.withdrawalMetric).toBe('medianYearly');
+  });
+
+  it('validates horizon range bounds', () => {
+    const s = defaultScenario();
+    s.numYears = 5;
+    s.horizonMinusYears = 5;
+    const errors = validateScenario(s, { minYear: 1900, maxYear: 2025 });
+    expect(errors.some((e) => e.includes('Horizon −'))).toBe(true);
+
+    s.horizonMinusYears = 0;
+    s.horizonPlusYears = 96;
+    const errors2 = validateScenario(s, { minYear: 1900, maxYear: 2025 });
+    expect(errors2.some((e) => e.includes('Endpoint + horizon'))).toBe(true);
+  });
+
+  it('computeMaxYears adds only the plus side', () => {
+    expect(computeMaxYears({ numYears: 30, horizonPlusYears: 4, horizonMinusYears: 3 })).toBe(34);
   });
 });

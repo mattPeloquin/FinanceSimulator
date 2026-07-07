@@ -116,6 +116,25 @@ export function plannedScheduleMedianYearly(portfolio, numYears) {
   return median(yearlyAmounts);
 }
 
+// Build a per-run planned benchmark array, memoizing by horizon length so
+// variable-horizon Monte Carlo runs only compute each distinct schedule once.
+export function buildPerRunPlanBenchmarks(portfolio, horizonYearsArray, useMedianYearly) {
+  const n = horizonYearsArray.length;
+  const benchmarks = new Float64Array(n);
+  const cache = new Map();
+  for (let i = 0; i < n; i++) {
+    const h = horizonYearsArray[i];
+    if (!cache.has(h)) {
+      cache.set(
+        h,
+        useMedianYearly ? plannedScheduleMedianYearly(portfolio, h) : plannedScheduleTotal(portfolio, h),
+      );
+    }
+    benchmarks[i] = cache.get(h);
+  }
+  return benchmarks;
+}
+
 // Highest per-year minimum-withdrawal backstop in the staged tier series.
 // Goal Seek must not search for a base below this — the floor always applies.
 export function highestMinimumWithdrawal(portfolio) {
@@ -350,19 +369,23 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const searchParams = { ...working, numSimulations, earlyYearsWindow: window };
     const result = await simulateAsync(searchParams);
     const useMedianYearly = isMedianYearlyMetric(config.withdrawalMetric);
-    const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
-    const plannedBenchmark = useMedianYearly
-      ? plannedScheduleMedianYearly(working.portfolio, params.numYears)
-      : plannedTotal;
+    const endpointYears = params.numYears;
+    const plannedTotal = plannedScheduleTotal(working.portfolio, endpointYears);
+    const plannedMedianAtEndpoint = plannedScheduleMedianYearly(working.portfolio, endpointYears);
+    const perRunBenchmarks = buildPerRunPlanBenchmarks(
+      working.portfolio,
+      result.horizonYears,
+      useMedianYearly,
+    );
     const actualWithdrawn = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,
       result.depletionYear,
-      params.numYears,
+      result.horizonYears,
       config.targetEndingBalance,
       actualWithdrawn,
-      plannedBenchmark,
+      perRunBenchmarks,
       shortfallTolerance,
     );
     return {
@@ -370,6 +393,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       medianTotalWithdrawn: median(result.totalWithdrawn),
       medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
       objectiveValue: computeObjective(result, window),
+      plannedTotal,
+      plannedMedianAtEndpoint,
     };
   }
 

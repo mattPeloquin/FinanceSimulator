@@ -7,7 +7,7 @@ import {
   buildDrilldownPaths,
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
-import { meetsWithdrawalTarget, median, isMedianYearlyMetric } from '../../core/statistics.js';
+import { meetsWithdrawalTarget, median, isMedianYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 
@@ -95,6 +95,7 @@ const surfaceState = {
   plannedMedianYearly: 0,
   onPlanBenchmark: 0,
   withdrawalMetric: 'total',
+  horizonVariable: false,
 };
 
 async function loadEcharts() {
@@ -259,8 +260,8 @@ function buildXAxisConfig(numCols) {
   });
 }
 
-function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted) {
-  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted];
+function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark) {
+  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark];
   if (depleted) {
     return { value, itemStyle: { color: colorForDepletedReturn(ret) } };
   }
@@ -421,6 +422,8 @@ function extractWithdrawalSeries(col) {
     returnData,
     totalUnadjusted,
     total: points[0] ? pointValue(points[0])[6] : 0,
+    medianYearly: points[0] ? pointValue(points[0])[9] : 0,
+    horizonYears: points[0] ? pointValue(points[0])[10] : 0,
     avg: points[0] ? pointValue(points[0])[7] : 0,
   };
 }
@@ -509,6 +512,26 @@ function applyFloatChartTheme(series) {
   dsActual.pointBackgroundColor = theme.point;
 }
 
+function withdrawalAmounts(total, medianYr) {
+  const useMedian = isMedianYearlyMetric(surfaceState.withdrawalMetric);
+  const { primary, secondary } = withdrawalMetricLabels(useMedian);
+  return useMedian
+    ? { primaryLabel: primary, primaryValue: medianYr, secondaryLabel: secondary, secondaryValue: total }
+    : { primaryLabel: primary, primaryValue: total, secondaryLabel: secondary, secondaryValue: medianYr };
+}
+
+function withdrawalSummaryHtml(total, medianYr, { includeHorizon = false, horizon = 0 } = {}) {
+  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } = withdrawalAmounts(total, medianYr);
+  const lines = [
+    `${primaryLabel}: <b>${formatK(primaryValue)}</b>`,
+    `${secondaryLabel}: <b>${formatK(secondaryValue)}</b>`,
+  ];
+  if (includeHorizon && surfaceState.horizonVariable && horizon > 0) {
+    lines.push(`Horizon: <b>${horizon} years</b>`);
+  }
+  return lines.join('<br>');
+}
+
 function showFloatWithdrawal(col) {
   ensureFloatPanel();
   const series = extractWithdrawalSeries(col);
@@ -516,13 +539,23 @@ function showFloatWithdrawal(col) {
 
   const status = pathStatusDisplay(series);
   const muted = getChartTheme().floatMutedText;
+  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
+    withdrawalAmounts(series.total, series.medianYearly);
+  const horizonNote = surfaceState.horizonVariable && series.horizonYears > 0
+    ? `<div style="font-weight:normal;color:${muted};margin-top:1px">Horizon: ${series.horizonYears} years</div>`
+    : '';
   floatTitle.innerHTML = `
     <div style="font-weight:700;margin-bottom:2px;">${sampleRunTitle(col)}</div>
     <div style="display:flex; justify-content:space-between; align-items:flex-start;font-weight:normal;">
       <div style="color:${status.color}">${status.text}</div>
       <div style="color:${muted};">Avg Return: ${formatPercent(series.avg)}</div>
     </div>
-    <div style="font-weight:normal;color:${muted};margin-top:1px">Withdrawn: ${formatK(series.total)} (Plan: ${formatK(series.totalUnadjusted)})</div>
+    <div style="font-weight:normal;color:${muted};margin-top:2px">
+      <div>${primaryLabel}: ${formatK(primaryValue)}</div>
+      <div>${secondaryLabel}: ${formatK(secondaryValue)}</div>
+      <div style="margin-top:1px">Plan: ${formatK(series.totalUnadjusted)}</div>
+    </div>
+    ${horizonNote}
   `;
   floatTitle.style.color = '';
 
@@ -608,7 +641,14 @@ function openLargeWithdrawalChart(col) {
   if (title) title.textContent = sampleRunTitle(col);
   
   const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
-  if (subtitle) subtitle.textContent = `Withdrawn: ${formatK(series.total)} | Plan: ${formatK(series.totalUnadjusted)}`;
+  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
+    withdrawalAmounts(series.total, series.medianYearly);
+  if (subtitle) {
+    subtitle.innerHTML =
+      `${primaryLabel}: ${formatK(primaryValue)}<br>` +
+      `${secondaryLabel}: ${formatK(secondaryValue)}<br>` +
+      `Plan: ${formatK(series.totalUnadjusted)}`;
+  }
   
   const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
   if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${formatPercent(series.avg)}`;
@@ -704,14 +744,17 @@ function tooltipFormatter(params) {
   const ret = vals[3];
   const bal = vals[4];
   const wd = vals[5];
-  const total = vals[6];
   const avg = vals[7];
   const unadj = vals[8];
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
+  const summary = withdrawalSummaryHtml(vals[6], vals[9], {
+    includeHorizon: true,
+    horizon: vals[10],
+  });
   return (
     `<b>${sampleRunTitle(col)}</b>` +
-    `<br>Total Withdrawn: <b>${formatK(total)}</b>` +
+    `<br>${summary}` +
     `<br>Avg Annual Return: <b>${formatPercent(avg)}</b>` +
     `<br>Year: ${y}` +
     `<br>Withdrawn: ${formatK(wd)}${deltaStr}` +
@@ -855,9 +898,6 @@ function bindEvents() {
 
 function buildColumnsFromPaths(surfacePaths, numYears, {
   shortfallTolerance,
-  plannedWithdrawn,
-  plannedMedianYearly,
-  onPlanBenchmark,
   withdrawalMetric,
 } = {}) {
   const numCols = surfacePaths.length;
@@ -866,15 +906,6 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
   const zCap = startBalance * Z_CAP_MULTIPLE;
   const tolerance = shortfallTolerance ?? surfaceState.shortfallTolerance ?? 0.05;
   const metric = withdrawalMetric ?? surfaceState.withdrawalMetric ?? 'total';
-  const plannedTotal = onPlanBenchmark > 0
-    ? onPlanBenchmark
-    : isMedianYearlyMetric(metric)
-      ? (plannedMedianYearly > 0
-        ? plannedMedianYearly
-        : median(surfacePaths[0]?.unadjustedWithdrawals ?? []))
-      : (plannedWithdrawn > 0
-        ? plannedWithdrawn
-        : (surfacePaths[0]?.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0));
 
   const data3D = [];
   const columns = [];
@@ -882,20 +913,22 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
   const belowPlanCols = [];
   for (let x = 0; x < numCols; x++) {
     const path = surfacePaths[x];
-    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn } = path;
+    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
+    const pathHorizon = horizonYears ?? numYears;
     const depleted = pathDepleted(balances);
-    const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), plannedTotal, tolerance);
+    const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), planBenchmark ?? 0, tolerance);
     depletedCols.push(depleted);
     belowPlanCols.push(belowPlan);
     const colPoints = [];
-    for (let y = 0; y <= numYears; y++) {
+    for (let y = 0; y <= pathHorizon; y++) {
       const balance = Math.max(0, balances[y]);
       const height = Math.min(balance, zCap);
       const ret = y > 0 ? returns[y - 1] : returns[0] || 0;
       const withdrawal = y > 0 && withdrawals ? withdrawals[y - 1] : 0;
       const unadjusted = y > 0 && unadjustedWithdrawals ? unadjustedWithdrawals[y - 1] : 0;
       const point = makeBarPoint(
-        x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted, belowPlan, unadjusted
+        x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted, belowPlan, unadjusted,
+        medianYearlyWithdrawal ?? 0, pathHorizon, planBenchmark ?? 0,
       );
       data3D.push(point);
       colPoints.push(point);
@@ -915,9 +948,6 @@ function applySurfaceDataset(surfacePaths, numYears) {
   const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
     buildColumnsFromPaths(surfacePaths, numYears, {
       shortfallTolerance: surfaceState.shortfallTolerance,
-      plannedWithdrawn: surfaceState.plannedWithdrawn,
-      plannedMedianYearly: surfaceState.plannedMedianYearly,
-      onPlanBenchmark: surfaceState.onPlanBenchmark,
       withdrawalMetric: surfaceState.withdrawalMetric,
     });
 
@@ -958,6 +988,24 @@ function applySurfaceDataset(surfacePaths, numYears) {
   });
 }
 
+function enrichDrilldownPaths(paths) {
+  const cache = surfaceState.surfaceMeta?.benchmarkCache ?? {};
+  const useMedian = isMedianYearlyMetric(surfaceState.withdrawalMetric);
+  return paths.map((path) => {
+    const h = path.horizonYears;
+    let planBenchmark = path.planBenchmark;
+    if (planBenchmark == null && h != null) {
+      planBenchmark = cache[h];
+    }
+    if (planBenchmark == null && h != null && surfaceState.simParams?.portfolio) {
+      planBenchmark = useMedian
+        ? median(path.withdrawals || [])
+        : (path.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
+    }
+    return { ...path, planBenchmark: planBenchmark ?? 0 };
+  });
+}
+
 function enterDrilldown(col) {
   if (!surfaceState.surfaceMeta || !surfaceState.simParams) {
     console.warn('3D drill-down unavailable: simulation metadata missing. Re-run the simulation.');
@@ -977,7 +1025,7 @@ function enterDrilldown(col) {
   surfaceState.drilldownLo = lo;
   surfaceState.drilldownHi = hi;
 
-  applySurfaceDataset(paths, surfaceState.numYears);
+  applySurfaceDataset(enrichDrilldownPaths(paths), surfaceState.numYears);
   updateSurfaceChrome({
     mode: 'drilldown',
     centerRank: resolvedCenter,
@@ -1021,6 +1069,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     plannedMedianYearly = 0,
     onPlanBenchmark = 0,
     withdrawalMetric = 'total',
+    horizonVariable = false,
   } = context;
 
   surfaceState.viewMode = 'overview';
@@ -1033,6 +1082,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.plannedMedianYearly = plannedMedianYearly;
   surfaceState.onPlanBenchmark = onPlanBenchmark;
   surfaceState.withdrawalMetric = withdrawalMetric;
+  surfaceState.horizonVariable = horizonVariable;
   surfaceState.drilldownCenterRank = null;
   surfaceState.drilldownLo = null;
   surfaceState.drilldownHi = null;
@@ -1042,9 +1092,6 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
     buildColumnsFromPaths(surfacePaths, numYears, {
       shortfallTolerance,
-      plannedWithdrawn,
-      plannedMedianYearly,
-      onPlanBenchmark,
       withdrawalMetric,
     });
 

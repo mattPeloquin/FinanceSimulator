@@ -4,8 +4,19 @@
     >Investment Horizon</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
         <div>
-            <label for="numYears" class="block text-sm font-medium text-theme-body">Years to simulate</label>
+            <label for="numYears" class="block text-sm font-medium text-theme-body">Years to simulate (endpoint)</label>
             <input type="number" id="numYears" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <div class="mt-2 grid grid-cols-2 gap-3">
+                <div>
+                    <label for="horizonMinusYears" class="block text-xs font-medium text-theme-muted">&minus; years (shorter)</label>
+                    <input type="number" id="horizonMinusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                </div>
+                <div>
+                    <label for="horizonPlusYears" class="block text-xs font-medium text-theme-muted">+ years (longer)</label>
+                    <input type="number" id="horizonPlusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                </div>
+            </div>
+            <p class="text-xs text-theme-faint mt-1">Optional: model an uncertain end date. Each simulation picks a horizon between the endpoint minus/plus values; those bounds are treated as very likely (about 2-in-100 tails). Leave both at 0 for a fixed timeline.</p>
         </div>
         <div>
             <label for="startBalance" class="block text-sm font-medium text-theme-body">Starting Portfolio</label>
@@ -50,10 +61,11 @@
                 <div>
                     <label for="withdrawalMetric" class="block text-sm font-medium text-theme-body">Withdrawal Success Metric</label>
                     <select id="withdrawalMetric" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                        <option value="auto">Auto (total for fixed horizon, median/yr for variable)</option>
                         <option value="total">Total withdrawal (lifetime)</option>
                         <option value="medianYearly">Median withdrawal per year</option>
                     </select>
-                    <p class="text-xs text-theme-faint mt-1">How runs are ranked (P5&ndash;P60), scored for &ldquo;on plan&rdquo; success, colored on the 3D chart, and optimized by Goal Seek. Median per year is better when horizons may differ.</p>
+                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P60), on-plan success, 3D coloring, and Goal Seek. Auto picks median/yr when a horizon range is set. The other metric is still shown alongside results.</p>
                 </div>
                 <div>
                     <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>

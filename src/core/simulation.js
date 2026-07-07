@@ -7,6 +7,34 @@ import { resolveAdjustment, balanceScaleMultiplier } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
+const MAX_HORIZON_YEARS = 100;
+
+// Draw this run's horizon when a +/- range is enabled. The first RNG draw inside
+// simulatePath is reserved for this so regeneratePath stays deterministic.
+// Positive z extends the endpoint (sigma = plus/2); negative z shortens it
+// (sigma = minus/2). Result is rounded, hard-clamped to the typed bounds, and
+// never below 1 year.
+function sampleHorizonYears(rng, endpoint, horizonRange) {
+  if (!horizonRange) return endpoint;
+
+  const { plus, minus } = horizonRange;
+  if (plus === 0 && minus === 0) return endpoint;
+
+  const z = rng.normal();
+  let delta = 0;
+  if (z >= 0 && plus > 0) {
+    const sigma = plus / 2;
+    delta = Math.min(plus, Math.max(0, Math.round(z * sigma)));
+  } else if (z < 0 && minus > 0) {
+    const sigma = minus / 2;
+    delta = -Math.min(minus, Math.max(0, Math.round(Math.abs(z) * sigma)));
+  }
+
+  let years = endpoint + delta;
+  years = Math.max(endpoint - minus, Math.min(endpoint + plus, years));
+  years = Math.max(1, Math.min(MAX_HORIZON_YEARS, years));
+  return years;
+}
 
 // `logNormalMuSigma` only depends on an asset's fixed mean/stdDev, never on the
 // random draw, so it's wasteful to recompute it every year of every simulation
@@ -57,7 +85,9 @@ function matVec(L, v) {
 // for the handful of paths we actually chart); otherwise only summary stats.
 export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0) {
   const {
-    numYears,
+    numYears: endpointYears,
+    maxYears: maxYearsParam,
+    horizonRange,
     distMethod,
     allocation,
     blockSize,
@@ -69,6 +99,9 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     scaledHistoricalSmoothing,
     earlyYearsWindow,
   } = params;
+
+  const maxYears = maxYearsParam ?? endpointYears ?? params.numYears;
+  const horizonYears = sampleHorizonYears(rng, endpointYears ?? params.numYears, horizonRange);
 
   const smoothing = scaledHistoricalSmoothing ?? 0;
   // Goal Seek's early-years objective (see core/goalSeek.js): how much was
@@ -89,14 +122,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const returns = collectPath ? [] : null;
   const unadjustedWithdrawals = collectPath ? [] : null;
   // Per-year actual withdrawals — used to score each run by median yearly spending.
-  const yearlyWithdrawals = new Array(numYears);
+  const yearlyWithdrawals = new Array(horizonYears);
 
   const sampleYears = samples ? samples.years : null;
   const sampleLen = sampleYears ? sampleYears.length : 0;
 
   const fittedWithdrawals =
     portfolio.strategy === 'specific'
-      ? fitSpecificWithdrawalsToHorizon(portfolio.specificWithdrawals || [], numYears)
+      ? fitSpecificWithdrawalsToHorizon(portfolio.specificWithdrawals || [], horizonYears)
       : null;
 
   // Log-normal setup (only used when distMethod === 'lognormal').
@@ -145,7 +178,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     ];
   }
 
-  for (let j = 0; j < numYears; j++) {
+  for (let j = 0; j < horizonYears; j++) {
     let portfolioReturn;
     let inflation;
 
@@ -292,7 +325,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     if (unadjustedWithdrawals) unadjustedWithdrawals.push(unadjustedTarget);
   }
 
-  const avgReturn = totalRealGrowthFactor ** (1 / numYears) - 1;
+  // Pad unused tail years with NaN for histograms when horizons vary.
+  if (outRealReturns && maxYears > horizonYears) {
+    for (let j = horizonYears; j < maxYears; j++) {
+      outRealReturns[outOffset + j] = NaN;
+    }
+  }
+
+  const avgReturn = horizonYears > 0 ? totalRealGrowthFactor ** (1 / horizonYears) - 1 : 0;
 
   const summary = {
     avgReturn,
@@ -301,6 +341,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     medianYearlyWithdrawal: median(yearlyWithdrawals),
     earlyWithdrawn,
     depletionYear,
+    horizonYears,
   };
 
   if (collectPath) {
@@ -315,7 +356,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 // `onProgress(fraction)` is called periodically (0..1).
 // `startIndex` offsets the per-simulation seed so parallel chunks stay deterministic.
 export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
-  const { numSimulations, numYears } = params;
+  const { numSimulations } = params;
+  const maxYears = params.maxYears ?? params.numYears;
   const baseSeed = params.seed >>> 0;
 
   const avgReturn = new Float64Array(numSimulations);
@@ -324,20 +366,23 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const medianYearlyWithdrawal = new Float64Array(numSimulations);
   const earlyWithdrawn = new Float64Array(numSimulations);
   const depletionYear = new Float64Array(numSimulations);
-  const allYearsReturns = new Float64Array(numSimulations * numYears);
+  const horizonYears = new Int32Array(numSimulations);
+  const allYearsReturns = new Float64Array(numSimulations * maxYears);
+  allYearsReturns.fill(NaN);
 
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
   for (let i = 0; i < numSimulations; i++) {
     const globalIndex = startIndex + i;
     const rng = createRng(deriveSeed(baseSeed, globalIndex));
-    const s = simulatePath(params, rng, false, allYearsReturns, i * numYears);
+    const s = simulatePath(params, rng, false, allYearsReturns, i * maxYears);
     avgReturn[i] = s.avgReturn;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
     medianYearlyWithdrawal[i] = s.medianYearlyWithdrawal;
     earlyWithdrawn[i] = s.earlyWithdrawn;
-    depletionYear[i] = s.depletionYear === Infinity ? params.numYears + 1 : s.depletionYear;
+    horizonYears[i] = s.horizonYears;
+    depletionYear[i] = s.depletionYear === Infinity ? s.horizonYears + 1 : s.depletionYear;
 
     if (onProgress && i % progressEvery === 0) {
       onProgress(i / numSimulations);
@@ -355,6 +400,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     medianYearlyWithdrawal,
     earlyWithdrawn,
     depletionYear,
+    horizonYears,
     allYearsReturns,
   };
 }

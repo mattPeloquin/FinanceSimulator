@@ -29,6 +29,8 @@ function field(key, dom, type) {
 
 const FIELDS = [
   field('numYears', 'numYears', 'int'),
+  field('horizonPlusYears', 'horizonPlusYears', 'int'),
+  field('horizonMinusYears', 'horizonMinusYears', 'int'),
   field('numSimulations', 'numSimulations', 'int'),
   field('randomSeed', 'randomSeed', 'string'),
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
@@ -348,6 +350,26 @@ export function defaultScenario() {
   return { ...SCENARIO_DEFAULTS };
 }
 
+/** True when the user set a +/- year range around the endpoint. */
+export function isHorizonVariable(scenario) {
+  return (scenario.horizonPlusYears || 0) > 0 || (scenario.horizonMinusYears || 0) > 0;
+}
+
+/** Resolve 'auto' to total (fixed horizon) or medianYearly (variable horizon). */
+export function resolveWithdrawalMetric(scenario) {
+  const metric = scenario.withdrawalMetric ?? SCENARIO_DEFAULTS.withdrawalMetric;
+  if (metric === 'medianYearly') return 'medianYearly';
+  if (metric === 'total') return 'total';
+  return isHorizonVariable(scenario) ? 'medianYearly' : 'total';
+}
+
+/** Max years any single run may simulate (endpoint + plus range). */
+export function computeMaxYears(scenario) {
+  const endpoint = scenario.numYears || SCENARIO_DEFAULTS.numYears;
+  const plus = Math.max(0, scenario.horizonPlusYears || 0);
+  return endpoint + plus;
+}
+
 // Read the current DOM input values into a scenario object.
 export function readScenarioFromDom(doc = document) {
   const scenario = {};
@@ -492,8 +514,21 @@ export function buildSimParams(scenario, samples) {
   const seedRaw = String(scenario.randomSeed ?? '').trim();
   const seed = seedRaw === '' ? (Math.random() * 0xffffffff) >>> 0 : parseInt(seedRaw, 10) >>> 0;
 
+  const endpointYears = scenario.numYears;
+  const horizonPlus = Math.max(0, scenario.horizonPlusYears || 0);
+  const horizonMinus = Math.max(0, scenario.horizonMinusYears || 0);
+  const maxYears = endpointYears + horizonPlus;
+  const horizonRange =
+    horizonPlus > 0 || horizonMinus > 0
+      ? { endpoint: endpointYears, plus: horizonPlus, minus: horizonMinus }
+      : null;
+  const resolvedMetric = resolveWithdrawalMetric(scenario);
+  const metricWasAuto = (scenario.withdrawalMetric ?? SCENARIO_DEFAULTS.withdrawalMetric) === 'auto';
+
   return {
-    numYears: scenario.numYears,
+    numYears: endpointYears,
+    maxYears,
+    horizonRange,
     numSimulations: scenario.numSimulations,
     seed,
     distMethod: scenario.distMethod,
@@ -501,7 +536,8 @@ export function buildSimParams(scenario, samples) {
     // Fraction of runs on each side of a percentile rank to average together
     // (clamped to a sane range). Consumed by the worker's path smoothing.
     smoothFraction: Math.min(Math.max(num(scenario.smoothWindowPct) / 100, 0), 0.1),
-    withdrawalMetric: scenario.withdrawalMetric === 'medianYearly' ? 'medianYearly' : 'total',
+    withdrawalMetric: resolvedMetric,
+    metricWasAuto,
     allocation: {
       usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
       usLgValue: (scenario.usLgValueAllocation || 0) / 100,
@@ -514,7 +550,7 @@ export function buildSimParams(scenario, samples) {
       strategy: scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy,
       specificWithdrawals: fitSpecificWithdrawalsToHorizon(
         parseSpecificWithdrawals(scenario.specificWithdrawals),
-        scenario.numYears,
+        maxYears,
       ),
       start: toDollars(scenario.startBalance),
       base: toDollars(scenario.baseWithdrawal),
@@ -526,17 +562,17 @@ export function buildSimParams(scenario, samples) {
         if (scenario.withdrawalStrategy === 'specific') {
           const specificAmounts = fitSpecificWithdrawalsToHorizon(
             parseSpecificWithdrawals(scenario.specificWithdrawals),
-            scenario.numYears,
+            maxYears,
           );
           return buildSpecificWithdrawalFloorSeries(
             normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors),
             specificAmounts,
-            scenario.numYears,
+            maxYears,
           );
         }
         return buildWithdrawalFloorSeries(
           normalizeWithdrawalFloors(scenario.withdrawalFloors),
-          scenario.numYears,
+          maxYears,
           toDollars,
         );
       })(),
@@ -628,7 +664,7 @@ export function buildGoalSeekConfig(scenario) {
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
     searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
-    withdrawalMetric: scenario.withdrawalMetric === 'medianYearly' ? 'medianYearly' : 'total',
+    withdrawalMetric: resolveWithdrawalMetric(scenario),
   };
 }
 
@@ -643,6 +679,24 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   if (!Number.isFinite(scenario.numYears) || scenario.numYears < 1 || scenario.numYears > MAX_NUM_YEARS) {
     errors.push(`Investment horizon must be between 1 and ${MAX_NUM_YEARS} years.`);
   }
+  const plus = scenario.horizonPlusYears ?? 0;
+  const minus = scenario.horizonMinusYears ?? 0;
+  if (!Number.isFinite(plus) || plus < 0 || !Number.isInteger(plus)) {
+    errors.push('Horizon + years must be a non-negative whole number.');
+  }
+  if (!Number.isFinite(minus) || minus < 0 || !Number.isInteger(minus)) {
+    errors.push('Horizon − years must be a non-negative whole number.');
+  }
+  if (Number.isFinite(scenario.numYears) && Number.isFinite(minus) && scenario.numYears - minus < 1) {
+    errors.push('Horizon − years cannot exceed endpoint − 1 (minimum simulated horizon is 1 year).');
+  }
+  if (Number.isFinite(scenario.numYears) && Number.isFinite(plus) && scenario.numYears + plus > MAX_NUM_YEARS) {
+    errors.push(`Endpoint + horizon range cannot exceed ${MAX_NUM_YEARS} years.`);
+  }
+  const minHorizon =
+    Number.isFinite(scenario.numYears) && Number.isFinite(minus)
+      ? scenario.numYears - minus
+      : scenario.numYears;
   if (
     !Number.isFinite(scenario.numSimulations) ||
     scenario.numSimulations < 1 ||
@@ -722,13 +776,13 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       }
       intermediateYears += years;
     }
-    if (intermediateYears >= scenario.numYears) {
+    if (intermediateYears >= minHorizon) {
       errors.push('Minimum-withdrawal tiers must leave at least 1 year for the final tier.');
     }
   }
 
   const specificTiers = normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors);
-  if (scenario.withdrawalStrategy === 'specific' && Number.isFinite(scenario.numYears) && specificTiers.length > 1) {
+  if (scenario.withdrawalStrategy === 'specific' && Number.isFinite(minHorizon) && specificTiers.length > 1) {
     let intermediateYears = 0;
     for (let i = 0; i < specificTiers.length - 1; i++) {
       const years = specificTiers[i].years;
@@ -738,7 +792,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       }
       intermediateYears += years;
     }
-    if (intermediateYears >= scenario.numYears) {
+    if (intermediateYears >= minHorizon) {
       errors.push('Specific List minimum tiers must leave at least 1 year for the final tier.');
     }
   }

@@ -83,6 +83,12 @@ describe('successRate', () => {
     const depletion = Float64Array.from([41, 10, 41, 5]); // numYears = 40 -> 41 means survived
     expect(successRate(depletion, 40)).toBe(0.5);
   });
+
+  it('supports per-run horizon arrays', () => {
+    const depletion = Float64Array.from([26, 20, 31, 10]);
+    const horizons = Int32Array.from([25, 25, 30, 25]);
+    expect(successRate(depletion, horizons)).toBe(0.5);
+  });
 });
 
 describe('goalSuccessRate', () => {

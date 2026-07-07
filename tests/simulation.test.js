@@ -646,3 +646,64 @@ describe('simulatePath path mode', () => {
     expect(out.every((r) => Number.isFinite(r))).toBe(true);
   });
 });
+
+describe('variable horizon', () => {
+  it('draws per-run horizons inside the typed +/- range', () => {
+    const params = lognormalParams({
+      numYears: 30,
+      maxYears: 35,
+      horizonRange: { endpoint: 30, plus: 5, minus: 5 },
+      numSimulations: 500,
+    });
+    const result = runMonteCarlo(params);
+    const horizons = Array.from(result.horizonYears);
+    expect(horizons.every((h) => h >= 25 && h <= 35)).toBe(true);
+    expect(new Set(horizons).size).toBeGreaterThan(1);
+  });
+
+  it('regeneratePath matches the stored horizon and summary stats', () => {
+    const params = lognormalParams({
+      numYears: 30,
+      maxYears: 33,
+      horizonRange: { endpoint: 30, plus: 3, minus: 2 },
+    });
+    const result = runMonteCarlo(params);
+    const re = regeneratePath(params, result.baseSeed, 7);
+    expect(re.horizonYears).toBe(result.horizonYears[7]);
+    expect(re.totalWithdrawn).toBeCloseTo(result.totalWithdrawn[7], 4);
+    expect(re.path.balances.length).toBe(re.horizonYears + 1);
+  });
+
+  it('does not consume an extra RNG draw when the range is disabled (seed compatibility)', () => {
+    const fixed = lognormalParams({ numYears: 20, numSimulations: 100, seed: 999 });
+    const withZeroRange = lognormalParams({
+      numYears: 20,
+      maxYears: 20,
+      horizonRange: { endpoint: 20, plus: 0, minus: 0 },
+      numSimulations: 100,
+      seed: 999,
+    });
+    const a = runMonteCarlo(fixed);
+    const b = runMonteCarlo(withZeroRange);
+    expect(Array.from(a.totalWithdrawn)).toEqual(Array.from(b.totalWithdrawn));
+  });
+
+  it('pads unused years in allYearsReturns with NaN', () => {
+    const params = lognormalParams({
+      numYears: 20,
+      maxYears: 24,
+      horizonRange: { endpoint: 20, plus: 4, minus: 0 },
+      numSimulations: 50,
+    });
+    const result = runMonteCarlo(params);
+    expect(result.allYearsReturns.length).toBe(50 * 24);
+    let sawNaN = false;
+    let sawFinite = false;
+    for (const v of result.allYearsReturns) {
+      if (Number.isNaN(v)) sawNaN = true;
+      else sawFinite = true;
+    }
+    expect(sawNaN).toBe(true);
+    expect(sawFinite).toBe(true);
+  });
+});

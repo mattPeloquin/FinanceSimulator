@@ -12,6 +12,7 @@ import {
   highestMinimumWithdrawal,
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
+  buildPerRunPlanBenchmarks,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
 
@@ -202,6 +203,24 @@ const FAST_LEVER_GRIDS = {
 const DEFAULT_GOAL_SEEK_CONFIG = {
   shortfallTolerance: 0.2,
 };
+
+describe('buildPerRunPlanBenchmarks', () => {
+  it('memoizes benchmarks by horizon length', () => {
+    const portfolio = {
+      strategy: 'base',
+      base: 100_000,
+      spendChangeRate: 0,
+      goGoBonus: 0,
+      goGoYears: 0,
+      withdrawalFloorSeries: new Array(30).fill(0),
+    };
+    const horizons = Int32Array.from([25, 25, 30, 30, 28]);
+    const benchmarks = buildPerRunPlanBenchmarks(portfolio, horizons, false);
+    expect(benchmarks[0]).toBe(benchmarks[1]);
+    expect(benchmarks[2]).toBe(benchmarks[3]);
+    expect(benchmarks[2]).toBeGreaterThan(benchmarks[0]);
+  });
+});
 
 describe('plannedScheduleTotal', () => {
   it('sums base withdrawals with front-loading and bonus years', () => {

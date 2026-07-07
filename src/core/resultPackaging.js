@@ -14,59 +14,115 @@ import {
   buildHistogram,
   summarizeReturns,
 } from './statistics.js';
+import {
+  plannedScheduleTotal,
+  plannedScheduleMedianYearly,
+  buildPerRunPlanBenchmarks,
+} from './goalSeek.js';
 
 const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
 
 // Build a smoothed "representative" outcome for a percentile by triangular-kernel
-// averaging the band of runs whose total-withdrawn rank sits within ±halfW of the
-// target rank. halfW = 0 collapses to the single run at that rank (no smoothing).
+// averaging the band of runs whose withdrawal rank sits within ±halfW of the
+// target rank. When horizons differ, each year renormalizes weights over runs
+// still active at that year.
 function smoothedPercentile(params, result, rankW, centerRank, halfW) {
-  const n = rankW.length;
   const lo = Math.max(0, centerRank - halfW);
-  const hi = Math.min(n - 1, centerRank + halfW);
+  const hi = Math.min(rankW.length - 1, centerRank + halfW);
 
-  let balances = null;
-  let withdrawals = null;
-  let returns = null;
-  let unadjustedWithdrawals = null;
-  let totalWithdrawn = 0;
-  let finalBalance = 0;
-  let avgReturn = 0;
-  let wSum = 0;
-
+  const entries = [];
   for (let r = lo; r <= hi; r++) {
     const simIndex = rankW[r];
     const w = halfW > 0 ? 1 - Math.abs(r - centerRank) / (halfW + 1) : 1;
-    const { path } = regeneratePath(params, result.baseSeed, simIndex);
-
-    if (balances === null) {
-      balances = new Array(path.balances.length).fill(0);
-      withdrawals = new Array(path.withdrawals.length).fill(0);
-      returns = new Array(path.returns.length).fill(0);
-      unadjustedWithdrawals = path.unadjustedWithdrawals;
-    }
-    for (let t = 0; t < balances.length; t++) balances[t] += w * path.balances[t];
-    for (let t = 0; t < withdrawals.length; t++) withdrawals[t] += w * path.withdrawals[t];
-    for (let t = 0; t < returns.length; t++) returns[t] += w * path.returns[t];
-
-    totalWithdrawn += w * result.totalWithdrawn[simIndex];
-    finalBalance += w * result.finalBalance[simIndex];
-    avgReturn += w * result.avgReturn[simIndex];
-    wSum += w;
+    const re = regeneratePath(params, result.baseSeed, simIndex);
+    entries.push({ w, path: re.path, simIndex, horizonYears: re.horizonYears });
   }
 
-  for (let t = 0; t < balances.length; t++) balances[t] /= wSum;
-  for (let t = 0; t < withdrawals.length; t++) withdrawals[t] /= wSum;
-  for (let t = 0; t < returns.length; t++) returns[t] /= wSum;
+  let maxLen = 0;
+  let totalWithdrawn = 0;
+  let finalBalance = 0;
+  let avgReturn = 0;
+  let medianYearlyWithdrawal = 0;
+  let horizonYearsWeighted = 0;
+  let wSum = 0;
+
+  for (const e of entries) {
+    maxLen = Math.max(maxLen, e.path.balances.length);
+    totalWithdrawn += e.w * result.totalWithdrawn[e.simIndex];
+    finalBalance += e.w * result.finalBalance[e.simIndex];
+    avgReturn += e.w * result.avgReturn[e.simIndex];
+    medianYearlyWithdrawal += e.w * result.medianYearlyWithdrawal[e.simIndex];
+    horizonYearsWeighted += e.w * e.horizonYears;
+    wSum += e.w;
+  }
+
+  const numYearsInPath = Math.max(0, maxLen - 1);
+  const balances = new Array(maxLen).fill(0);
+  const withdrawals = new Array(numYearsInPath).fill(0);
+  const returns = new Array(numYearsInPath).fill(0);
+  const weightByYearBal = new Array(maxLen).fill(0);
+  const weightByYearWd = new Array(numYearsInPath).fill(0);
+
+  for (const e of entries) {
+    const p = e.path;
+    for (let t = 0; t < p.balances.length; t++) {
+      balances[t] += e.w * p.balances[t];
+      weightByYearBal[t] += e.w;
+    }
+    for (let t = 0; t < p.withdrawals.length; t++) {
+      withdrawals[t] += e.w * p.withdrawals[t];
+      returns[t] += e.w * p.returns[t];
+      weightByYearWd[t] += e.w;
+    }
+  }
+
+  for (let t = 0; t < maxLen; t++) {
+    if (weightByYearBal[t] > 0) balances[t] /= weightByYearBal[t];
+  }
+  for (let t = 0; t < numYearsInPath; t++) {
+    if (weightByYearWd[t] > 0) {
+      withdrawals[t] /= weightByYearWd[t];
+      returns[t] /= weightByYearWd[t];
+    }
+  }
 
   return {
     totalWithdrawn: totalWithdrawn / wSum,
+    medianYearlyWithdrawal: medianYearlyWithdrawal / wSum,
     finalBalance: finalBalance / wSum,
     avgReturn: avgReturn / wSum,
-    path: { balances, withdrawals, returns, unadjustedWithdrawals },
+    horizonYears: Math.round(horizonYearsWeighted / wSum),
+    path: {
+      balances,
+      withdrawals,
+      returns,
+      unadjustedWithdrawals: entries[0]?.path.unadjustedWithdrawals ?? [],
+    },
     windowCount: hi - lo + 1,
+  };
+}
+
+function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedianYearly) {
+  const re = regeneratePath(params, result.baseSeed, simIndex);
+  const h = re.horizonYears;
+  if (!benchmarkCache.has(h)) {
+    benchmarkCache.set(
+      h,
+      useMedianYearly ? plannedScheduleMedianYearly(params.portfolio, h) : plannedScheduleTotal(params.portfolio, h),
+    );
+  }
+  return {
+    balances: re.path.balances,
+    returns: re.path.returns,
+    withdrawals: re.path.withdrawals,
+    unadjustedWithdrawals: re.path.unadjustedWithdrawals,
+    totalWithdrawn: result.totalWithdrawn[simIndex],
+    medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
+    avgReturn: result.avgReturn[simIndex],
+    horizonYears: h,
+    planBenchmark: benchmarkCache.get(h),
   };
 }
 
@@ -74,13 +130,12 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
 export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const tolerance = shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
   const n = result.numSimulations;
-  const numYears = params.numYears;
+  const endpointYears = params.numYears;
+  const maxYears = params.maxYears ?? endpointYears;
+  const horizonVariable = params.horizonRange != null;
   const withdrawalMetric = params.withdrawalMetric || 'total';
   const useMedianYearly = isMedianYearlyMetric(withdrawalMetric);
 
-  // Percentile cards & timelines use the selected withdrawal ranking. Each is a
-  // kernel-weighted average of the band of runs around the target rank, which
-  // greatly reduces the run-to-run noise of a single representative path.
   const rankW = rankByWithdrawn(result, withdrawalMetric);
   const halfW = Math.round((params.smoothFraction || 0) * n);
   const percentiles = {};
@@ -89,8 +144,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     percentiles[`p${Math.round(p * 100)}`] = smoothedPercentile(params, result, rankW, centerRank, halfW);
   }
 
-  // 3D topography samples paths across the SAME withdrawal ranking used
-  // by the percentile cards, so the X axis P5..P60 is consistent.
+  const benchmarkCache = new Map();
   const p5i = percentileIndex(n, 0.05);
   const p60i = percentileIndex(n, 0.6);
   const step = Math.max(1, Math.floor((p60i - p5i) / SURFACE_SAMPLES));
@@ -98,16 +152,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   for (let i = 0; i < SURFACE_SAMPLES; i++) {
     const rankIndex = Math.min(p5i + i * step, p60i);
     const simIndex = rankW[rankIndex];
-    const re = regeneratePath(params, result.baseSeed, simIndex);
-    surfacePaths.push({
-      balances: re.path.balances,
-      returns: re.path.returns,
-      withdrawals: re.path.withdrawals,
-      unadjustedWithdrawals: re.path.unadjustedWithdrawals,
-      totalWithdrawn: result.totalWithdrawn[simIndex],
-      medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
-      avgReturn: result.avgReturn[simIndex],
-    });
+    surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedianYearly));
   }
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
@@ -115,23 +160,28 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const allYearsHistogram = buildHistogram(result.allYearsReturns, HISTOGRAM_BINS);
   const allYearsSummary = summarizeReturns(result.allYearsReturns);
 
-  // The planned (unadjusted) withdrawal schedule ignores market returns, so it
-  // is identical in every run — derive totals and median-yearly once from p50.
-  const plannedSchedule = percentiles.p50.path.unadjustedWithdrawals;
-  const plannedWithdrawn = plannedSchedule.reduce((a, b) => a + b, 0);
-  const plannedMedianYearly = median(plannedSchedule);
-  const onPlanActuals = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
+  const plannedWithdrawn = plannedScheduleTotal(params.portfolio, endpointYears);
+  const plannedMedianYearly = plannedScheduleMedianYearly(params.portfolio, endpointYears);
   const onPlanBenchmark = useMedianYearly ? plannedMedianYearly : plannedWithdrawn;
+  const onPlanActuals = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
+  const perRunBenchmarks = buildPerRunPlanBenchmarks(
+    params.portfolio,
+    result.horizonYears,
+    useMedianYearly,
+  );
 
   return {
     numSimulations: n,
-    numYears,
+    numYears: endpointYears,
+    maxYears,
+    horizonVariable,
+    metricWasAuto: !!params.metricWasAuto,
     seed: result.baseSeed,
     withdrawalMetric,
-    successRate: successRate(result.depletionYear, numYears),
+    successRate: successRate(result.depletionYear, result.horizonYears),
     withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(
       onPlanActuals,
-      onPlanBenchmark,
+      perRunBenchmarks,
       tolerance,
     ),
     shortfallTolerance: tolerance,
@@ -147,9 +197,11 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       numSimulations: n,
       rankW,
       withdrawalMetric,
+      maxYears,
       p5Rank: p5i,
       p60Rank: p60i,
       surfaceSamples: SURFACE_SAMPLES,
+      benchmarkCache: Object.fromEntries(benchmarkCache),
     },
     histogram,
     returnSummary,
