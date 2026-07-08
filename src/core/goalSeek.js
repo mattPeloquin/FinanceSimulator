@@ -56,17 +56,17 @@ function roundDownToThousand(value) {
   return Math.floor(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
 }
 
-// Sum the unadjusted withdrawal schedule (base × compounding tiers + extras,
+// Unadjusted per-year withdrawal plan (base × compounding tiers + extras,
 // with minimum-withdrawal floors), or the fixed per-year specific-list amounts
 // when that strategy is in use. Deterministic — mirrors simulatePath's
 // unadjustedTarget logic without running a simulation.
-export function plannedScheduleTotal(portfolio, numYears) {
+export function plannedYearlySchedule(portfolio, numYears) {
   const isSpecific = portfolio.strategy === 'specific';
-  let total = 0;
   const baseSchedule = isSpecific
     ? null
     : buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, numYears);
 
+  const yearlyAmounts = new Array(numYears);
   for (let j = 0; j < numYears; j++) {
     let unadjustedTarget;
     if (isSpecific) {
@@ -80,34 +80,22 @@ export function plannedScheduleTotal(portfolio, numYears) {
     if (unadjustedTarget >= 0 && yearFloor > 0) {
       unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
     }
-    total += unadjustedTarget;
+    yearlyAmounts[j] = unadjustedTarget;
   }
+  return yearlyAmounts;
+}
+
+// Sum of the unadjusted withdrawal schedule — the lifetime plan benchmark.
+export function plannedScheduleTotal(portfolio, numYears) {
+  let total = 0;
+  for (const amount of plannedYearlySchedule(portfolio, numYears)) total += amount;
   return total;
 }
 
 // Median of the unadjusted per-year withdrawal schedule — the plan benchmark
 // when scoring runs by median yearly spending instead of lifetime total.
 export function plannedScheduleMedianYearly(portfolio, numYears) {
-  const yearlyAmounts = [];
-  const isSpecific = portfolio.strategy === 'specific';
-  const baseSchedule = isSpecific
-    ? null
-    : buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, numYears);
-
-  for (let j = 0; j < numYears; j++) {
-    let unadjustedTarget;
-    if (isSpecific) {
-      unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
-    } else {
-      unadjustedTarget = baseSchedule[j];
-    }
-    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
-    if (unadjustedTarget >= 0 && yearFloor > 0) {
-      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
-    }
-    yearlyAmounts.push(unadjustedTarget);
-  }
-  return median(yearlyAmounts);
+  return median(plannedYearlySchedule(portfolio, numYears));
 }
 
 // Build a per-run planned benchmark array, memoizing by horizon length so

@@ -2,7 +2,7 @@
 // and be unit-tested directly.
 
 import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
-import { median } from './statistics.js';
+import { median, irrFromPath } from './statistics.js';
 import { resolveAdjustment, balanceScaleMultiplier, buildBaseWithdrawalSchedule } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
@@ -342,9 +342,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   }
 
   const avgReturn = horizonYears > 0 ? totalRealGrowthFactor ** (1 / horizonYears) - 1 : 0;
+  const irr = irrFromPath(portfolio.start, yearlyWithdrawals, balance, avgReturn);
 
   const summary = {
     avgReturn,
+    irr,
     finalBalance: balance,
     totalWithdrawn,
     medianYearlyWithdrawal: median(yearlyWithdrawals),
@@ -370,6 +372,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const baseSeed = params.seed >>> 0;
 
   const avgReturn = new Float64Array(numSimulations);
+  const irr = new Float64Array(numSimulations);
   const finalBalance = new Float64Array(numSimulations);
   const totalWithdrawn = new Float64Array(numSimulations);
   const medianYearlyWithdrawal = new Float64Array(numSimulations);
@@ -386,6 +389,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     const rng = createRng(deriveSeed(baseSeed, globalIndex));
     const s = simulatePath(params, rng, false, allYearsReturns, i * maxYears);
     avgReturn[i] = s.avgReturn;
+    irr[i] = s.irr;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
     medianYearlyWithdrawal[i] = s.medianYearlyWithdrawal;
@@ -404,6 +408,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     baseSeed,
     numSimulations,
     avgReturn,
+    irr,
     finalBalance,
     totalWithdrawn,
     medianYearlyWithdrawal,

@@ -9,6 +9,21 @@
         <div id="surfaceChart" class="h-[420px] w-[90%] mx-auto rounded-lg overflow-hidden border border-theme-border bg-theme-page"></div>
     </div>
 
+    <!-- Sequence-risk scatter: money-weighted vs time-weighted return per path -->
+    <div>
+        <h3 class="text-lg font-semibold text-theme-body mb-2">Sequence Risk: IRR vs Average Return</h3>
+        <p class="text-sm text-theme-faint mb-4">Each dot is one simulation. Dots below the dashed diagonal were hurt by early bad years — their money-weighted IRR trails their time-weighted average return; dots above it got lucky early. Paths in the lower-right had good average returns but still fell short of the plan: sequence risk in its purest form. Click a dot to see that path's withdrawals against its plan.</p>
+        <div id="irrScatterLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
+        <div class="relative h-80 w-full">
+            <canvas id="irrScatterCanvas" class="w-full h-full block"></canvas>
+            <div id="irrScatterTooltip" style="display:none" class="absolute pointer-events-none text-xs rounded-md border border-theme-border shadow-lg px-2 py-1.5 z-10"></div>
+        </div>
+        <div id="irrScatterDrilldown" class="hidden mt-3">
+            <div id="irrScatterDrilldownTitle" class="text-xs text-theme-faint mb-1"></div>
+            <div class="h-48 w-full"><canvas id="irrScatterPathCanvas"></canvas></div>
+        </div>
+    </div>
+
     <details class="group border rounded-lg">
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center justify-between">
             <span>Average Timelines</span>
@@ -33,27 +48,37 @@
             <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
         </summary>
         <div class="px-4 pb-4">
-            <p class="text-sm text-theme-faint mb-4">Summary of average annual real return across all simulations.</p>
+            <p class="text-sm text-theme-faint mb-4">Summary of average annual real return across all simulations. Each stat also shows the IRR — the money-weighted return, which accounts for the timing of withdrawals and deposits.</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
                 <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
                     <div class="text-[10px] uppercase tracking-wider text-theme-faint">Mean Avg Return</div>
                     <div id="returnMean" class="text-xl font-bold text-theme-heading"></div>
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint mt-2" title="Money-weighted return: accounts for the timing of withdrawals and deposits, unlike the time-weighted average return above">IRR</div>
+                    <div id="returnMeanIrr" class="text-sm font-semibold text-theme-muted"></div>
                 </div>
                 <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
                     <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median Avg Return</div>
                     <div id="returnMedian" class="text-xl font-bold text-theme-heading"></div>
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint mt-2" title="Money-weighted return: accounts for the timing of withdrawals and deposits, unlike the time-weighted average return above">IRR</div>
+                    <div id="returnMedianIrr" class="text-sm font-semibold text-theme-muted"></div>
                 </div>
                 <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Lowest average annual real return among all simulations (not a single-year extreme)">
                     <div class="text-[10px] uppercase tracking-wider text-theme-faint">Worst Avg Return</div>
                     <div id="returnMin" class="text-xl font-bold text-theme-heading"></div>
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint mt-2" title="Money-weighted return: accounts for the timing of withdrawals and deposits, unlike the time-weighted average return above">IRR</div>
+                    <div id="returnMinIrr" class="text-sm font-semibold text-theme-muted"></div>
                 </div>
                 <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Highest average annual real return among all simulations (not a single-year extreme)">
                     <div class="text-[10px] uppercase tracking-wider text-theme-faint">Best Avg Return</div>
                     <div id="returnMax" class="text-xl font-bold text-theme-heading"></div>
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint mt-2" title="Money-weighted return: accounts for the timing of withdrawals and deposits, unlike the time-weighted average return above">IRR</div>
+                    <div id="returnMaxIrr" class="text-sm font-semibold text-theme-muted"></div>
                 </div>
                 <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
                     <div class="text-[10px] uppercase tracking-wider text-theme-faint">Std Dev</div>
                     <div id="returnStdDev" class="text-xl font-bold text-theme-heading"></div>
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint mt-2" title="Spread of the money-weighted (IRR) distribution">IRR</div>
+                    <div id="returnStdDevIrr" class="text-sm font-semibold text-theme-muted"></div>
                 </div>
             </div>
             <div id="returnHistogramLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
@@ -87,6 +112,27 @@
             </div>
             <div id="allYearsHistogramLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
             <div class="h-64 w-full"><canvas id="allYearsChart"></canvas></div>
+
+            <hr class="my-8 border-theme-border">
+
+            <h4 class="text-base font-semibold text-theme-body mb-2">Distribution of IRR</h4>
+            <p class="text-sm text-theme-faint mb-4">Money-weighted real return across all simulations — the same distribution view as the average return above, but weighted by when money was actually in the portfolio.</p>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Median money-weighted return across all simulations">
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median IRR</div>
+                    <div id="seqMedianIrr" class="text-xl font-bold text-theme-heading"></div>
+                </div>
+                <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Money-weighted return at which the planned withdrawals exactly exhaust the starting balance">
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint">Required IRR</div>
+                    <div id="seqRequiredIrr" class="text-xl font-bold text-theme-heading"></div>
+                </div>
+                <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="10th–90th percentile of (IRR − avg return) per path: how far the order of returns alone moves an outcome, holding the average fixed">
+                    <div class="text-[10px] uppercase tracking-wider text-theme-faint">Sequence Effect (P10–P90)</div>
+                    <div id="seqDrag" class="text-xl font-bold text-theme-heading"></div>
+                </div>
+            </div>
+            <div id="irrHistogramLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
+            <div class="h-64 w-full"><canvas id="irrChart"></canvas></div>
         </div>
     </details>
 </div>

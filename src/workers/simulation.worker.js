@@ -18,6 +18,7 @@ function postChunkResult(target, startIndex, numSimulations, result) {
       numSimulations,
       buffers: {
         avgReturn: result.avgReturn.buffer,
+        irr: result.irr.buffer,
         finalBalance: result.finalBalance.buffer,
         totalWithdrawn: result.totalWithdrawn.buffer,
         medianYearlyWithdrawal: result.medianYearlyWithdrawal.buffer,
@@ -29,6 +30,7 @@ function postChunkResult(target, startIndex, numSimulations, result) {
     },
     [
       result.avgReturn.buffer,
+      result.irr.buffer,
       result.finalBalance.buffer,
       result.totalWithdrawn.buffer,
       result.medianYearlyWithdrawal.buffer,

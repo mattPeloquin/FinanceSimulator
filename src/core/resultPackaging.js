@@ -13,10 +13,12 @@ import {
   isMedianYearlyMetric,
   buildHistogram,
   summarizeReturns,
+  irrFromPath,
 } from './statistics.js';
 import {
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
+  plannedYearlySchedule,
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
 
@@ -44,6 +46,8 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
   let totalWithdrawn = 0;
   let finalBalance = 0;
   let avgReturn = 0;
+  let irr = 0;
+  let irrWSum = 0;
   let medianYearlyWithdrawal = 0;
   let horizonYearsWeighted = 0;
   let wSum = 0;
@@ -53,6 +57,12 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
     totalWithdrawn += e.w * result.totalWithdrawn[e.simIndex];
     finalBalance += e.w * result.finalBalance[e.simIndex];
     avgReturn += e.w * result.avgReturn[e.simIndex];
+    // IRR is NaN for pathological paths (no positive inflows); average the rest.
+    const runIrr = result.irr[e.simIndex];
+    if (!Number.isNaN(runIrr)) {
+      irr += e.w * runIrr;
+      irrWSum += e.w;
+    }
     medianYearlyWithdrawal += e.w * result.medianYearlyWithdrawal[e.simIndex];
     horizonYearsWeighted += e.w * e.horizonYears;
     wSum += e.w;
@@ -93,6 +103,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
     medianYearlyWithdrawal: medianYearlyWithdrawal / wSum,
     finalBalance: finalBalance / wSum,
     avgReturn: avgReturn / wSum,
+    irr: irrWSum > 0 ? irr / irrWSum : NaN,
     horizonYears: Math.round(horizonYearsWeighted / wSum),
     path: {
       balances,
@@ -121,6 +132,7 @@ function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedi
     totalWithdrawn: result.totalWithdrawn[simIndex],
     medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
     avgReturn: result.avgReturn[simIndex],
+    irr: result.irr[simIndex],
     horizonYears: h,
     planBenchmark: benchmarkCache.get(h),
   };
@@ -157,6 +169,8 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
   const returnSummary = summarizeReturns(result.avgReturn);
+  const irrSummary = summarizeReturns(result.irr);
+  const irrHistogram = buildHistogram(result.irr, HISTOGRAM_BINS);
   const allYearsHistogram = buildHistogram(result.allYearsReturns, HISTOGRAM_BINS);
   const allYearsSummary = summarizeReturns(result.allYearsReturns);
 
@@ -168,6 +182,25 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     params.portfolio,
     result.horizonYears,
     useMedianYearly,
+  );
+
+  // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
+  // 1 = below plan (within horizon but short of the benchmark), 2 = ran out.
+  const scatterOutcome = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (result.depletionYear[i] <= result.horizonYears[i]) {
+      scatterOutcome[i] = 2;
+    } else if (perRunBenchmarks[i] > 0 && onPlanActuals[i] < perRunBenchmarks[i] * (1 - tolerance)) {
+      scatterOutcome[i] = 1;
+    }
+  }
+  // The money-weighted return at which the planned schedule exactly exhausts
+  // the starting balance at the endpoint horizon — the plan's break-even IRR.
+  const requiredIrr = irrFromPath(
+    params.portfolio.start,
+    plannedYearlySchedule(params.portfolio, endpointYears),
+    0,
+    0.03,
   );
 
   return {
@@ -203,8 +236,16 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       surfaceSamples: SURFACE_SAMPLES,
       benchmarkCache: Object.fromEntries(benchmarkCache),
     },
+    returnScatter: {
+      avgReturn: result.avgReturn,
+      irr: result.irr,
+      outcome: scatterOutcome,
+      requiredIrr: Number.isNaN(requiredIrr) ? null : requiredIrr,
+    },
     histogram,
     returnSummary,
+    irrSummary,
+    irrHistogram,
     allYearsHistogram,
     allYearsSummary,
   };

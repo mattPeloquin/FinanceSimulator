@@ -71,6 +71,7 @@ describe('runMonteCarlo determinism', () => {
     const a = runMonteCarlo(lognormalParams());
     const b = runMonteCarlo(lognormalParams());
     expect(Array.from(a.avgReturn)).toEqual(Array.from(b.avgReturn));
+    expect(Array.from(a.irr)).toEqual(Array.from(b.irr));
     expect(Array.from(a.finalBalance)).toEqual(Array.from(b.finalBalance));
     expect(Array.from(a.totalWithdrawn)).toEqual(Array.from(b.totalWithdrawn));
     expect(Array.from(a.medianYearlyWithdrawal)).toEqual(Array.from(b.medianYearlyWithdrawal));
@@ -101,12 +102,38 @@ describe('regeneratePath', () => {
       expect(re.totalWithdrawn).toBeCloseTo(result.totalWithdrawn[i], 6);
       expect(re.medianYearlyWithdrawal).toBeCloseTo(result.medianYearlyWithdrawal[i], 6);
       expect(re.avgReturn).toBeCloseTo(result.avgReturn[i], 12);
+      expect(re.irr).toBeCloseTo(result.irr[i], 12);
       // The regenerated path arrays are populated and self-consistent.
       expect(re.path.balances.length).toBe(params.numYears + 1);
       expect(re.path.withdrawals.length).toBe(params.numYears);
       expect(re.path.returns.length).toBe(params.numYears);
       expect(re.path.balances[re.path.balances.length - 1]).toBeCloseTo(re.finalBalance, 6);
     }
+  });
+});
+
+describe('money-weighted return (irr)', () => {
+  it('collapses to the time-weighted avgReturn when there are no withdrawals', () => {
+    // With zero withdrawals the only flows are the initial balance and the final
+    // balance, so the IRR is exactly the geometric mean return.
+    const params = lognormalParams({
+      numSimulations: 50,
+      portfolio: { start: 4_000_000, base: 0 },
+    });
+    const result = runMonteCarlo(params);
+    for (let i = 0; i < result.numSimulations; i++) {
+      expect(result.irr[i]).toBeCloseTo(result.avgReturn[i], 8);
+    }
+  });
+
+  it('diverges from avgReturn once withdrawals weight the returns', () => {
+    const result = runMonteCarlo(lognormalParams({ numSimulations: 200 }));
+    let differing = 0;
+    for (let i = 0; i < result.numSimulations; i++) {
+      expect(Number.isFinite(result.irr[i])).toBe(true);
+      if (Math.abs(result.irr[i] - result.avgReturn[i]) > 1e-6) differing++;
+    }
+    expect(differing).toBeGreaterThan(0);
   });
 });
 
@@ -120,6 +147,7 @@ describe('historical resampling', () => {
     });
     const result = runMonteCarlo(params);
     expect(result.avgReturn.length).toBe(500);
+    expect(result.irr.length).toBe(500);
     expect(result.allYearsReturns.length).toBe(500 * params.numYears);
     expect(Number.isFinite(result.finalBalance[0])).toBe(true);
   });

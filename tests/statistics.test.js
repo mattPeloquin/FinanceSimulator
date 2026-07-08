@@ -14,6 +14,7 @@ import {
   stdDev,
   summarizeReturns,
   buildHistogram,
+  irrFromPath,
 } from '../src/core/statistics.js';
 
 function makeSummary(arrs) {
@@ -68,6 +69,43 @@ describe('rankByReturn', () => {
       totalWithdrawn: [0, 0, 0],
     });
     expect(Array.from(rankByReturn(summary))).toEqual([1, 0, 2]);
+  });
+});
+
+describe('irrFromPath', () => {
+  // NPV of the cash-flow convention irrFromPath solves, for cross-checking roots.
+  function npvAt(r, start, withdrawals, finalBalance) {
+    let v = -start;
+    for (let t = 0; t < withdrawals.length; t++) v += withdrawals[t] / (1 + r) ** (t + 1);
+    return v + finalBalance / (1 + r) ** withdrawals.length;
+  }
+
+  it('matches the hand-computed root for a simple two-year annuity', () => {
+    // -1000 + 500/(1+r) + 600/(1+r)^2 = 0  =>  r = (-500 + sqrt(2,650,000)) rearranged
+    expect(irrFromPath(1000, [500, 600], 0, 0.05)).toBeCloseTo(0.0639411, 5);
+  });
+
+  it('equals the geometric mean return when there are no intermediate flows', () => {
+    expect(irrFromPath(1000, [0, 0, 0], 1331, 0)).toBeCloseTo(0.1, 9);
+    expect(irrFromPath(1000, [0, 0], 810, 0.2)).toBeCloseTo(-0.1, 9);
+  });
+
+  it('converges with a deposit (negative withdrawal) year in the flows', () => {
+    const r = irrFromPath(1000, [-200, 300, 300], 800, 0.05);
+    expect(Number.isFinite(r)).toBe(true);
+    expect(npvAt(r, 1000, [-200, 300, 300], 800)).toBeCloseTo(0, 4);
+  });
+
+  it('finds the root even from a far-off guess', () => {
+    expect(irrFromPath(1000, [500, 600], 0, 5)).toBeCloseTo(0.0639411, 5);
+  });
+
+  it('returns NaN when there are no positive inflows', () => {
+    expect(irrFromPath(1000, [0, -50], 0, 0)).toBeNaN();
+  });
+
+  it('returns 0 for a zero-year horizon', () => {
+    expect(irrFromPath(1000, [], 500, 0)).toBe(0);
   });
 });
 

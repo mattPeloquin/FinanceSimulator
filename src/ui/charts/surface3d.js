@@ -266,8 +266,8 @@ function buildXAxisConfig(numCols) {
   });
 }
 
-function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark) {
-  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark];
+function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr) {
+  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr];
   if (depleted) {
     return { value, itemStyle: { color: colorForDepletedReturn(ret) } };
   }
@@ -475,13 +475,19 @@ function withdrawalDetailTailLines(details) {
   ];
 }
 
-function withdrawalChartTooltipCallbacks(colKey) {
-  const colAt = () => surfaceState[colKey];
+// `source` is either a surfaceState column key (this chart's own popups) or a
+// `(dataIndex) => details` function so other charts (the sequence-risk
+// scatter's drill-down) can reuse the exact same tooltip.
+export function withdrawalChartTooltipCallbacks(source) {
+  const detailsAt =
+    typeof source === 'function'
+      ? source
+      : (dataIndex) => withdrawalPointDetails(surfaceState[source], dataIndex);
   return {
     title: (items) => (items[0] ? `Year ${items[0].label}` : null),
     afterTitle: (items) => {
       if (!items[0]) return [];
-      const details = withdrawalPointDetails(colAt(), items[0].dataIndex);
+      const details = detailsAt(items[0].dataIndex);
       return details ? [formatWithdrawnLine(details.wd, details.unadj)] : [];
     },
     // "Actual Withdrawal" is omitted here since afterTitle's "Withdrawn" line
@@ -496,7 +502,7 @@ function withdrawalChartTooltipCallbacks(colKey) {
     },
     afterBody: (items) => {
       if (!items[0]) return [];
-      return withdrawalDetailTailLines(withdrawalPointDetails(colAt(), items[0].dataIndex));
+      return withdrawalDetailTailLines(detailsAt(items[0].dataIndex));
     },
   };
 }
@@ -536,13 +542,13 @@ function extractWithdrawalSeries(col) {
     medianYearly: points[0] ? pointValue(points[0])[9] : 0,
     horizonYears: points[0] ? pointValue(points[0])[10] : 0,
     avg: points[0] ? pointValue(points[0])[7] : 0,
+    irr: points[0] ? pointValue(points[0])[12] : NaN,
   };
 }
 
 // Minimum-withdrawal and gift-ceiling reference lines for a sample-run chart,
 // sliced to the path length and styled like the schedule preview sparklines.
-function planOverlaySlice(length) {
-  const portfolio = surfaceState.simParams?.portfolio;
+function planOverlaySlice(portfolio, length) {
   if (!portfolio || length <= 0) {
     return { floorSeries: null, giftAmounts: null, floorStepped: true };
   }
@@ -553,9 +559,12 @@ function planOverlaySlice(length) {
   };
 }
 
-function buildWithdrawalOverlayDatasets(series, { large = false } = {}) {
+function buildWithdrawalOverlayDatasets(series, { large = false, portfolio } = {}) {
   const theme = getChartTheme();
-  const { floorSeries, giftAmounts, floorStepped } = planOverlaySlice(series.labels.length);
+  const { floorSeries, giftAmounts, floorStepped } = planOverlaySlice(
+    portfolio ?? surfaceState.simParams?.portfolio,
+    series.labels.length,
+  );
   const datasets = [];
 
   const displayFloor = Array.isArray(floorSeries)
@@ -602,9 +611,11 @@ function buildWithdrawalOverlayDatasets(series, { large = false } = {}) {
 }
 
 // Chart.js datasets comparing the original withdrawal plan against what was
-// actually withdrawn. Shared by the small float panel and the large dialog;
-// `large` just scales line and point sizes up.
-function withdrawalComparisonDatasets(series, { large = false } = {}) {
+// actually withdrawn. Shared by the small float panel, the large dialog, and
+// the sequence-risk scatter's drill-down; `large` just scales line and point
+// sizes up, and `portfolio` overrides this chart's own sim params for reuse
+// from other charts.
+export function withdrawalComparisonDatasets(series, { large = false, portfolio } = {}) {
   const theme = getChartTheme();
   const floatTheme = floatThemeForSeries(series);
   // Deposit years carry a negative "withdrawal" internally; this chart only
@@ -643,7 +654,7 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
       pointBorderWidth: 1,
       order: 3,
     },
-    ...buildWithdrawalOverlayDatasets(series, { large }),
+    ...buildWithdrawalOverlayDatasets(series, { large, portfolio }),
   ];
 }
 
@@ -738,7 +749,10 @@ function showFloatWithdrawal(col) {
     <div style="font-weight:700;margin-bottom:2px;">${sampleRunTitle(col)}</div>
     <div style="display:flex; justify-content:space-between; align-items:flex-start;font-weight:normal;">
       <div style="color:${status.color}">${status.text}</div>
-      <div style="color:${muted};">Avg Return: ${formatPercent(series.avg)}</div>
+      <div style="color:${muted};text-align:right;">
+        <div>Avg Return: ${formatPercent(series.avg)}</div>
+        <div>IRR: ${formatPercent(series.irr) || '—'}</div>
+      </div>
     </div>
     <div style="font-weight:normal;color:${muted};margin-top:2px">
       <div>${primaryLabel}: ${formatK(primaryValue)}</div>
@@ -878,6 +892,9 @@ function openLargeWithdrawalChart(col) {
   const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
   if (avgReturnEl) avgReturnEl.textContent = `Avg Return: ${formatPercent(series.avg)}`;
 
+  const irrEl = document.getElementById('withdrawalChartDialogIrr');
+  if (irrEl) irrEl.textContent = `IRR: ${formatPercent(series.irr) || '—'}`;
+
   const canvas = document.getElementById('largeWithdrawalCanvas');
   const balanceCanvas = document.getElementById('largeBalanceCanvas');
   const theme = floatThemeForSeries(series);
@@ -968,6 +985,7 @@ function tooltipFormatter(params) {
   const bal = vals[4];
   const wd = vals[5];
   const avg = vals[7];
+  const irr = vals[12];
   const unadj = vals[8];
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
@@ -979,6 +997,7 @@ function tooltipFormatter(params) {
     `<b>${sampleRunTitle(col)}</b>` +
     `<br>${summary}` +
     `<br>Avg Annual Return: <b>${formatPercent(avg)}</b>` +
+    `<br>IRR: <b>${formatPercent(irr) || '—'}</b>` +
     `<br>Year: ${y}` +
     `<br>Withdrawn: ${formatK(wd)}${deltaStr}` +
     `<br>Original Plan: ${formatK(unadj)}` +
@@ -1175,7 +1194,7 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
   const belowPlanCols = [];
   for (let x = 0; x < numCols; x++) {
     const path = surfacePaths[x];
-    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
+    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn, irr, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
     const pathHorizon = horizonYears ?? numYears;
     const depleted = pathDepleted(balances);
     const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), planBenchmark ?? 0, tolerance);
@@ -1190,7 +1209,7 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
       const unadjusted = y > 0 && unadjustedWithdrawals ? unadjustedWithdrawals[y - 1] : 0;
       const point = makeBarPoint(
         x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted, belowPlan, unadjusted,
-        medianYearlyWithdrawal ?? 0, pathHorizon, planBenchmark ?? 0,
+        medianYearlyWithdrawal ?? 0, pathHorizon, planBenchmark ?? 0, irr ?? NaN,
       );
       data3D.push(point);
       colPoints.push(point);

@@ -152,6 +152,87 @@ export function withdrawalTargetSuccessRate(actualWithdrawn, plannedBenchmark, t
   return eligible > 0 ? metTarget / eligible : null;
 }
 
+// Money-weighted annual return (IRR) of one simulated path, in the same real
+// terms as the path itself. Solves for r in:
+//   -start + Σ_{t=1..H} wd[t-1]/(1+r)^t + final/(1+r)^H = 0
+// matching the sim loop's end-of-year withdrawal convention. Deposits arrive
+// as negative withdrawals, so flows can be mixed-sign with multiple roots;
+// Newton seeded from `guess` (the path's time-weighted return) picks the
+// economically sensible one, with bracketed bisection as the fallback.
+// Returns NaN when no root exists (e.g. no positive inflows at all).
+export function irrFromPath(startBalance, yearlyWithdrawals, finalBalance, guess = 0) {
+  const n = yearlyWithdrawals.length;
+  if (n === 0) return 0;
+
+  // NPV and its derivative at rate r (r > -1).
+  const npv = (r) => {
+    const g = 1 + r;
+    let v = -startBalance;
+    let d = 1;
+    for (let t = 0; t < n; t++) {
+      d /= g;
+      v += yearlyWithdrawals[t] * d;
+    }
+    return v + finalBalance * d;
+  };
+  const npvDeriv = (r) => {
+    const g = 1 + r;
+    let v = 0;
+    let d = 1;
+    for (let t = 1; t <= n; t++) {
+      d /= g;
+      v -= (t * yearlyWithdrawals[t - 1] * d) / g;
+    }
+    return v - (n * finalBalance * d) / g;
+  };
+
+  const R_MIN = -0.9999;
+  const tol = 1e-9 * Math.max(1, Math.abs(startBalance));
+
+  let r = Math.max(R_MIN, Number.isFinite(guess) ? guess : 0);
+  for (let iter = 0; iter < 50; iter++) {
+    const f = npv(r);
+    if (Math.abs(f) < tol) return r;
+    const fp = npvDeriv(r);
+    if (fp === 0 || !Number.isFinite(fp)) break;
+    const step = f / fp;
+    r = Math.max(R_MIN, r - step);
+    if (Math.abs(step) < 1e-12) {
+      return Math.abs(npv(r)) < tol ? r : Number.NaN;
+    }
+  }
+
+  // Newton wandered: bracket a sign change on a coarse grid and bisect.
+  const grid = [R_MIN, -0.9, -0.5, -0.2, -0.05, 0, 0.05, 0.15, 0.3, 0.6, 1, 2, 5, 10];
+  let lo = Number.NaN;
+  let hi = Number.NaN;
+  let prev = npv(grid[0]);
+  for (let i = 1; i < grid.length; i++) {
+    const cur = npv(grid[i]);
+    if ((prev < 0 && cur > 0) || (prev > 0 && cur < 0)) {
+      lo = grid[i - 1];
+      hi = grid[i];
+      break;
+    }
+    prev = cur;
+  }
+  if (Number.isNaN(lo)) return Number.NaN;
+
+  let fLo = npv(lo);
+  for (let iter = 0; iter < 200; iter++) {
+    const mid = (lo + hi) / 2;
+    const fMid = npv(mid);
+    if (Math.abs(fMid) < tol || hi - lo < 1e-12) return mid;
+    if ((fLo < 0) === (fMid < 0)) {
+      lo = mid;
+      fLo = fMid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
 export function mean(values) {
   let sum = 0;
   for (let i = 0; i < values.length; i++) sum += values[i];

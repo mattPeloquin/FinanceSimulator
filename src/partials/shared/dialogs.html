@@ -36,7 +36,10 @@
                 <div id="withdrawalChartDialogSubtitle" class="text-sm font-normal text-theme-faint mt-1"></div>
             </div>
             <div class="flex items-center gap-4">
-                <div id="withdrawalChartDialogAvgReturn" class="text-sm text-theme-faint"></div>
+                <div class="text-right">
+                    <div id="withdrawalChartDialogAvgReturn" class="text-sm text-theme-faint"></div>
+                    <div id="withdrawalChartDialogIrr" class="text-sm text-theme-faint" title="Money-weighted return (IRR): accounts for withdrawal timing"></div>
+                </div>
                 <button onclick="document.getElementById('withdrawalChartDialog').close()" class="text-theme-faint hover:text-theme-body p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>

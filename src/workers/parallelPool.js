@@ -35,6 +35,7 @@ export function stitchMonteCarloResults(params, chunkResults) {
   const baseSeed = params.seed >>> 0;
 
   const avgReturn = new Float64Array(totalSims);
+  const irr = new Float64Array(totalSims);
   const finalBalance = new Float64Array(totalSims);
   const totalWithdrawn = new Float64Array(totalSims);
   const medianYearlyWithdrawal = new Float64Array(totalSims);
@@ -45,8 +46,9 @@ export function stitchMonteCarloResults(params, chunkResults) {
   allYearsReturns.fill(NaN);
 
   for (const chunk of chunkResults) {
-    const { startIndex, numSimulations, avgReturn: a, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr } = chunk;
+    const { startIndex, numSimulations, avgReturn: a, irr: ir, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr } = chunk;
     avgReturn.set(a, startIndex);
+    irr.set(ir, startIndex);
     finalBalance.set(fb, startIndex);
     totalWithdrawn.set(tw, startIndex);
     medianYearlyWithdrawal.set(myw, startIndex);
@@ -65,6 +67,7 @@ export function stitchMonteCarloResults(params, chunkResults) {
     baseSeed,
     numSimulations: totalSims,
     avgReturn,
+    irr,
     finalBalance,
     totalWithdrawn,
     medianYearlyWithdrawal,
@@ -82,11 +85,12 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
       if (msg.type === 'chunkDone') {
         port.removeEventListener('message', onMessage);
         port.removeEventListener('messageerror', onError);
-        const { avgReturn, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns } = msg.buffers;
+        const { avgReturn, irr, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
           numSimulations: msg.numSimulations,
           avgReturn: new Float64Array(avgReturn),
+          irr: new Float64Array(irr),
           finalBalance: new Float64Array(finalBalance),
           totalWithdrawn: new Float64Array(totalWithdrawn),
           medianYearlyWithdrawal: new Float64Array(medianYearlyWithdrawal),

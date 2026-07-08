@@ -1,7 +1,8 @@
 // Renders the results section: headline metrics, percentile cards, and charts.
 import { formatK, formatPercent } from './format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
-import { drawDistributionChart, drawAllYearsDistributionChart } from './charts/distribution.js';
+import { drawDistributionChart, drawAllYearsDistributionChart, drawIrrDistributionChart } from './charts/distribution.js';
+import { drawIrrScatter } from './charts/irrScatter.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
 import { isMedianYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
 
@@ -142,6 +143,7 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   );
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianReturn', formatPercent(result.returnSummary.median));
+  setText('medianIrr', formatPercent(result.irrSummary.median) || '—');
   setText('medianWithdrawn', formatK(medianActual));
   setSecondaryMetric('medianWithdrawnSecondary', secondaryActual);
   setText('plannedWithdrawn', formatK(plannedBenchmark));
@@ -157,6 +159,7 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
     setText(`${key}Bal`, formatK(p.finalBalance));
     setEndYear(`${key}EndYear`, p.path.balances, result.numYears, p.horizonYears);
     setText(`${key}Ret`, formatPercent(p.avgReturn));
+    setText(`${key}Irr`, `IRR ${formatPercent(p.irr) || '—'}`);
   }
 
   drawTimelineCharts(result.percentiles, chartYears);
@@ -168,7 +171,15 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   setText('returnMax', formatPercent(rs.max));
   setText('returnStdDev', formatPercent(rs.stdDev));
 
+  const irs = result.irrSummary;
+  setText('returnMeanIrr', formatPercent(irs.mean) || '—');
+  setText('returnMedianIrr', formatPercent(irs.median) || '—');
+  setText('returnMinIrr', formatPercent(irs.min) || '—');
+  setText('returnMaxIrr', formatPercent(irs.max) || '—');
+  setText('returnStdDevIrr', formatPercent(irs.stdDev) || '—');
+
   drawDistributionChart(result.histogram, result.returnSummary);
+  drawIrrScatter(result.returnScatter, { params, seed: result.seed });
 
   const ay = result.allYearsSummary;
   setText('allYearsMean', formatPercent(ay.mean));
@@ -177,6 +188,7 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   setText('allYearsMax', formatPercent(ay.max));
   setText('allYearsStdDev', formatPercent(ay.stdDev));
   drawAllYearsDistributionChart(result.allYearsHistogram, result.allYearsSummary);
+  drawIrrDistributionChart(result.irrHistogram, result.irrSummary);
 
   // 3D chart loads its heavy libs lazily; don't block the rest of the render.
   drawSurfaceChart(result.surfacePaths, chartYears, {

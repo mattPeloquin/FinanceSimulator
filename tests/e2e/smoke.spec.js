@@ -40,6 +40,31 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   const medianBalance = page.locator('#medianBalance');
   await expect(medianBalance).not.toBeEmpty();
 
+  // Percentile cards show both the time-weighted return and the IRR
+  await expect(page.locator('#p50Ret')).toContainText('%');
+  await expect(page.locator('#p50Irr')).toContainText('IRR');
+  await expect(page.locator('#p50Irr')).toContainText('%');
+
+  // Return distribution tiles carry an IRR secondary value
+  await page.click('summary:has-text("Distribution of Real Returns")');
+  await expect(page.locator('#returnMean')).toContainText('%');
+  await expect(page.locator('#returnMeanIrr')).toContainText('%');
+  await expect(page.locator('#returnMedianIrr')).toContainText('%');
+
+  // Sequence-risk scatter renders with its summary cards and outcome legend
+  await expect(page.locator('#irrScatterCanvas')).toBeVisible();
+  await expect(page.locator('#seqMedianIrr')).toContainText('%');
+  await expect(page.locator('#seqRequiredIrr')).toContainText('%');
+  await expect(page.locator('#irrScatterLegend')).toContainText('Met plan');
+  await expect(page.locator('#irrScatterLegend')).toContainText('IRR = Avg');
+  await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
+
+  // Combined success card and Median End Balance IRR
+  await expect(page.locator('#medianIrr')).toContainText('%');
+
+  // IRR distribution histogram at the end of the section
+  await expect(page.locator('#irrChart')).toBeVisible();
+
   // Verify that canvases are rendered
   const balanceChart = page.locator('#balanceChart');
   await expect(balanceChart).toBeVisible();

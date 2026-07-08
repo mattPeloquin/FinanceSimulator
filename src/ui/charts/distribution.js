@@ -15,6 +15,7 @@ const MARKERS = [
 
 const avgChartState = { chart: null, histogram: null, returnSummary: null };
 const allYearsChartState = { chart: null, histogram: null, returnSummary: null };
+const irrChartState = { chart: null, histogram: null, returnSummary: null };
 
 function buildBarStyles(histogram, returnSummary, theme) {
   const { labels, bins, binSize } = histogram;
@@ -140,11 +141,25 @@ export function drawAllYearsDistributionChart(histogram, returnSummary) {
   );
 }
 
+export function drawIrrDistributionChart(histogram, returnSummary) {
+  renderHistogramChart(
+    'irrChart',
+    'irrHistogramLegend',
+    'IRR (Money-Weighted Real Return)',
+    histogram,
+    returnSummary,
+    irrChartState,
+  );
+}
+
 onThemeChange(() => {
   if (avgChartState.histogram && avgChartState.returnSummary) {
     drawDistributionChart(avgChartState.histogram, avgChartState.returnSummary);
   }
   if (allYearsChartState.histogram && allYearsChartState.returnSummary) {
     drawAllYearsDistributionChart(allYearsChartState.histogram, allYearsChartState.returnSummary);
+  }
+  if (irrChartState.histogram && irrChartState.returnSummary) {
+    drawIrrDistributionChart(irrChartState.histogram, irrChartState.returnSummary);
   }
 });
