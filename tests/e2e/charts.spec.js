@@ -143,3 +143,44 @@ test('3D surface double-click triggers drill-down', async ({ page }) => {
   await expect(page.locator('#surfaceChartTitle')).not.toHaveText('Explore specific paths');
   expect(await page.evaluate(() => window.__TEST_HOOKS__.surfaceViewMode())).toBe('drilldown');
 });
+
+test('3D surface tooltip shows original plan from stored bar data when hover value is truncated', async ({ page }) => {
+  await page.goto('/');
+
+  await page.click('summary:has-text("Advanced simulation settings")');
+  await page.fill('#numYears', '30');
+  await page.fill('#numSimulations', '1000');
+  await page.fill('#randomSeed', '12345');
+
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible();
+
+  await page.waitForFunction(() => {
+    const hooks = window.__TEST_HOOKS__;
+    if (!hooks?.surfaceChart || !hooks.formatSurfaceTooltip) return false;
+    const opt = hooks.surfaceChart.getOption();
+    const seriesData = opt?.series?.find((s) => s.name === 'paths')?.data;
+    return seriesData?.length > 0;
+  });
+
+  const tooltipCheck = await page.evaluate(() => {
+    const pointValue = (p) => (Array.isArray(p) ? p : p.value);
+    const seriesData = window.__TEST_HOOKS__.surfaceChart.getOption().series.find((s) => s.name === 'paths').data;
+    const fullPoint = seriesData.find((p) => {
+      const v = pointValue(p);
+      return Math.round(v[0]) === 0 && v[1] === 3;
+    });
+    const full = pointValue(fullPoint);
+    const truncated = full.slice(0, 4);
+    const format = window.__TEST_HOOKS__.formatSurfaceTooltip;
+    return {
+      unadjusted: full[8],
+      fullText: format({ value: fullPoint }),
+      truncatedText: format({ value: truncated }),
+    };
+  });
+
+  expect(tooltipCheck.unadjusted).toBeGreaterThan(0);
+  expect(tooltipCheck.truncatedText).toBe(tooltipCheck.fullText);
+  expect(tooltipCheck.truncatedText).toContain('Original Plan:');
+});

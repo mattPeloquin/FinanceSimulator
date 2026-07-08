@@ -11,6 +11,8 @@
     "lint": "npm run lint:html && npm run lint:js",
     "lint:html": "htmlhint \"index.html\" \"src/partials/**/*.html\"",
     "lint:js": "eslint .",
+    "postinstall": "node scripts/postinstall-playwright.js",
+    "setup:e2e": "playwright install chromium",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

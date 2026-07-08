@@ -64,6 +64,13 @@ const FLOAT_THEME = {
 };
 
 const CLICK_WAIT_MS = 400; // window to distinguish single vs double click (ECharts GL bar3D has no reliable dblclick)
+const TOOLTIP_POINTER_OFFSET = 28; // gap between cursor and hover card
+const TOOLTIP_EDGE_PAD = 8;
+const SURFACE_AXIS_TICK_FONT = 10;
+const BALANCE_AXIS_NAME_GAP = 28;
+
+// bar3D passes an empty rect and often [0, 0] for point; track the cursor ourselves.
+let surfaceTooltipPointer = null;
 
 const OVERVIEW_TITLE = 'Explore specific paths';
 const OVERVIEW_DESCRIPTION =
@@ -252,10 +259,8 @@ function buildXAxisConfig(numCols) {
     min: 0,
     max: numCols - 1,
     splitNumber: 5,
+    axisLine: { show: true, lineStyle: { width: 1 } },
     axisLabel: {
-      show: true,
-      fontSize: 9,
-      margin: 4,
       formatter: (v) => columnPercentileLabel(v, numCols),
     },
   });
@@ -276,9 +281,20 @@ function pointValue(p) {
   return Array.isArray(p) ? p : p.value;
 }
 
+// bar3D hover params.value often carries only x/y/z (+ visualMap dim); look up the
+// full per-bar payload we stored when building columns.
+function surfaceBarPointValues(params) {
+  const partial = pointValue(params?.value);
+  if (!partial?.length) return partial ?? [];
+  const col = Math.round(partial[0]);
+  const y = Math.round(partial[1]);
+  const stored = surfaceState.columns[col]?.[y];
+  return stored ? pointValue(stored) : partial;
+}
+
 function zAxisLabel(formatter) {
   const theme = getChartTheme();
-  return { show: true, color: theme.axisLabel, fontSize: 9, margin: 4, formatter };
+  return { show: true, color: theme.axisName, fontSize: SURFACE_AXIS_TICK_FONT, margin: 4, formatter };
 }
 
 function largeWithdrawalLegendOptions(theme) {
@@ -311,14 +327,10 @@ function applySurfaceTheme() {
   const theme = getChartTheme();
   const numCols = surfaceState.columns.length;
   chartInstance.setOption({
+    tooltip: surfaceTooltipOptions(theme),
     xAxis3D: buildXAxisConfig(numCols),
     yAxis3D: axisConfig('Year', { min: 0, max: surfaceState.numYears, splitNumber: 5, inverse: true }),
-    zAxis3D: {
-      min: 0,
-      max: surfaceState.zCap,
-      ...axisConfig('Balance'),
-      axisLabel: zAxisLabel((v) => formatK(v)),
-    },
+    zAxis3D: buildZAxisConfig({ min: 0, max: surfaceState.zCap }),
     grid3D: { environment: theme.sceneBg },
   });
   if (floatPanel) {
@@ -355,15 +367,45 @@ function applySurfaceTheme() {
 
 function axisConfig(name, extra = {}) {
   const theme = getChartTheme();
+  const {
+    axisLabel: axisLabelExtra,
+    axisLine: axisLineExtra,
+    axisTick: axisTickExtra,
+    nameTextStyle: nameTextStyleExtra,
+    splitLine: splitLineExtra,
+    ...rest
+  } = extra;
+
   return {
     type: 'value',
     name,
-    nameTextStyle: { color: theme.axisName, fontSize: 11 },
-    axisLabel: { show: true, color: theme.axisLabel, fontSize: 9, margin: 4, ...extra.axisLabel },
-    axisTick: { show: false },
-    axisLine: { lineStyle: { color: theme.axisLine } },
-    splitLine: { show: false },
-    ...extra,
+    nameTextStyle: { color: theme.axisName, fontSize: 11, ...nameTextStyleExtra },
+    axisLabel: {
+      show: true,
+      color: theme.axisName,
+      fontSize: SURFACE_AXIS_TICK_FONT,
+      margin: 4,
+      ...axisLabelExtra,
+    },
+    axisTick: { show: false, ...axisTickExtra },
+    axisLine: {
+      ...axisLineExtra,
+      lineStyle: {
+        color: theme.axisName,
+        ...axisLineExtra?.lineStyle,
+      },
+    },
+    splitLine: { show: false, ...splitLineExtra },
+    ...rest,
+  };
+}
+
+function buildZAxisConfig({ min = 0, max = surfaceState.zCap } = {}) {
+  return {
+    min,
+    max,
+    ...axisConfig('Balance', { nameGap: BALANCE_AXIS_NAME_GAP }),
+    axisLabel: zAxisLabel((v) => formatK(v)),
   };
 }
 
@@ -866,7 +908,7 @@ function hideFloatPanel() {
 }
 
 function tooltipFormatter(params) {
-  const vals = pointValue(params.value);
+  const vals = surfaceBarPointValues(params);
   const col = Math.round(vals[0]);
   const y = vals[1];
   const ret = vals[3];
@@ -890,6 +932,38 @@ function tooltipFormatter(params) {
     `<br>Balance: ${formatK(bal)}` +
     `<br>Market Return: ${(ret * 100).toFixed(1)}%`
   );
+}
+
+function surfaceTooltipPosition(point, _params, _dom, _rect, size) {
+  const [viewW, viewH] = size.viewSize;
+  const [tipW, tipH] = size.contentSize;
+  const mouse = surfaceTooltipPointer ?? point;
+  if (!mouse) return [TOOLTIP_EDGE_PAD, TOOLTIP_EDGE_PAD];
+
+  let x = mouse[0] + TOOLTIP_POINTER_OFFSET;
+  let y = mouse[1] + TOOLTIP_POINTER_OFFSET;
+  if (x + tipW > viewW - TOOLTIP_EDGE_PAD) {
+    x = mouse[0] - tipW - TOOLTIP_POINTER_OFFSET;
+  }
+  if (y + tipH > viewH - TOOLTIP_EDGE_PAD) {
+    y = mouse[1] - tipH - TOOLTIP_POINTER_OFFSET;
+  }
+  x = Math.max(TOOLTIP_EDGE_PAD, Math.min(x, viewW - tipW - TOOLTIP_EDGE_PAD));
+  y = Math.max(TOOLTIP_EDGE_PAD, Math.min(y, viewH - tipH - TOOLTIP_EDGE_PAD));
+  return [x, y];
+}
+
+function surfaceTooltipOptions(theme) {
+  return {
+    confine: true,
+    appendToBody: false,
+    position: surfaceTooltipPosition,
+    formatter: tooltipFormatter,
+    backgroundColor: theme.floatPanelBg,
+    borderColor: theme.floatPanelBorder,
+    padding: [5, 7],
+    textStyle: { fontSize: 11, color: theme.tooltipBody },
+  };
 }
 
 // Update the dim/highlight overlay without rebuilding the whole chart.
@@ -1003,6 +1077,13 @@ function bindEvents() {
     const col = pendingClickCol ?? lastClickCol;
     if (col == null) return;
     runDoubleClick(col);
+  });
+
+  chartInstance.getZr().on('mousemove', (e) => {
+    surfaceTooltipPointer = [e.offsetX, e.offsetY];
+  });
+  chartInstance.getZr().on('mouseout', () => {
+    surfaceTooltipPointer = null;
   });
 
   // Any click that does NOT land on a column unpins. The series 'click' above
@@ -1237,7 +1318,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
 
   chartInstance.setOption(
     {
-      tooltip: { formatter: tooltipFormatter },
+      tooltip: surfaceTooltipOptions(theme),
       visualMap: {
         show: false,
         dimension: 3,
@@ -1247,11 +1328,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
       },
       xAxis3D: buildXAxisConfig(numCols),
       yAxis3D: axisConfig('Year', { min: 0, max: numYears, splitNumber: 5, inverse: true }),
-      zAxis3D: axisConfig('Balance', {
-        min: 0,
-        max: zCap,
-        axisLabel: zAxisLabel((v) => formatK(v)),
-      }),
+      zAxis3D: buildZAxisConfig({ min: 0, max: zCap }),
       grid3D: {
         boxWidth: BOX_WIDTH,
         boxDepth: BOX_DEPTH,
@@ -1313,6 +1390,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   window.__TEST_HOOKS__.exitSurfaceDrilldown = () => exitDrilldown();
   window.__TEST_HOOKS__.surfaceXAxisLabel = (col) =>
     columnPercentileLabel(col, surfaceState.columns.length);
+  window.__TEST_HOOKS__.formatSurfaceTooltip = (params) => tooltipFormatter(params);
 
   if (!window.__sorSurfaceResizeBound) {
     window.addEventListener('resize', () => {

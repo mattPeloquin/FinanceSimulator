@@ -43,6 +43,15 @@ You don't need to be a software engineer to modify this app! You just need a few
   ```
    *Press Enter. This starts up your local preview. You'll see a web link (usually* `http://localhost:5173`*). Click it or copy it into your browser (or Ctrl-Click the link in the terminal) to see the app running live!*
 
+   *The first `npm install` also downloads the Chromium browser used for automated UI tests (about 150 MB). If you skip that step or tests complain about a missing browser, run `npm run setup:e2e` once.*
+
+### Running automated tests (optional)
+
+- **Unit tests:** `npm test`
+- **Browser tests:** `npm run test:e2e` (Chromium is installed automatically during `npm install`; re-run `npm run setup:e2e` if needed)
+
+To skip the browser download during install (e.g. in CI jobs that don't run E2E tests), set `SKIP_PLAYWRIGHT=1` before `npm install`.
+
 ---
 
 

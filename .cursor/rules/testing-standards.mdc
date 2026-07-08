@@ -9,7 +9,7 @@ alwaysApply: false
 Because this is a financial simulator, calculations must be strictly verified, and the UI must remain stable for users.
 
 - **Core Math (`src/core/`)**: Whenever changing or adding financial formulas (e.g., inflation adjustment, withdrawal strategies, tax logic), you MUST write or update accompanying unit tests in `tests/` using **Vitest**.
-- **UI & Interaction (`src/ui/`)**: Whenever adding new inputs, charts, or modifying the user flow, you MUST ensure the end-to-end tests in `tests/e2e/` using **Playwright** are updated.
+- **UI & Interaction (`src/ui/`)**: Whenever adding new inputs, charts, or modifying the user flow, you MUST ensure the end-to-end tests in `tests/e2e/` using **Playwright** are updated. Chromium is installed automatically on `npm install`; run `npm run setup:e2e` if browser tests fail with a missing executable.
 
 ```javascript
 // ❌ BAD: Adding a new financial function without tests
