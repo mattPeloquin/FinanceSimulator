@@ -458,7 +458,10 @@ function withdrawalPointDetails(col, dataIndex) {
   };
 }
 
+// A negative "withdrawal" is actually a deposit (see simulation.js); report it
+// as such rather than as a negative withdrawal amount.
 function formatWithdrawnLine(wd, unadj) {
+  if (wd < 0) return `Deposit: ${formatK(-wd)}`;
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
   return `Withdrawn: ${formatK(wd)}${deltaStr}`;
@@ -481,9 +484,11 @@ function withdrawalChartTooltipCallbacks(colKey) {
       const details = withdrawalPointDetails(colAt(), items[0].dataIndex);
       return details ? [formatWithdrawnLine(details.wd, details.unadj)] : [];
     },
+    // "Actual Withdrawal" is omitted here since afterTitle's "Withdrawn" line
+    // already shows that same value (plus its delta from plan).
+    filter: (item) => item.dataset.label !== 'Actual Withdrawal',
     label: (ctx) => {
       const value = formatK(ctx.parsed.y);
-      if (ctx.dataset.label === 'Actual Withdrawal') return `Actual Withdrawal: ${value}`;
       if (ctx.dataset.label === 'Minimum') return `Minimum: ${value}`;
       if (ctx.dataset.label === 'Gift') return `Gift ceiling: ${value}`;
       if (ctx.dataset.label === 'Original Plan') return `Original Plan: ${value}`;
@@ -602,10 +607,14 @@ function buildWithdrawalOverlayDatasets(series, { large = false } = {}) {
 function withdrawalComparisonDatasets(series, { large = false } = {}) {
   const theme = getChartTheme();
   const floatTheme = floatThemeForSeries(series);
+  // Deposit years carry a negative "withdrawal" internally; this chart only
+  // depicts withdrawals, so clamp those to 0 rather than dipping below the axis.
+  const unadjustedData = series.unadjustedData.map((v) => Math.max(0, v));
+  const actualData = series.actualData.map((v) => Math.max(0, v));
   return [
     {
       label: 'Original Plan',
-      data: series.unadjustedData,
+      data: unadjustedData,
       borderColor: theme.planLine,
       borderWidth: large ? 2 : 1.5,
       borderDash: large ? [5, 5] : [4, 4],
@@ -618,7 +627,7 @@ function withdrawalComparisonDatasets(series, { large = false } = {}) {
     },
     {
       label: 'Actual Withdrawal',
-      data: series.actualData,
+      data: actualData,
       borderColor: floatTheme.line,
       borderWidth: large ? 2 : 1.5,
       tension: 0.1,
@@ -676,6 +685,8 @@ function floatChartOptions() {
         displayColors: false,
         bodyFont: { size: 9 },
         padding: 4,
+        yAlign: 'bottom',
+        caretPadding: 6,
         callbacks: withdrawalChartTooltipCallbacks('pinnedCol'),
       },
     },
@@ -774,13 +785,44 @@ function syncBalanceBarHighlight(index) {
   largeBalanceChart.update('none');
 }
 
+// Drives the withdrawal line chart's own tooltip from a hover on the balance
+// bar chart, so the two stay in lockstep instead of showing separate tooltips.
+function showLineTooltipAtIndex(index) {
+  if (!largeChart?.tooltip) return;
+  if (index < 0) {
+    largeChart.setActiveElements([]);
+    largeChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    largeChart.update('none');
+    return;
+  }
+  const active = largeChart.data.datasets
+    .map((ds, datasetIndex) => ({ datasetIndex, value: ds.data[index] }))
+    .filter(({ value }) => value != null)
+    .map(({ datasetIndex }) => ({ datasetIndex, index }));
+  if (!active.length) return;
+  const point = largeChart.getDatasetMeta(active[0].datasetIndex).data[index];
+  const position = point ? { x: point.x, y: point.y } : { x: 0, y: 0 };
+  largeChart.setActiveElements(active);
+  largeChart.tooltip.setActiveElements(active, position);
+  largeChart.update('none');
+}
+
+// Belt-and-suspenders reset used on top of Chart.js's own hover handling: fires
+// on 'mouseleave' of either canvas so the tooltip/highlight can never get stuck
+// on when the pointer leaves the chart area (e.g. skipping between the two
+// stacked canvases faster than a 'mousemove' can land on the other one first).
+function resetWithdrawalHover() {
+  syncBalanceBarHighlight(-1);
+  showLineTooltipAtIndex(-1);
+}
+
 function balanceBarOptions() {
   const theme = getChartTheme();
   return {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    events: [],
+    interaction: { mode: 'index', intersect: false },
     scales: {
       x: {
         title: { display: true, text: 'Year', color: theme.axisTitle },
@@ -796,7 +838,14 @@ function balanceBarOptions() {
     },
     plugins: {
       legend: { display: false },
+      // The balance chart shows no tooltip of its own; hovering it drives the
+      // full tooltip on the withdrawal line chart above (see onHover below).
       tooltip: { enabled: false },
+    },
+    onHover: (_evt, activeElements) => {
+      const index = activeElements.length > 0 ? activeElements[0].index : -1;
+      syncBalanceBarHighlight(index);
+      showLineTooltipAtIndex(index);
     },
   };
 }
@@ -861,6 +910,8 @@ function openLargeWithdrawalChart(col) {
           legend: largeWithdrawalLegendOptions(chartTheme),
           tooltip: {
             displayColors: false,
+            yAlign: 'bottom',
+            caretPadding: 8,
             callbacks: withdrawalChartTooltipCallbacks('largeChartCol'),
           },
         },
@@ -870,6 +921,7 @@ function openLargeWithdrawalChart(col) {
         },
       },
     });
+    canvas.addEventListener('mouseleave', resetWithdrawalHover);
     const actualDataset = largeChart.data.datasets.find((ds) => ds.label === 'Actual Withdrawal');
     if (actualDataset) {
       actualDataset.borderColor = theme.line;
@@ -898,6 +950,7 @@ function openLargeWithdrawalChart(col) {
       },
       options: balanceBarOptions(),
     });
+    balanceCanvas.addEventListener('mouseleave', resetWithdrawalHover);
   }
 
   dialog.showModal();
