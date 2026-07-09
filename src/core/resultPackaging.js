@@ -22,7 +22,7 @@ import {
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
 
-const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
 
@@ -158,11 +158,11 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
 
   const benchmarkCache = new Map();
   const p5i = percentileIndex(n, 0.05);
-  const p60i = percentileIndex(n, 0.6);
-  const step = Math.max(1, Math.floor((p60i - p5i) / SURFACE_SAMPLES));
+  const p65i = percentileIndex(n, 0.65);
+  const step = Math.max(1, Math.floor((p65i - p5i) / SURFACE_SAMPLES));
   const surfacePaths = [];
   for (let i = 0; i < SURFACE_SAMPLES; i++) {
-    const rankIndex = Math.min(p5i + i * step, p60i);
+    const rankIndex = Math.min(p5i + i * step, p65i);
     const simIndex = rankW[rankIndex];
     surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedianYearly));
   }
@@ -232,7 +232,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       withdrawalMetric,
       maxYears,
       p5Rank: p5i,
-      p60Rank: p60i,
+      p65Rank: p65i,
       surfaceSamples: SURFACE_SAMPLES,
       benchmarkCache: Object.fromEntries(benchmarkCache),
     },

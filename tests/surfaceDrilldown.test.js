@@ -8,7 +8,7 @@ import {
 } from '../src/core/surfaceDrilldown.js';
 
 describe('rankForOverviewColumn', () => {
-  const meta = { p5Rank: 50, p60Rank: 600, surfaceSamples: 200 };
+  const meta = { p5Rank: 50, p65Rank: 600, surfaceSamples: 200 };
 
   it('matches the worker step formula', () => {
     const step = Math.max(1, Math.floor((600 - 50) / 200));
@@ -19,9 +19,9 @@ describe('rankForOverviewColumn', () => {
   });
 
   it('handles small simulation counts', () => {
-    const small = { p5Rank: 5, p60Rank: 60, surfaceSamples: 200 };
+    const small = { p5Rank: 5, p65Rank: 65, surfaceSamples: 200 };
     expect(rankForOverviewColumn(0, small)).toBe(5);
-    expect(rankForOverviewColumn(55, small)).toBe(60);
+    expect(rankForOverviewColumn(60, small)).toBe(65);
   });
 });
 

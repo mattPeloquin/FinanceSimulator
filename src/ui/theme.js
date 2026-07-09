@@ -43,6 +43,7 @@ export const themeTokens = {
     p40: { light: '101 163 13', dark: '132 204 22' },
     p50: { light: '22 163 74', dark: '74 222 128' },
     p60: { light: '13 148 136', dark: '45 212 191' },
+    p65: { light: '13 148 136', dark: '45 212 191' },
   },
 
   chartAssets: {

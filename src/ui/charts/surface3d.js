@@ -73,7 +73,7 @@ let surfaceTooltipPointer = null;
 
 const OVERVIEW_TITLE = 'Explore specific paths';
 const OVERVIEW_DESCRIPTION =
-  'A 3D plot of representative paths from the 5th to 60th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
+  'A 3D plot of representative paths from the 5th to 65th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
 
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
@@ -174,11 +174,27 @@ function pathStatusDisplay(series) {
   return { text: 'Funded', color: '#15803d' };
 }
 
-// Columns are sampled evenly from the 5th to the 60th percentile, so the first
-// column is P5 and the LAST column is P60 (hence numCols - 1 in the divisor).
+// Columns are sampled evenly from the 5th to the 65th percentile, so the first
+// column is P5 and the LAST column is P65 (hence numCols - 1 in the divisor).
 function percentileLabel(col, numCols) {
   const fraction = numCols > 1 ? col / (numCols - 1) : 0;
-  return 'P' + Math.round(5 + fraction * 55);
+  return 'P' + Math.round(5 + fraction * 60);
+}
+
+const OVERVIEW_AXIS_PERCENTILES = [5, 15, 25, 35, 45, 55, 65];
+const OVERVIEW_PERCENTILE_SPAN = OVERVIEW_AXIS_PERCENTILES.at(-1) - OVERVIEW_AXIS_PERCENTILES[0];
+
+function overviewAxisInterval(numCols) {
+  if (numCols <= 1) return 1;
+  return ((numCols - 1) * 10) / OVERVIEW_PERCENTILE_SPAN;
+}
+
+// Overview x-axis: show P5, P15, …, P65 at evenly spaced 10-point ticks.
+function overviewAxisTickLabel(col, numCols) {
+  if (numCols <= 1) return col === 0 ? 'P5' : '';
+  const pct = Math.round(5 + (col / (numCols - 1)) * OVERVIEW_PERCENTILE_SPAN);
+  if (pct < 5 || pct > 65 || (pct - 5) % 10 !== 0) return '';
+  return 'P' + pct;
 }
 
 const DRILLDOWN_PERCENTILE_DECIMALS = 2;
@@ -212,7 +228,7 @@ function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
     descEl.innerHTML =
       `Showing ~200 simulations with total-withdrawn ranks between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
       'Column height represents portfolio balance; color reflects each year\'s market return. ' +
-      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P5–P60 overview.';
+      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P5–P65 overview.';
     return;
   }
 
@@ -230,10 +246,17 @@ function buildXAxisConfig(numCols) {
   return axisConfig(isDrilldown ? `Percentile (near ${centerLabel})` : 'Percentile', {
     min: 0,
     max: numCols - 1,
-    splitNumber: 5,
+    ...(isDrilldown
+      ? { splitNumber: 5 }
+      : { interval: overviewAxisInterval(numCols), splitNumber: OVERVIEW_AXIS_PERCENTILES.length - 1 }),
     axisLine: { show: true, lineStyle: { width: 1 } },
     axisLabel: {
-      formatter: (v) => columnPercentileLabel(v, numCols),
+      showMinLabel: !isDrilldown,
+      showMaxLabel: !isDrilldown,
+      formatter: (v) =>
+        isDrilldown
+          ? columnPercentileLabel(v, numCols)
+          : overviewAxisTickLabel(Number(v), numCols),
     },
   });
 }
@@ -1329,6 +1352,8 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   window.__TEST_HOOKS__.exitSurfaceDrilldown = () => exitDrilldown();
   window.__TEST_HOOKS__.surfaceXAxisLabel = (col) =>
     columnPercentileLabel(col, surfaceState.columns.length);
+  window.__TEST_HOOKS__.surfaceOverviewAxisTickLabel = (col) =>
+    overviewAxisTickLabel(col, surfaceState.columns.length);
   window.__TEST_HOOKS__.formatSurfaceTooltip = (params) => tooltipFormatter(params);
 
   if (!window.__sorSurfaceResizeBound) {

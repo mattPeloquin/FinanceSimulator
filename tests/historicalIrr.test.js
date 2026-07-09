@@ -92,13 +92,13 @@ describe('historicalPlanIrrs', () => {
 });
 
 describe('historicalIrrBand', () => {
-  it('matches the app-wide P5–P60 outcome band by default', () => {
-    expect(HISTORICAL_IRR_PERCENTILES).toEqual({ low: 0.05, high: 0.6 });
+  it('matches the chart P5–P65 outcome band by default', () => {
+    expect(HISTORICAL_IRR_PERCENTILES).toEqual({ low: 0.05, high: 0.65 });
   });
 
-  it('reduces the window IRRs to their P5 and P60', () => {
+  it('reduces the window IRRs to their P5 and P65', () => {
     // Ten 1-year windows with distinct returns 1%..10%: P5 -> index
-    // floor(10*0.05)=0 (1%), P60 -> index floor(10*0.6)=6 (7%).
+    // floor(10*0.05)=0 (1%), P65 -> index floor(10*0.65)=6 (7%).
     const years = Array.from({ length: 10 }, (_, i) => yr(i + 1));
     const band = historicalIrrBand(makeParams({ years, numYears: 1 }));
     expect(band.windows).toBe(10);

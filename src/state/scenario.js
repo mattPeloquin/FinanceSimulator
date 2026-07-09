@@ -868,9 +868,9 @@ export function buildSimParams(scenario, samples) {
   };
 }
 
-/** Fraction 0–0.65 from the advanced "Plan Risk Tolerance" setting. */
+/** Fraction 0–0.35 from the advanced "Plan Risk Tolerance" setting. */
 export function planShortfallTolerance(scenario) {
-  return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.65);
+  return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.35);
 }
 
 function num(v) {
@@ -919,7 +919,7 @@ export function buildGoalSeekConfig(scenario) {
   return {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
-    shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 1),
+    shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 0.35),
     pinBaseWithdrawal: isSpecific ? true : !scenario.goalSeekIncludeBaseWithdrawal,
     includeSpendingOverTime: isSpecific ? false : !!scenario.goalSeekIncludeSpendingOverTime,
     spendingFirstTierYears: isSpecific
@@ -972,8 +972,8 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     errors.push(`Number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
   }
   const planRisk = scenario.planRiskTolerancePct;
-  if (!Number.isFinite(planRisk) || planRisk < 0 || planRisk > 65) {
-    errors.push('Plan risk tolerance must be between 0 and 65.');
+  if (!Number.isFinite(planRisk) || planRisk < 0 || planRisk > 35) {
+    errors.push('Plan risk tolerance must be between 0 and 35.');
   }
   if (
     scenario.goalSeekMode &&
@@ -1125,8 +1125,8 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       errors.push('Goal Seek desired success % must be between 65 and 99.');
     }
     const riskTolerance = scenario.goalSeekRiskTolerancePct;
-    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 65) {
-      errors.push('Goal Seek risk tolerance must be between 0 and 65.');
+    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 35) {
+      errors.push('Goal Seek risk tolerance must be between 0 and 35.');
     }
     if (scenario.withdrawalStrategy === 'specific') {
       // With a Specific List, each year's amount is fixed as typed — Goal Seek

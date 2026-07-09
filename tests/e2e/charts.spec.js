@@ -97,7 +97,7 @@ test('3D surface drill-down updates title and axis, then returns to overview', a
   expect(drillState.title).not.toBe('Explore specific paths');
   expect(drillState.title).toMatch(/^Explore paths near P/);
   expect(drillState.xAxisName).toMatch(/^Percentile \(near P/);
-  expect(drillState.lastLabel).not.toBe('P60');
+  expect(drillState.lastLabel).not.toBe('P65');
   expect(drillState.surfaceLen).toBe(6200);
 
   const restored = await page.evaluate(() => {
@@ -113,7 +113,23 @@ test('3D surface drill-down updates title and axis, then returns to overview', a
   expect(restored.viewMode).toBe('overview');
   expect(restored.title).toBe('Explore specific paths');
   expect(restored.firstLabel).toBe('P5');
-  expect(restored.lastLabel).toBe('P60');
+  expect(restored.lastLabel).toBe('P65');
+
+  const axisTicks = await page.evaluate(() => {
+    const tickLabel = window.__TEST_HOOKS__.surfaceOverviewAxisTickLabel;
+    const cols = [0, 33, 50, 66, 100, 133, 166, 199];
+    return Object.fromEntries(cols.map((col) => [col, tickLabel(col)]));
+  });
+  expect(axisTicks).toEqual({
+    0: 'P5',
+    33: 'P15',
+    50: '',
+    66: 'P25',
+    100: 'P35',
+    133: 'P45',
+    166: 'P55',
+    199: 'P65',
+  });
 });
 
 test('3D surface double-click triggers drill-down', async ({ page }) => {

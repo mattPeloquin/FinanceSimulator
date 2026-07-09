@@ -39,7 +39,7 @@ const state = {
   scatter: null,
   params: null,
   seed: null,
-  band: null, // P5–P60 of the plan's IRR backtested over contiguous historical windows
+  band: null, // P5–P65 of the plan's IRR backtested over contiguous historical windows
   selected: null, // sim index of the clicked path
   pathChart: null,
   balanceBars: null, // linked balance bar chart under the drill-down's line chart
@@ -162,7 +162,7 @@ function drawAxes(ctx, theme, extents, geom, scales) {
   ctx.restore();
 }
 
-// Soft horizontal band: the P5–P60 range of the plan's money-weighted IRR when
+// Soft horizontal band: the P5–P65 range of the plan's money-weighted IRR when
 // run over every contiguous horizon-length window of the user's selected
 // historical years — the same quantity as the y-axis, sequence risk included.
 function drawHistoricalBand(ctx, theme, geom, scales) {
@@ -173,7 +173,7 @@ function drawHistoricalBand(ctx, theme, geom, scales) {
   const yBottom = Math.max(plotTop, Math.min(plotBottom, scales.sy(state.band.low)));
   ctx.fillStyle = theme.planFill;
   ctx.fillRect(geom.plotX, yTop, geom.plotW, yBottom - yTop);
-  // Solid edge lines: the P5–P60 band can be a narrow strip, and the soft fill
+  // Solid edge lines: the P5–P65 band can be a narrow strip, and the soft fill
   // alone disappears under the grid lines.
   ctx.strokeStyle = theme.planLine;
   ctx.lineWidth = 1;
@@ -307,7 +307,7 @@ function renderLegend() {
       ? '; the selection is shorter than the horizon, so windows wrap around it'
       : '';
     items.push(
-      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="P5–P60 of your plan's money-weighted IRR when run over all ${state.band.windows} contiguous ${state.params?.numYears}-year sequences from ${rangeNote}${wrapNote}">` +
+      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="P5–P65 of your plan's money-weighted IRR when run over all ${state.band.windows} contiguous ${state.params?.numYears}-year sequences from ${rangeNote}${wrapNote}">` +
         `<span class="inline-block w-4 h-3 rounded-sm shrink-0" style="background:${theme.planFill};border:1px solid ${theme.planLine}"></span>Historical IRR range (${state.params?.numYears}-yr windows)</span>`,
     );
   }

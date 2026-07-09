@@ -31,7 +31,7 @@ export const SCENARIO_DEFAULTS = {
 
   // Max lifetime spending shortfall vs. plan (%) when scoring regular runs.
   // Drives the "on plan" success rate and 3D below-plan coloring.
-  // Valid UI range: 0–65. Goal Seek uses its own Risk Tolerance when enabled.
+  // Valid UI range: 0–35. Goal Seek uses its own Risk Tolerance when enabled.
   planRiskTolerancePct: 5,
 
   // How runs are ranked and scored against the plan. Options:

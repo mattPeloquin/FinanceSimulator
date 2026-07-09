@@ -330,7 +330,9 @@
                             </div>
                             <div>
                                 <label for="glideRate" class="text-[10px] uppercase text-theme-faint font-semibold">Spend Timing</label>
-                                <input type="range" id="glideRate" min="-4" max="0" step="1" value="-2" list="glideRateTicks" class="w-full h-2 mt-2.5 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                                <div class="flex items-center mt-2.5">
+                                    <input type="range" id="glideRate" min="-4" max="0" step="1" value="-2" list="glideRateTicks" class="range-theme w-full">
+                                </div>
                                 <datalist id="glideRateTicks">
                                     <option value="-4"></option>
                                     <option value="-3"></option>

@@ -179,8 +179,8 @@ Once all simulations finish, the worker (`src/core/statistics.js`) computes:
 
 Only the paths that will actually appear on screen are regenerated in full year-by-year detail (using the seed trick above):
 
-- The **7 percentile paths** (5th–60th) for the timeline charts.
-- About **200 paths sampled evenly between the 5th and 60th percentile** for the 3D chart.
+- The **7 percentile paths** (5th–65th) for the timeline charts.
+- About **200 paths sampled evenly between the 5th and 65th percentile** for the 3D chart.
 
 The worker then sends this compact, chart-ready package back to the page for display in cards and charts  (`src/ui/results.js` and `src/ui/charts/`).
 

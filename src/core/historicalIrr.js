@@ -5,16 +5,16 @@
 // simulation's IRR scatter does — unlike a buy-and-hold annualized return —
 // so the band and the scatter's y-axis measure the same quantity.
 //
-// The band is reduced to its 5th–60th percentiles to match the P5–P60 outcome
-// band used everywhere else in the app (percentile cards, 3D surface columns).
+// The band is reduced to its 5th–65th percentiles to match the P5–P65 chart
+// outcome band (3D surface columns, timeline, IRR scatter).
 // DOM-free and unit-testable.
 
 import { percentileValue } from './statistics.js';
 import { simulatePath } from './simulation.js';
 import { createRng } from './rng.js';
 
-// App-wide outcome band: P5–P60.
-export const HISTORICAL_IRR_PERCENTILES = { low: 0.05, high: 0.6 };
+// Chart outcome band: P5–P65.
+export const HISTORICAL_IRR_PERCENTILES = { low: 0.05, high: 0.65 };
 
 // Money-weighted IRR of the plan run over each contiguous horizon-length
 // window of the selected years (one window per starting year). When the
@@ -43,7 +43,7 @@ export function historicalPlanIrrs(params) {
   return { irrs, wrapped };
 }
 
-// P5–P60 band of the plan's backtested IRRs over the selected year records.
+// P5–P65 band of the plan's backtested IRRs over the selected year records.
 // Returns { low, high, windows, wrapped } or null when no window has a
 // defined IRR.
 export function historicalIrrBand(params, percentiles = HISTORICAL_IRR_PERCENTILES) {

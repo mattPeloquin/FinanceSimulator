@@ -56,7 +56,7 @@
                         <input type="number" id="smoothWindowPct" min="0" max="5" step="0.5" class="block w-full rounded-md input-theme sm:text-sm p-2">
                         <span class="input-adorn-suffix">%</span>
                     </div>
-                    <p class="text-xs text-theme-faint mt-1">Averages a band of runs around each percentile (P5&ndash;P60) to reduce noise. 0 = a single run.</p>
+                    <p class="text-xs text-theme-faint mt-1">Averages a band of runs around each percentile (P5&ndash;P65) to reduce noise. 0 = a single run.</p>
                 </div>
                 <div>
                     <label for="withdrawalMetric" class="block text-sm font-medium text-theme-body">Withdrawal Success Metric</label>
@@ -65,13 +65,13 @@
                         <option value="total">Total withdrawal (lifetime)</option>
                         <option value="medianYearly">Median withdrawal per year</option>
                     </select>
-                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P60), on-plan success, 3D coloring, and Goal Seek. Auto picks median/yr when a horizon range is set. The other metric is still shown alongside results.</p>
+                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Goal Seek. Auto picks median/yr when a horizon range is set. The other metric is still shown alongside results.</p>
                 </div>
                 <div>
                     <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
                     <div class="flex items-center gap-3 mt-1">
-                        <input type="range" id="planRiskTolerancePctSlider" min="0" max="65" step="1" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
-                        <input type="number" id="planRiskTolerancePct" min="0" max="65" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                        <input type="range" id="planRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
+                        <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                     </div>
                     <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate and 3D chart coloring. Goal Seek uses its own Risk Tolerance when enabled.</p>
                 </div>
@@ -81,7 +81,7 @@
             <div id="resampling-profiles" class="p-3 border rounded-lg bg-theme-muted space-y-2" title="Resampling and Smoothed Historical: draws runs of consecutive years averaging this length to preserve historical cycles. Log-Normal: adds year-to-year smoothing (serial correlation).">
                 <div class="flex items-center gap-3">
                     <label for="blockSize" class="text-sm font-medium text-theme-body whitespace-nowrap">Persistence (avg yrs)</label>
-                    <input type="range" id="blockSizeSlider" min="1" max="6" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                    <input type="range" id="blockSizeSlider" min="1" max="6" class="range-theme flex-1">
                     <input type="number" id="blockSize" min="1" max="6" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
                 <p class="text-xs text-theme-faint">Adds year-to-year persistence by drawing runs of consecutive years averaging this length (Historical Resampling and Smoothed Historical); set to 1 for fully independent years. Log-Normal uses it for year-to-year smoothing instead.</p>
@@ -90,7 +90,7 @@
             <div id="smoothing-control" class="p-3 border rounded-lg bg-theme-muted space-y-2" title="Only used by Smoothed Historical: softens results so they aren't limited to only the exact years in your selected range.">
                 <div class="flex items-center gap-3">
                     <label for="scaledHistoricalSmoothing" class="text-sm font-medium text-theme-body whitespace-nowrap">Smoothing</label>
-                    <input type="range" id="scaledHistoricalSmoothingSlider" min="0" max="100" class="flex-1 h-2 bg-theme-border rounded-lg appearance-none cursor-pointer accent-theme-accent">
+                    <input type="range" id="scaledHistoricalSmoothingSlider" min="0" max="100" class="range-theme flex-1">
                     <input type="number" id="scaledHistoricalSmoothing" min="0" max="100" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
                 <p class="text-xs text-theme-faint">Softens Smoothed Historical's output so it isn't limited to only the exact years in your selected range. Not used by the other two methods.</p>

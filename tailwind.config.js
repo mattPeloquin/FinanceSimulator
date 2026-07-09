@@ -51,6 +51,7 @@ export default {
         'theme-p40': rgb('--theme-p40'),
         'theme-p50': rgb('--theme-p50'),
         'theme-p60': rgb('--theme-p60'),
+        'theme-p65': rgb('--theme-p65'),
       },
       borderColor: {
         'theme-border': rgb('--theme-border-default'),

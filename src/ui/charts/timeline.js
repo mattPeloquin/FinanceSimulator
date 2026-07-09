@@ -8,7 +8,7 @@ function getColors() {
   return percentileColors(isDarkMode());
 }
 const SERIES = [
-  { key: 'p60', label: '60th % (Above Avg)' },
+  { key: 'p65', label: '65th % (Above Avg)' },
   { key: 'p50', label: '50th % (Median)' },
   { key: 'p40', label: '40th % (Avg)' },
   { key: 'p30', label: '30th % (Below Avg)' },

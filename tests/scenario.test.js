@@ -255,7 +255,7 @@ describe('buildSimParams', () => {
     s.planRiskTolerancePct = 20;
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.2, 6);
     s.planRiskTolerancePct = 150;
-    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.65, 6);
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.35, 6);
   });
 });
 
@@ -292,10 +292,10 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(0);
   });
 
-  it('clamps risk tolerance to 0-1', () => {
+  it('clamps risk tolerance to 0-0.35', () => {
     const s = defaultScenario();
     s.goalSeekRiskTolerancePct = 150;
-    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(1);
+    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(0.35);
     s.goalSeekRiskTolerancePct = -10;
     expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(0);
   });
@@ -476,11 +476,11 @@ describe('validateScenario', () => {
 
   it('flags an out-of-range plan risk tolerance', () => {
     const s = defaultScenario();
-    s.planRiskTolerancePct = 66;
+    s.planRiskTolerancePct = 36;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(true);
     s.planRiskTolerancePct = 0;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
-    s.planRiskTolerancePct = 65;
+    s.planRiskTolerancePct = 35;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
   });
 
@@ -528,14 +528,14 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('risk tolerance'))).toBe(true);
   });
 
-  it('flags a risk tolerance outside the 0-65 range when Goal Seek is on', () => {
+  it('flags a risk tolerance outside the 0-35 range when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
-    s.goalSeekRiskTolerancePct = 66;
+    s.goalSeekRiskTolerancePct = 36;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(true);
     s.goalSeekRiskTolerancePct = 0;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
-    s.goalSeekRiskTolerancePct = 65;
+    s.goalSeekRiskTolerancePct = 35;
     expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
   });
 
