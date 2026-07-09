@@ -1,78 +1,58 @@
-// Historical IRR band: what annualized real return a fixed allocation actually
-// earned over rolling horizon-length windows of the user's SELECTED historical
-// year range. For a buy-and-hold path the IRR equals the annualized return, so
-// the band is the "typical historical IRR" for an investing timeline of that
-// length. DOM-free and unit-testable.
+// Historical plan-backtest IRR band: run the user's actual withdrawal plan
+// over every contiguous horizon-length window of the SELECTED historical years
+// and take the money-weighted IRR of each run. Because the plan's cash flows
+// weight early years the most, this captures sequence risk the way the
+// simulation's IRR scatter does — unlike a buy-and-hold annualized return —
+// so the band and the scatter's y-axis measure the same quantity.
 //
 // The band is reduced to its 5th–60th percentiles to match the P5–P60 outcome
 // band used everywhere else in the app (percentile cards, 3D surface columns).
+// DOM-free and unit-testable.
 
 import { percentileValue } from './statistics.js';
+import { simulatePath } from './simulation.js';
+import { createRng } from './rng.js';
 
 // App-wide outcome band: P5–P60.
 export const HISTORICAL_IRR_PERCENTILES = { low: 0.05, high: 0.6 };
 
-// Allocation-key mapping between the app's camelCase allocation object and the
-// snake_case historical dataset columns.
-const ALLOCATION_TO_DATA_KEY = {
-  usLgGrowth: 'us_lg_growth',
-  usLgValue: 'us_lg_value',
-  usSmMid: 'us_sm_mid',
-  exUs: 'ex_us',
-  bond: 'bond',
-  cash: 'cash',
-};
+// Money-weighted IRR of the plan run over each contiguous horizon-length
+// window of the selected years (one window per starting year). When the
+// selection is shorter than the horizon, windows wrap around the selection
+// (flagged via `wrapped`) — matching how Historical Resampling reuses a short
+// selection. Returns { irrs, wrapped } or null when the inputs can't support
+// a backtest (no selection or no horizon). Windows whose IRR is undefined
+// (irrFromPath returns NaN) are dropped.
+export function historicalPlanIrrs(params) {
+  const records = params?.samples?.years;
+  const horizonYears = params?.numYears;
+  if (!records || records.length === 0 || !horizonYears || horizonYears < 1) return null;
 
-// One year's inflation-adjusted return (fraction) of a fixed allocation, from a
-// historical year record (values in percent). Missing columns/weights count as 0.
-export function portfolioRealReturn(record, allocation) {
-  let nominal = 0;
-  for (const [allocKey, dataKey] of Object.entries(ALLOCATION_TO_DATA_KEY)) {
-    nominal += ((record[dataKey] ?? 0) / 100) * (allocation[allocKey] ?? 0);
-  }
-  return (1 + nominal) / (1 + (record.inflation ?? 0) / 100) - 1;
-}
-
-// Annualized real return of the allocation over every rolling
-// `horizonYears`-long window of `records` (chronological year records, e.g.
-// from getSampleYears). With `wrap`, windows cycle around the selection (one
-// per starting year) — matching how Historical Resampling reuses a selection
-// shorter than the horizon. Without it, only true in-selection windows count,
-// so the result is empty when the horizon exceeds the selection.
-export function rollingAnnualizedRealReturns(records, allocation, horizonYears, { wrap = false } = {}) {
-  const n = records.length;
-  const starts = wrap ? n : n - horizonYears + 1;
-  const annualized = [];
-  for (let start = 0; start < starts; start++) {
-    let growth = 1;
-    for (let j = 0; j < horizonYears; j++) {
-      growth *= 1 + portfolioRealReturn(records[(start + j) % n], allocation);
-    }
-    annualized.push(growth ** (1 / horizonYears) - 1);
-  }
-  return annualized;
-}
-
-// P5–P60 band of rolling-window annualized real returns for the selected year
-// records. When the selection is shorter than the horizon, windows wrap around
-// the selection (flagged via `wrapped`) so short selections still get a band.
-// Returns { low, high, windows, wrapped } or null when the inputs can't
-// support one (no selection or no allocation).
-export function historicalIrrBand(
-  records,
-  allocation,
-  horizonYears,
-  percentiles = HISTORICAL_IRR_PERCENTILES,
-) {
-  if (!records || records.length === 0 || !allocation || !horizonYears || horizonYears < 1) {
-    return null;
-  }
   const wrapped = records.length < horizonYears;
-  const annualized = rollingAnnualizedRealReturns(records, allocation, horizonYears, { wrap: wrapped });
+  const starts = wrapped ? records.length : records.length - horizonYears + 1;
+
+  // Reuse the Monte Carlo engine's full withdrawal/guardrail/IRR logic in its
+  // deterministic 'historicalSequence' mode. That mode never draws from the
+  // rng (and horizonRange: null skips the horizon draw), so the seed is inert.
+  const base = { ...params, distMethod: 'historicalSequence', horizonRange: null };
+  const irrs = [];
+  for (let start = 0; start < starts; start++) {
+    const { irr } = simulatePath({ ...base, sequenceStart: start }, createRng(0));
+    if (!Number.isNaN(irr)) irrs.push(irr);
+  }
+  return { irrs, wrapped };
+}
+
+// P5–P60 band of the plan's backtested IRRs over the selected year records.
+// Returns { low, high, windows, wrapped } or null when no window has a
+// defined IRR.
+export function historicalIrrBand(params, percentiles = HISTORICAL_IRR_PERCENTILES) {
+  const backtest = historicalPlanIrrs(params);
+  if (!backtest || backtest.irrs.length === 0) return null;
   return {
-    low: percentileValue(annualized, percentiles.low),
-    high: percentileValue(annualized, percentiles.high),
-    windows: annualized.length,
-    wrapped,
+    low: percentileValue(backtest.irrs, percentiles.low),
+    high: percentileValue(backtest.irrs, percentiles.high),
+    windows: backtest.irrs.length,
+    wrapped: backtest.wrapped,
   };
 }

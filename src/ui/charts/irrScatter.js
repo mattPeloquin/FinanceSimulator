@@ -39,7 +39,7 @@ const state = {
   scatter: null,
   params: null,
   seed: null,
-  band: null, // P5–P60 rolling-window IRR band for the run's allocation/horizon/year selection
+  band: null, // P5–P60 of the plan's IRR backtested over contiguous historical windows
   selected: null, // sim index of the clicked path
   pathChart: null,
   balanceBars: null, // linked balance bar chart under the drill-down's line chart
@@ -162,9 +162,9 @@ function drawAxes(ctx, theme, extents, geom, scales) {
   ctx.restore();
 }
 
-// Soft horizontal band: the P5–P60 range of annualized real returns over
-// rolling windows of the user's selected historical years, matching this run's
-// horizon and allocation.
+// Soft horizontal band: the P5–P60 range of the plan's money-weighted IRR when
+// run over every contiguous horizon-length window of the user's selected
+// historical years — the same quantity as the y-axis, sequence risk included.
 function drawHistoricalBand(ctx, theme, geom, scales) {
   if (!state.band) return;
   const plotTop = geom.plotY;
@@ -307,7 +307,7 @@ function renderLegend() {
       ? '; the selection is shorter than the horizon, so windows wrap around it'
       : '';
     items.push(
-      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="P5–P60 of annualized real returns for your allocation across all ${state.band.windows} rolling ${state.params?.numYears}-year windows in ${rangeNote}${wrapNote}">` +
+      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="P5–P60 of your plan's money-weighted IRR when run over all ${state.band.windows} contiguous ${state.params?.numYears}-year sequences from ${rangeNote}${wrapNote}">` +
         `<span class="inline-block w-4 h-3 rounded-sm shrink-0" style="background:${theme.planFill};border:1px solid ${theme.planLine}"></span>Historical IRR range (${state.params?.numYears}-yr windows)</span>`,
     );
   }
@@ -520,7 +520,7 @@ export function drawIrrScatter(scatter, { params, seed } = {}) {
   state.scatter = scatter;
   state.params = params ?? null;
   state.seed = seed ?? null;
-  state.band = historicalIrrBand(params?.samples?.years, params?.allocation, params?.numYears);
+  state.band = historicalIrrBand(params);
   state.selected = null;
   if (state.pathChart) {
     state.pathChart.destroy();

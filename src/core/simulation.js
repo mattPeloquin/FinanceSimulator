@@ -98,6 +98,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     scaledHistoricalShocks,
     scaledHistoricalSmoothing,
     earlyYearsWindow,
+    sequenceStart,
   } = params;
 
   const maxYears = maxYearsParam ?? endpointYears ?? params.numYears;
@@ -228,8 +229,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       const infJitter = smoothing > 0 ? rng.normal() * smoothing * inf.stdDev : 0;
       inflation = inf.mean + z[6] * inf.stdDev + infJitter;
     } else {
-      // Historical resampling via a stationary (circular) block bootstrap.
-      currentYearIndex = nextBootstrapIndex(rng, currentYearIndex, sampleLen, blockSize);
+      // Historical years: a stationary (circular) block bootstrap for Monte
+      // Carlo resampling, or — for 'historicalSequence' (the plan-backtest
+      // band) — a deterministic contiguous walk from `sequenceStart`, wrapping
+      // when the selection is shorter than the horizon.
+      currentYearIndex =
+        distMethod === 'historicalSequence'
+          ? ((sequenceStart ?? 0) + j) % sampleLen
+          : nextBootstrapIndex(rng, currentYearIndex, sampleLen, blockSize);
 
       const yearData = sampleYears[currentYearIndex];
       const usLgGrowthReturn = yearData.us_lg_growth / 100;

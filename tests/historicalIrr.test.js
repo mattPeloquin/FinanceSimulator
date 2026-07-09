@@ -1,124 +1,133 @@
 import { describe, it, expect } from 'vitest';
 import {
   HISTORICAL_IRR_PERCENTILES,
-  portfolioRealReturn,
-  rollingAnnualizedRealReturns,
+  historicalPlanIrrs,
   historicalIrrBand,
 } from '../src/core/historicalIrr.js';
 import { getSampleYears } from '../src/core/history.js';
 
-// Year record shorthand: growth-only portfolio unless more columns are given.
-const yr = (us_lg_growth, inflation = 0, rest = {}) => ({ us_lg_growth, inflation, ...rest });
-
-describe('portfolioRealReturn', () => {
-  it('weights each asset class and deflates by inflation', () => {
-    const record = { us_lg_growth: 10, bond: 5, inflation: 2 };
-    const allocation = { usLgGrowth: 0.6, bond: 0.4 };
-    // Nominal: 0.6*10% + 0.4*5% = 8%; real: 1.08/1.02 - 1.
-    expect(portfolioRealReturn(record, allocation)).toBeCloseTo(1.08 / 1.02 - 1, 12);
-  });
-
-  it('treats missing data columns and allocation weights as zero', () => {
-    expect(portfolioRealReturn({ inflation: 0 }, { usLgGrowth: 1 })).toBe(0);
-    expect(portfolioRealReturn(yr(10), {})).toBe(0);
-    // No inflation column: nominal return is the real return.
-    expect(portfolioRealReturn({ us_lg_growth: 10 }, { usLgGrowth: 1 })).toBeCloseTo(0.1, 12);
-  });
+// Full year record (all asset columns) with only us_lg_growth and inflation set.
+const yr = (us_lg_growth, inflation = 0) => ({
+  us_lg_growth,
+  us_lg_value: 0,
+  us_sm_mid: 0,
+  ex_us: 0,
+  bond: 0,
+  cash: 0,
+  inflation,
 });
 
-describe('rollingAnnualizedRealReturns', () => {
-  it('computes one annualized return per rolling window', () => {
-    const records = [yr(10), yr(10), yr(21)];
-    const returns = rollingAnnualizedRealReturns(records, { usLgGrowth: 1 }, 2);
+// Minimal engine params: all-growth allocation, plain base withdrawal, no
+// guardrails/floors/gifts, so window IRRs are hand-checkable.
+function makeParams({ years, numYears, base = 0, start = 1000 }) {
+  return {
+    numYears,
+    allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+    portfolio: {
+      strategy: 'base',
+      start,
+      base,
+      floorBalance: 0,
+      floorPenalty: 0,
+      ceilingBalance: Infinity,
+      ceilingBonus: 0,
+    },
+    dynConfig: { enabled: false },
+    samples: { years },
+  };
+}
+
+describe('historicalPlanIrrs', () => {
+  it('with no withdrawals, each window IRR equals its annualized real return', () => {
+    const params = makeParams({ years: [yr(10), yr(10), yr(21)], numYears: 2 });
+    const { irrs, wrapped } = historicalPlanIrrs(params);
+    expect(wrapped).toBe(false);
+    expect(irrs).toHaveLength(2);
     // Windows: 1.1*1.1 -> 10% and 1.1*1.21 -> ~15.36% annualized.
-    expect(returns).toHaveLength(2);
-    expect(returns[0]).toBeCloseTo(0.1, 10);
-    expect(returns[1]).toBeCloseTo(Math.sqrt(1.1 * 1.21) - 1, 10);
+    expect(irrs[0]).toBeCloseTo(0.1, 6);
+    expect(irrs[1]).toBeCloseTo(Math.sqrt(1.1 * 1.21) - 1, 6);
   });
 
-  it('deflates each year by its own inflation', () => {
-    const records = [yr(10, 10), yr(10, 10)];
-    const returns = rollingAnnualizedRealReturns(records, { usLgGrowth: 1 }, 2);
-    expect(returns).toHaveLength(1);
-    expect(returns[0]).toBeCloseTo(0, 10);
+  it('deflates by inflation: IRR is real, not nominal', () => {
+    const params = makeParams({ years: [yr(10, 10), yr(10, 10)], numYears: 2 });
+    const { irrs } = historicalPlanIrrs(params);
+    expect(irrs).toHaveLength(1);
+    expect(irrs[0]).toBeCloseTo(0, 6);
   });
 
-  it('is empty when the horizon exceeds the selection and wrap is off', () => {
-    expect(rollingAnnualizedRealReturns([yr(10)], { usLgGrowth: 1 }, 2)).toEqual([]);
+  it('at a constant return, withdrawals do not move the IRR off that rate', () => {
+    const params = makeParams({ years: [yr(5), yr(5), yr(5), yr(5)], numYears: 3, base: 40 });
+    const { irrs } = historicalPlanIrrs(params);
+    for (const irr of irrs) expect(irr).toBeCloseTo(0.05, 6);
   });
 
-  it('wraps around the selection when wrap is on, one window per starting year', () => {
-    const records = [yr(10), yr(20), yr(30)];
-    const returns = rollingAnnualizedRealReturns(records, { usLgGrowth: 1 }, 4, { wrap: true });
-    expect(returns).toHaveLength(3);
-    // Window starting at index 1 covers years 1,2,0,1: 1.2*1.3*1.1*1.2.
-    expect(returns[1]).toBeCloseTo((1.2 * 1.3 * 1.1 * 1.2) ** (1 / 4) - 1, 10);
+  it('is sequence-sensitive: with withdrawals, a crash-first era scores below a crash-last one', () => {
+    const crashFirst = makeParams({ years: [yr(-30), yr(25), yr(25)], numYears: 3, base: 50 });
+    const crashLast = makeParams({ years: [yr(25), yr(25), yr(-30)], numYears: 3, base: 50 });
+    const a = historicalPlanIrrs(crashFirst).irrs[0];
+    const b = historicalPlanIrrs(crashLast).irrs[0];
+    expect(a).toBeLessThan(b);
+
+    // Without cash flows the order of the same years is irrelevant.
+    const aHold = historicalPlanIrrs({ ...crashFirst, portfolio: { ...crashFirst.portfolio, base: 0 } });
+    const bHold = historicalPlanIrrs({ ...crashLast, portfolio: { ...crashLast.portfolio, base: 0 } });
+    expect(aHold.irrs[0]).toBeCloseTo(bHold.irrs[0], 8);
+  });
+
+  it('reflects depletion: a plan that runs out mid-window has a negative IRR', () => {
+    const params = makeParams({ years: [yr(-10), yr(-10), yr(-10)], numYears: 3, base: 400 });
+    const { irrs } = historicalPlanIrrs(params);
+    // Balances: 1000 -> 900-400=500 -> 450-400=50 -> 45-45=0 (depleted).
+    // Flows: -1000, then +400, +400, +45: less recovered than invested.
+    expect(irrs[0]).toBeLessThan(0);
+  });
+
+  it('wraps around a selection shorter than the horizon, one window per starting year', () => {
+    const params = makeParams({ years: [yr(5), yr(5)], numYears: 35, base: 10 });
+    const { irrs, wrapped } = historicalPlanIrrs(params);
+    expect(wrapped).toBe(true);
+    expect(irrs).toHaveLength(2);
+    for (const irr of irrs) expect(irr).toBeCloseTo(0.05, 6);
   });
 });
 
 describe('historicalIrrBand', () => {
-  const allocation = { usLgGrowth: 1 };
-
-  it('reduces the windows to their P5 and P60', () => {
-    // Ten 1-year windows with distinct returns 1%..10%: P5 -> index
-    // floor(10*0.05)=0 (1%), P60 -> index floor(10*0.6)=6 (7%).
-    const records = Array.from({ length: 10 }, (_, i) => yr(i + 1));
-    const band = historicalIrrBand(records, allocation, 1);
-    expect(band.windows).toBe(10);
-    expect(band.low).toBeCloseTo(0.01, 10);
-    expect(band.high).toBeCloseTo(0.07, 10);
-  });
-
   it('matches the app-wide P5–P60 outcome band by default', () => {
     expect(HISTORICAL_IRR_PERCENTILES).toEqual({ low: 0.05, high: 0.6 });
   });
 
-  it('is computed from the selected records only, not the full dataset', () => {
-    const calm = [yr(5), yr(5), yr(5)];
-    const volatile = [yr(-20), yr(5), yr(40)];
-    const calmBand = historicalIrrBand(calm, allocation, 2);
-    const volatileBand = historicalIrrBand(volatile, allocation, 2);
-    expect(calmBand.low).toBeCloseTo(0.05, 10);
-    expect(calmBand.high).toBeCloseTo(0.05, 10);
-    expect(volatileBand.low).toBeLessThan(calmBand.low);
-    expect(volatileBand.low).toBeCloseTo(Math.sqrt(0.8 * 1.05) - 1, 10);
-  });
-
-  it('spans one window per possible start year of a real year selection', () => {
-    const records = getSampleYears(1950, 2000);
-    const horizon = 30;
-    const band = historicalIrrBand(records, { usLgGrowth: 0.6, bond: 0.4 }, horizon);
-    expect(band.windows).toBe(2000 - 1950 + 1 - horizon + 1);
-    expect(band.low).toBeLessThanOrEqual(band.high);
-    expect(band.low).toBeGreaterThan(-0.2);
-    expect(band.high).toBeLessThan(0.25);
-  });
-
-  it('wraps around a selection shorter than the horizon instead of vanishing', () => {
-    // 2 selected years, 35-year horizon: still 2 windows, flagged as wrapped.
-    const records = [yr(5), yr(5)];
-    const band = historicalIrrBand(records, allocation, 35);
-    expect(band.wrapped).toBe(true);
-    expect(band.windows).toBe(2);
-    expect(band.low).toBeCloseTo(0.05, 10);
-    expect(band.high).toBeCloseTo(0.05, 10);
-
-    const unwrapped = historicalIrrBand(getSampleYears(1950, 2000), allocation, 30);
-    expect(unwrapped.wrapped).toBe(false);
-  });
-
-  it('returns null when the band cannot be computed', () => {
-    const records = [yr(10), yr(10)];
-    expect(historicalIrrBand(records, null, 1)).toBeNull();
-    expect(historicalIrrBand(records, allocation, 0)).toBeNull();
-    expect(historicalIrrBand(null, allocation, 1)).toBeNull();
-    expect(historicalIrrBand([], allocation, 1)).toBeNull();
+  it('reduces the window IRRs to their P5 and P60', () => {
+    // Ten 1-year windows with distinct returns 1%..10%: P5 -> index
+    // floor(10*0.05)=0 (1%), P60 -> index floor(10*0.6)=6 (7%).
+    const years = Array.from({ length: 10 }, (_, i) => yr(i + 1));
+    const band = historicalIrrBand(makeParams({ years, numYears: 1 }));
+    expect(band.windows).toBe(10);
+    expect(band.wrapped).toBe(false);
+    expect(band.low).toBeCloseTo(0.01, 6);
+    expect(band.high).toBeCloseTo(0.07, 6);
   });
 
   it('supports custom percentiles', () => {
-    const records = Array.from({ length: 10 }, (_, i) => yr(i + 1));
-    const band = historicalIrrBand(records, allocation, 1, { low: 0.1, high: 0.9 });
-    expect(band.low).toBeCloseTo(0.02, 10);
-    expect(band.high).toBeCloseTo(0.1, 10);
+    const years = Array.from({ length: 10 }, (_, i) => yr(i + 1));
+    const band = historicalIrrBand(makeParams({ years, numYears: 1 }), { low: 0.1, high: 0.9 });
+    expect(band.low).toBeCloseTo(0.02, 6);
+    expect(band.high).toBeCloseTo(0.1, 6);
+  });
+
+  it('widens when the plan withdraws (sequence risk shows up in the band)', () => {
+    const years = getSampleYears(1950, 2000);
+    const numYears = 30;
+    const hold = historicalIrrBand(makeParams({ years, numYears, start: 1000, base: 0 }));
+    const spend = historicalIrrBand(makeParams({ years, numYears, start: 1000, base: 40 }));
+    expect(hold.windows).toBe(2000 - 1950 + 1 - numYears + 1);
+    expect(spend.windows).toBe(hold.windows);
+    expect(spend.high - spend.low).toBeGreaterThan(hold.high - hold.low);
+  });
+
+  it('returns null when the backtest cannot run', () => {
+    expect(historicalIrrBand(makeParams({ years: [], numYears: 3 }))).toBeNull();
+    expect(historicalIrrBand(makeParams({ years: [yr(5)], numYears: 0 }))).toBeNull();
+    expect(historicalIrrBand(null)).toBeNull();
+    expect(historicalIrrBand({ numYears: 3 })).toBeNull();
   });
 });
