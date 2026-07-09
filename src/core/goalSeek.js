@@ -18,14 +18,14 @@ const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
 const DEFAULT_FLOOR_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
 // Includes sub-1x multiples so the ceiling boost can engage before the
 // portfolio has grown past its starting balance, not only after it balloons.
-const DEFAULT_CEILING_MULTIPLES = [0, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
+const DEFAULT_CEILING_MULTIPLES = [0, 0.75, 1.0, 1.25, 1.5, 2.0];
 // Used by the exported buildFractionGrid()'s own default (unit-tested directly).
-const DEFAULT_PENALTY_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
+const DEFAULT_PENALTY_BONUS_GRID = { minPct: 5, maxPct: 65, stepPct: 10 };
 // Coarser than DEFAULT_PENALTY_BONUS_GRID: ceiling pairs tune balance threshold
 // AND boost rate together (see buildPairGrid). Reaches to +300% because the
 // ramp only adds the full bonus per whole multiple ABOVE the ceiling — at 1.5x
 // the ceiling a 300% bonus is still only a 2.5x spending scale.
-const DEFAULT_CEILING_BONUS_GRID = { minPct: 0, maxPct: 300, stepPct: 50 };
+const DEFAULT_CEILING_BONUS_GRID = { minPct: 25, maxPct: 150, stepPct: 25 };
 const FLOOR_PENALTY_STEP_PCT = 10;
 const BASE_BISECTION_MAX_ITERATIONS = 30;
 
@@ -211,6 +211,32 @@ export function buildFractionGrid({ minPct, maxPct, stepPct } = DEFAULT_PENALTY_
   return candidates;
 }
 
+// Goal Seek balance-adjustment search excludes 0% cut/boost. When risk
+// tolerance caps max cut below the grid step, the cap itself becomes the sole
+// candidate; when tolerance is 0%, the smallest step is still used.
+function buildBalanceAdjustmentFractionGrid({ minPct = 0, maxPct = 0, stepPct = FLOOR_PENALTY_STEP_PCT } = {}) {
+  if (maxPct <= 0) {
+    return [stepPct / 100];
+  }
+  const effectiveMin = maxPct < stepPct ? maxPct : Math.max(stepPct, minPct);
+  return buildFractionGrid({ minPct: effectiveMin, maxPct, stepPct });
+}
+
+function minBalanceAdjustmentFraction(gridConfig) {
+  return buildBalanceAdjustmentFractionGrid(gridConfig)[0];
+}
+
+function clampBalanceAdjustmentRates(config, portfolio) {
+  portfolio.floorPenalty = Math.max(
+    portfolio.floorPenalty,
+    minBalanceAdjustmentFraction(buildFloorPenaltyGridConfig(config)),
+  );
+  portfolio.ceilingBonus = Math.max(
+    portfolio.ceilingBonus,
+    minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID),
+  );
+}
+
 // Bonus-amount candidates as round dollars, expressed as a fraction of the
 // currently-solved base withdrawal so the grid rescales with the plan.
 export function buildBonusGrid(baseWithdrawal, fractions = DEFAULT_GOGO_BONUS_FRACTIONS) {
@@ -275,14 +301,34 @@ function buildFloorPenaltyGridConfig(config) {
   return config.floorPenaltyGrid || { minPct: 0, maxPct: maxPenalty, stepPct: FLOOR_PENALTY_STEP_PCT };
 }
 
+// Balance-override search pins the widest guardrail band (lowest floor, highest
+// ceiling) and tunes only max cut / boost rate — off (0× / Infinity) is excluded.
+function balanceOverrideFloorMultiples(config) {
+  return (config.floorMultiples || DEFAULT_FLOOR_MULTIPLES).filter((m) => m > 0);
+}
+
+function balanceOverrideCeilingMultiples(config) {
+  return (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).filter((m) => m > 0);
+}
+
+function pinnedBalanceOverrideFloor(start, config) {
+  const multiples = balanceOverrideFloorMultiples(config);
+  return roundToThousand(start * Math.min(...multiples));
+}
+
+function pinnedBalanceOverrideCeiling(start, config) {
+  const multiples = balanceOverrideCeilingMultiples(config);
+  return roundToThousand(start * Math.max(...multiples));
+}
+
 function estimateEvalBudget(params, config) {
   const floorMultiplesLen = (config.floorMultiples || DEFAULT_FLOOR_MULTIPLES).length;
   const ceilingMultiplesLen = (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).length;
   const marketDownAdjLen = gridLength(config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID);
   const marketMedAdjLen = gridLength(config.marketMedAdjGrid || DEFAULT_MARKET_MED_ADJ_GRID);
   const marketUpAdjLen = gridLength(config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID);
-  const floorPenaltyGridLen = gridLength(buildFloorPenaltyGridConfig(config));
-  const ceilingBonusGridLen = gridLength(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
+  const floorPenaltyGridLen = buildBalanceAdjustmentFractionGrid(buildFloorPenaltyGridConfig(config)).length;
+  const ceilingBonusGridLen = buildBalanceAdjustmentFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID).length;
   const bonusGridLen = (config.goGoBonusFractions || DEFAULT_GOGO_BONUS_FRACTIONS).length;
   const glideFractionsLen = (config.glideFractions || DEFAULT_GLIDE_FRACTIONS).length;
   const candidateCost = perCandidateCost(config);
@@ -293,7 +339,7 @@ function estimateEvalBudget(params, config) {
       ? (marketDownAdjLen + marketMedAdjLen + marketUpAdjLen + floorMultiplesLen + 2 * ceilingMultiplesLen) * candidateCost
       : 0) +
     (config.includeBalanceOverrides
-      ? (floorMultiplesLen * floorPenaltyGridLen + ceilingMultiplesLen * ceilingBonusGridLen) * candidateCost
+      ? (floorPenaltyGridLen + ceilingBonusGridLen) * candidateCost
       : 0) +
     (config.includeGlidePath ? glideFractionsLen * candidateCost : 0);
 
@@ -449,10 +495,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     working.dynConfig.high.bal = null;
   }
   if (config.includeBalanceOverrides) {
-    working.portfolio.floorBalance = 0;
-    working.portfolio.ceilingBalance = Infinity;
-    working.portfolio.floorPenalty = 0;
-    working.portfolio.ceilingBonus = 0;
+    working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
+    working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
+    working.portfolio.floorPenalty = minBalanceAdjustmentFraction(buildFloorPenaltyGridConfig(config));
+    working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
   }
   if (config.includeGlidePath) {
     // The lever's whole purpose is landing on the Goal Seek target, so the
@@ -728,51 +774,30 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
 
     if (config.includeBalanceOverrides) {
-      const floorGrid = buildBalanceGrid(
-        params.portfolio.start,
-        config.floorMultiples || DEFAULT_FLOOR_MULTIPLES,
-        0,
-      );
-      const penaltyGrid = buildFractionGrid(buildFloorPenaltyGridConfig(config));
-      const floorPairs = buildPairGrid(floorGrid, penaltyGrid, (floor) => floor === 0);
-      const validFloorPairs = floorPairs.filter(
-        ([floor]) =>
-          floor === 0
-          || !Number.isFinite(working.portfolio.ceilingBalance)
-          || floor < working.portfolio.ceilingBalance,
-      );
-      await pickBestPairWithResolve(
-        validFloorPairs,
-        (floor, penalty) => {
-          working.portfolio.floorBalance = floor;
-          working.portfolio.floorPenalty = penalty;
+      working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
+      working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
+
+      const penaltyGrid = buildBalanceAdjustmentFractionGrid(buildFloorPenaltyGridConfig(config));
+      await pickBestCandidateWithResolve(
+        penaltyGrid,
+        (value) => {
+          working.portfolio.floorPenalty = value;
         },
-        'Tuning floor balance & max cut',
-        [working.portfolio.floorBalance, working.portfolio.floorPenalty],
+        'Tuning floor max cut',
+        working.portfolio.floorPenalty,
       );
 
-      const ceilingGrid = buildBalanceGrid(
-        params.portfolio.start,
-        config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES,
-        Infinity,
-      );
-      const bonusRateGrid = buildFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
-      const ceilingPairs = buildPairGrid(ceilingGrid, bonusRateGrid, (ceiling) => !Number.isFinite(ceiling));
-      const validCeilingPairs = ceilingPairs.filter(
-        ([ceiling]) =>
-          !Number.isFinite(ceiling)
-          || working.portfolio.floorBalance === 0
-          || ceiling > working.portfolio.floorBalance,
-      );
-      await pickBestPairWithResolve(
-        validCeilingPairs,
-        (ceiling, bonus) => {
-          working.portfolio.ceilingBalance = ceiling;
-          working.portfolio.ceilingBonus = bonus;
+      const bonusRateGrid = buildBalanceAdjustmentFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
+      await pickBestCandidateWithResolve(
+        bonusRateGrid,
+        (value) => {
+          working.portfolio.ceilingBonus = value;
         },
-        'Tuning ceiling balance & boost rate',
-        [working.portfolio.ceilingBalance, working.portfolio.ceilingBonus],
+        'Tuning ceiling boost rate',
+        working.portfolio.ceilingBonus,
       );
+
+      clampBalanceAdjustmentRates(config, working.portfolio);
     }
 
     // Tuned last: the glide fraction recycles whatever surplus the levers
@@ -850,6 +875,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   }
 
   const finalBase = solvedBase;
+
+  if (config.includeBalanceOverrides) {
+    clampBalanceAdjustmentRates(config, working.portfolio);
+  }
 
   const finalMetrics = await evaluate('Finalizing');
   notify('Confirming final plan', 1);

@@ -415,9 +415,10 @@ describe('runGoalSeek', () => {
       expect(value === null || value % 1000 === 0).toBe(true);
     }
     expect(summary.balanceAdjustment.floorBalance % 1000 === 0).toBe(true);
-    expect(
-      summary.balanceAdjustment.ceilingBalance === null || summary.balanceAdjustment.ceilingBalance % 1000 === 0,
-    ).toBe(true);
+    expect(summary.balanceAdjustment.floorBalance).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.ceilingBalance % 1000 === 0).toBe(true);
+    expect(Number.isFinite(summary.balanceAdjustment.ceilingBalance)).toBe(true);
+    expect(summary.balanceAdjustment.ceilingBalance).toBeGreaterThan(0);
   });
 
   it('optionally tunes early-years bonus alongside the base withdrawal', async () => {
@@ -471,21 +472,46 @@ describe('runGoalSeek', () => {
     });
     expect(summary.feasible).toBe(true);
     const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
-    expect(floorBalance).toBeGreaterThanOrEqual(0);
-    expect(ceilingBalance === null || ceilingBalance > 0).toBe(true);
-    expect(floorPenalty).toBeGreaterThanOrEqual(0);
+    expect(floorBalance).toBeGreaterThan(0);
+    expect(Number.isFinite(ceilingBalance)).toBe(true);
+    expect(ceilingBalance).toBe(6_000_000);
+    expect(floorBalance).toBe(200_000);
+    expect(floorPenalty).toBeGreaterThan(0);
     expect(floorPenalty).toBeLessThanOrEqual(1);
-    expect(ceilingBonus).toBeGreaterThanOrEqual(0);
+    expect(ceilingBonus).toBeGreaterThan(0);
     expect(ceilingBonus).toBeLessThanOrEqual(1);
   });
 
-  // Regression test for the "everything stuck at neutral" bug: floor/penalty
-  // and ceiling/bonus are each a no-op without their partner, so tuning them
-  // independently (the old approach) could never move either off zero. A
-  // scenario with meaningful volatility and a starting balance close to what
-  // the base withdrawal can sustain gives guardrails real value — the joint
-  // pair search (scored with the base re-solved) should find that value.
-  it('finds nonzero guardrail settings when they meaningfully help (regression for the stuck-at-neutral bug)', async () => {
+  it('pins floor to the lowest balance band and ceiling to the highest, then tunes cut/boost rates', async () => {
+    const params = makeParams({
+      portfolio: { ...makeParams().portfolio, start: 1_500_000 },
+    });
+    const { params: finalParams, summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 2,
+      floorMultiples: [0, 0.5, 1],
+      ceilingMultiples: [0, 0.5, 1, 2],
+      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.balanceAdjustment.floorBalance).toBe(750_000);
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(3_000_000);
+    expect(finalParams.portfolio.floorBalance).toBe(750_000);
+    expect(finalParams.portfolio.ceilingBalance).toBe(3_000_000);
+    expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
+  });
+
+  // Regression: balance thresholds stay pinned to the widest band and max
+  // cut / boost rate are scored with the base re-solved (not stuck at 0% because
+  // the partner threshold was searched independently).
+  it('pins guardrail thresholds and searches cut/boost rates with re-solve scoring', async () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -503,14 +529,37 @@ describe('runGoalSeek', () => {
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
       maxRounds: 3,
-      balanceMultiples: [0, 0.5, 1],
+      floorMultiples: [0, 0.5, 1],
+      ceilingMultiples: [0, 1, 2],
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
     });
 
     expect(summary.feasible).toBe(true);
-    const { floorBalance, floorPenalty } = summary.balanceAdjustment;
-    expect(floorBalance).toBeGreaterThan(0);
+    const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
+    expect(floorBalance).toBe(750_000);
+    expect(ceilingBalance).toBe(3_000_000);
     expect(floorPenalty).toBeGreaterThan(0);
+    expect(ceilingBonus).toBeGreaterThan(0);
+  });
+
+  it('never returns 0% max cut when risk tolerance is below the grid step', async () => {
+    const params = makeParams({
+      portfolio: { ...makeParams().portfolio, start: 1_500_000 },
+    });
+    const { summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.75,
+      shortfallTolerance: 0.05,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 600,
+      maxRounds: 1,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.balanceAdjustment.floorPenalty).toBe(0.05);
+    expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
   });
 
   // Regression test for the fixed-base scoring bug: since a spending cut only
