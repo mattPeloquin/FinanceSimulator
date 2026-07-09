@@ -9,15 +9,23 @@ import { buildBaseWithdrawalSchedule } from './withdrawal.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
 const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: 0, stepPct: 5 };
-const DEFAULT_MARKET_MED_ADJ_GRID = { minPct: -20, maxPct: 20, stepPct: 5 };
-const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 0, maxPct: 50, stepPct: 5 };
+// Upside grids reach further than the downside ones so the search can burn
+// surplus down toward the target aggressively: the med grid extends to +40%
+// of base and the up grid to +100% (coarser steps keep the candidate count —
+// and thus the search budget — close to the old 0..50% x 5% grid).
+const DEFAULT_MARKET_MED_ADJ_GRID = { minPct: -20, maxPct: 40, stepPct: 5 };
+const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
 const DEFAULT_FLOOR_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
-const DEFAULT_CEILING_MULTIPLES = [0, 1.25, 1.5, 2.0, 2.5, 3.0];
+// Includes sub-1x multiples so the ceiling boost can engage before the
+// portfolio has grown past its starting balance, not only after it balloons.
+const DEFAULT_CEILING_MULTIPLES = [0, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
 // Used by the exported buildFractionGrid()'s own default (unit-tested directly).
 const DEFAULT_PENALTY_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
 // Coarser than DEFAULT_PENALTY_BONUS_GRID: ceiling pairs tune balance threshold
-// AND boost rate together (see buildPairGrid).
-const DEFAULT_CEILING_BONUS_GRID = { minPct: 0, maxPct: 100, stepPct: 20 };
+// AND boost rate together (see buildPairGrid). Reaches to +300% because the
+// ramp only adds the full bonus per whole multiple ABOVE the ceiling — at 1.5x
+// the ceiling a 300% bonus is still only a 2.5x spending scale.
+const DEFAULT_CEILING_BONUS_GRID = { minPct: 0, maxPct: 300, stepPct: 50 };
 const FLOOR_PENALTY_STEP_PCT = 10;
 const BASE_BISECTION_MAX_ITERATIONS = 30;
 
@@ -25,6 +33,12 @@ const BASE_BISECTION_MAX_ITERATIONS = 30;
 // Using a finer, lower grid prevents the final bonus from heavily cannibalizing
 // the base and appearing as an unexpectedly high percentage in the final result.
 const DEFAULT_GOGO_BONUS_FRACTIONS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3];
+
+// Glide-path spend-down candidates: the share of each year's surplus above the
+// glide path recycled into extra spending. 0 = lever off. Finer at the low end
+// — moderate fractions usually win because a full recycle leaves runs sitting
+// knife-edge on the target, where the strict end >= target check fails them.
+const DEFAULT_GLIDE_FRACTIONS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1];
 
 // Each candidate scored via the re-solve scorer costs one inner bisection
 // (this many predicate evaluations at reduced fidelity) plus one confirming
@@ -238,7 +252,12 @@ function cloneParams(params) {
 }
 
 function hasIncludedLevers(config) {
-  return !!(config.includeSpendingOverTime || config.includeMarketAdjustments || config.includeBalanceOverrides);
+  return !!(
+    config.includeSpendingOverTime
+    || config.includeMarketAdjustments
+    || config.includeBalanceOverrides
+    || config.includeGlidePath
+  );
 }
 
 // Cost (in evaluations) of scoring one candidate via the re-solve scorer: an
@@ -265,6 +284,7 @@ function estimateEvalBudget(params, config) {
   const floorPenaltyGridLen = gridLength(buildFloorPenaltyGridConfig(config));
   const ceilingBonusGridLen = gridLength(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
   const bonusGridLen = (config.goGoBonusFractions || DEFAULT_GOGO_BONUS_FRACTIONS).length;
+  const glideFractionsLen = (config.glideFractions || DEFAULT_GLIDE_FRACTIONS).length;
   const candidateCost = perCandidateCost(config);
 
   const perRoundLeverCost =
@@ -274,7 +294,8 @@ function estimateEvalBudget(params, config) {
       : 0) +
     (config.includeBalanceOverrides
       ? (floorMultiplesLen * floorPenaltyGridLen + ceilingMultiplesLen * ceilingBonusGridLen) * candidateCost
-      : 0);
+      : 0) +
+    (config.includeGlidePath ? glideFractionsLen * candidateCost : 0);
 
   if (config.pinBaseWithdrawal) {
     if (!hasIncludedLevers(config)) return 1;
@@ -302,6 +323,9 @@ function estimateEvalBudget(params, config) {
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/Med/HighAdj AND dynLow/Med/HighBal
 //   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
+//   includeGlidePath           bool — covers glideFraction; the glide target is
+//                              pinned to targetEndingBalance and glideRate stays as typed
+//   glideFractions             optional array of surplus-recycle fractions (0..1)
 //   searchNumSimulations       optional override of the reduced sim count
 //   marketDownAdjGrid          optional { minPct, maxPct, stepPct } for dynLowAdj
 //   marketMedAdjGrid           optional { minPct, maxPct, stepPct } for dynMedAdj
@@ -429,6 +453,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     working.portfolio.ceilingBalance = Infinity;
     working.portfolio.floorPenalty = 0;
     working.portfolio.ceilingBonus = 0;
+  }
+  if (config.includeGlidePath) {
+    // The lever's whole purpose is landing on the Goal Seek target, so the
+    // glide target is pinned to it rather than searched; only the recycle
+    // fraction is tuned. The assumed glide rate stays as the user typed it.
+    working.portfolio.glideTarget = config.targetEndingBalance;
+    working.portfolio.glideFraction = 0;
   }
 
   if (pinBase && !hasIncludedLevers(config)) {
@@ -743,6 +774,20 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         [working.portfolio.ceilingBalance, working.portfolio.ceilingBonus],
       );
     }
+
+    // Tuned last: the glide fraction recycles whatever surplus the levers
+    // above leave behind, so it should react to their settled values.
+    if (config.includeGlidePath) {
+      const glideGrid = config.glideFractions || DEFAULT_GLIDE_FRACTIONS;
+      await pickBestCandidateWithResolve(
+        glideGrid,
+        (value) => {
+          working.portfolio.glideFraction = value;
+        },
+        'Tuning glide-path spend-down',
+        working.portfolio.glideFraction,
+      );
+    }
   }
 
   // Snapshot of every *included* lever's current value, used to detect when a
@@ -765,6 +810,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       snapshot.ceilingBalance = working.portfolio.ceilingBalance;
       snapshot.floorPenalty = working.portfolio.floorPenalty;
       snapshot.ceilingBonus = working.portfolio.ceilingBonus;
+    }
+    if (config.includeGlidePath) {
+      snapshot.glideFraction = working.portfolio.glideFraction;
     }
     return snapshot;
   }
@@ -838,6 +886,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
               ceilingBonus: working.portfolio.ceilingBonus,
             }
           : undefined,
+        glideSpendDown: config.includeGlidePath
+          ? {
+              target: working.portfolio.glideTarget,
+              fraction: working.portfolio.glideFraction,
+              rate: working.portfolio.glideRate ?? 0,
+            }
+          : undefined,
         shortfallTolerance,
         plannedScheduleTotal: plannedTotal,
         achievedSuccessRate: finalMetrics.successRateAchieved,
@@ -871,6 +926,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
           ceilingBalance: Number.isFinite(working.portfolio.ceilingBalance) ? working.portfolio.ceilingBalance : null,
           floorPenalty: working.portfolio.floorPenalty,
           ceilingBonus: working.portfolio.ceilingBonus,
+        }
+      : undefined,
+    glideSpendDown: config.includeGlidePath
+      ? {
+          target: working.portfolio.glideTarget,
+          fraction: working.portfolio.glideFraction,
+          rate: working.portfolio.glideRate ?? 0,
         }
       : undefined,
     shortfallTolerance,

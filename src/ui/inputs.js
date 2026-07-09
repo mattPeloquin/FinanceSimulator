@@ -7,6 +7,7 @@ import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, syncWithdrawalPreviewFromForm, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
+import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
@@ -25,6 +26,9 @@ export function setupAccordionResize() {
 const OPTIONAL_BALANCE_OVERRIDE_IDS = new Set(['dynLowBal', 'dynMedBal', 'dynHighBal']);
 
 function formatCurrencyInputValue(input) {
+  // Blank disables the glide lever while a typed 0 means "land on zero", so a
+  // blank glide target must survive the blur reformat instead of becoming "0".
+  if (input.id === 'glideTarget' && input.value.trim() === '') return;
   const val = parseCurrency(input.value);
   if (OPTIONAL_BALANCE_OVERRIDE_IDS.has(input.id) && val === 0) {
     input.value = '';
@@ -136,6 +140,8 @@ export function toggleWithdrawalStrategy(strategy) {
     destroyWithdrawalPreviewChart();
     syncBaseWithdrawalPreview();
   }
+  // The glide path funds whichever plan is active, so redraw it on switch.
+  syncGlidePreview();
 }
 
 // Maps each "include in search" checkbox id to the input field(s) it takes
@@ -148,6 +154,9 @@ const GOAL_SEEK_LEVER_FIELDS = {
   goalSeekIncludeBaseWithdrawal: ['baseWithdrawal'],
   goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynMedAdj', 'dynHighAdj', 'dynLowBal', 'dynMedBal', 'dynHighBal'],
   goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
+  // The search pins the glide target to Goal Seek's Target Ending Balance and
+  // tunes the spend rate; the assumed return stays user-editable.
+  goalSeekIncludeGlidePath: ['glideTarget', 'glideFraction'],
 };
 
 // Gray out (or restore) the first spending-over-time tier's extra field when
@@ -197,6 +206,11 @@ function syncGoalSeekSectionExpansion() {
     const balanceDetails = document.getElementById('details-balance-adjustment');
     if (balanceDetails) balanceDetails.open = true;
   }
+
+  if (document.getElementById('goalSeekIncludeGlidePath')?.checked) {
+    const glideDetails = document.getElementById('details-glide-path');
+    if (glideDetails) glideDetails.open = true;
+  }
 }
 
 // Show/hide the Goal Seek panel and its per-field "include in search"
@@ -239,6 +253,7 @@ export function toggleDynamicAdjustments(enabled) {
 export function refreshDynamicAdjustmentPreviews() {
   syncGuardrailPreview();
   syncWithdrawalAdjPreview();
+  syncGlidePreview();
 }
 
 function formatWithdrawalFloorCurrencyInput(input) {
@@ -585,6 +600,16 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   }
   syncWithdrawalAdjPreview();
 
+  // The glide-path sparkline tracks its own fields plus everything that shapes
+  // the plan schedule it must keep funding (base, horizon, specific list).
+  // Tier edits (spending over time, minimum withdrawals) are wired below via
+  // their list containers.
+  for (const id of ['glideTarget', 'glideRate', 'glideFraction', 'baseWithdrawal', 'numYears', 'specificWithdrawals']) {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener('input', syncGlidePreview);
+  }
+  syncGlidePreview();
+
   for (const id of ['baseWithdrawal', 'numYears']) {
     const input = document.getElementById(id);
     if (input) input.addEventListener('input', syncBaseWithdrawalPreview);
@@ -639,30 +664,39 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   if (spendingOverTimeTiersList) {
     spendingOverTimeTiersList.addEventListener('input', syncBaseWithdrawalPreview);
     spendingOverTimeTiersList.addEventListener('click', syncBaseWithdrawalPreview);
+    spendingOverTimeTiersList.addEventListener('input', syncGlidePreview);
+    spendingOverTimeTiersList.addEventListener('click', syncGlidePreview);
   }
   const addSpendingOverTimeTierBtn = document.getElementById('addSpendingOverTimeTier');
   if (addSpendingOverTimeTierBtn) {
     addSpendingOverTimeTierBtn.addEventListener('click', syncBaseWithdrawalPreview);
+    addSpendingOverTimeTierBtn.addEventListener('click', syncGlidePreview);
   }
 
   const withdrawalFloorsList = document.getElementById('withdrawalFloorsList');
   if (withdrawalFloorsList) {
     withdrawalFloorsList.addEventListener('input', syncBaseWithdrawalPreview);
     withdrawalFloorsList.addEventListener('click', syncBaseWithdrawalPreview);
+    withdrawalFloorsList.addEventListener('input', syncGlidePreview);
+    withdrawalFloorsList.addEventListener('click', syncGlidePreview);
   }
   const addWithdrawalFloorTierBtn = document.getElementById('addWithdrawalFloorTier');
   if (addWithdrawalFloorTierBtn) {
     addWithdrawalFloorTierBtn.addEventListener('click', syncBaseWithdrawalPreview);
+    addWithdrawalFloorTierBtn.addEventListener('click', syncGlidePreview);
   }
 
   const specificWithdrawalFloorsList = document.getElementById('specificWithdrawalFloorsList');
   if (specificWithdrawalFloorsList) {
     specificWithdrawalFloorsList.addEventListener('input', syncWithdrawalPreviewFromForm);
     specificWithdrawalFloorsList.addEventListener('click', syncWithdrawalPreviewFromForm);
+    specificWithdrawalFloorsList.addEventListener('input', syncGlidePreview);
+    specificWithdrawalFloorsList.addEventListener('click', syncGlidePreview);
   }
   const addSpecificWithdrawalFloorTierBtn = document.getElementById('addSpecificWithdrawalFloorTier');
   if (addSpecificWithdrawalFloorTierBtn) {
     addSpecificWithdrawalFloorTierBtn.addEventListener('click', syncWithdrawalPreviewFromForm);
+    addSpecificWithdrawalFloorTierBtn.addEventListener('click', syncGlidePreview);
   }
 
   const giftingTiersList = document.getElementById('giftingTiersList');

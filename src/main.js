@@ -286,6 +286,12 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
     if (ceilingBonusEl) ceilingBonusEl.value = Math.round(ceilingBonus * 100);
   }
 
+  if (summary.glideSpendDown) {
+    setCurrencyField('glideTarget', summary.glideSpendDown.target);
+    const glideFractionEl = document.getElementById('glideFraction');
+    if (glideFractionEl) glideFractionEl.value = Math.round(summary.glideSpendDown.fraction * 100);
+  }
+
   refreshDynamicAdjustmentPreviews();
 }
 

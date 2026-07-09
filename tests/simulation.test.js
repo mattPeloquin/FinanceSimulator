@@ -66,6 +66,128 @@ const sampleYears = {
   ],
 };
 
+describe('glide-path spend-down', () => {
+  // The glide lever is part of Dynamic Adjustments & Guardrails, so it only
+  // runs when dynConfig.enabled is true. Neutral anchors (all adjustments 0,
+  // no balance overrides) keep the section enabled without adding spending.
+  const neutralEnabledDynConfig = {
+    enabled: true,
+    low: { ret: -15, bal: null, adj: 0 },
+    med: { ret: 5, bal: null, adj: 0 },
+    high: { ret: 20, bal: null, adj: 0 },
+  };
+
+  // 100% cash at a deterministic 5% nominal / 0% inflation return, with
+  // neutral adjustments and guardrails — every path is identical, so glide
+  // behavior can be asserted exactly.
+  function deterministicParams(portfolioOverrides = {}) {
+    return lognormalParams({
+      numYears: 10,
+      numSimulations: 1,
+      allocation: { usLgGrowth: 0, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 1 },
+      logNormal: {
+        ...logNormalProfiles,
+        cash: { mean: 0.05, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+      },
+      dynConfig: neutralEnabledDynConfig,
+      portfolio: {
+        start: 1_000_000,
+        base: 50_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        ...portfolioOverrides,
+      },
+    });
+  }
+
+  it('is inert while dynamic adjustments are disabled, even with a target set', () => {
+    const off = runMonteCarlo(deterministicParams());
+    const disabledSection = runMonteCarlo({
+      ...deterministicParams({ glideTarget: 200_000, glideFraction: 1, glideRate: 0.05 }),
+      dynConfig: { ...neutralEnabledDynConfig, enabled: false },
+    });
+    const offDisabled = runMonteCarlo({
+      ...deterministicParams(),
+      dynConfig: { ...neutralEnabledDynConfig, enabled: false },
+    });
+    expect(Array.from(disabledSection.finalBalance)).toEqual(Array.from(offDisabled.finalBalance));
+    expect(Array.from(disabledSection.totalWithdrawn)).toEqual(Array.from(offDisabled.totalWithdrawn));
+    // Sanity: with neutral anchors the enabled/disabled baselines also match.
+    expect(Array.from(off.finalBalance)).toEqual(Array.from(offDisabled.finalBalance));
+  });
+
+  it('a null glide target leaves results byte-identical to params without glide fields', () => {
+    const withoutFields = runMonteCarlo(lognormalParams());
+    const withNullTarget = runMonteCarlo(
+      lognormalParams({
+        portfolio: {
+          ...lognormalParams().portfolio,
+          glideTarget: null,
+          glideFraction: 0.5,
+          glideRate: 0.02,
+        },
+      }),
+    );
+    expect(Array.from(withNullTarget.finalBalance)).toEqual(Array.from(withoutFields.finalBalance));
+    expect(Array.from(withNullTarget.totalWithdrawn)).toEqual(Array.from(withoutFields.totalWithdrawn));
+  });
+
+  it('a zero fraction also disables the lever', () => {
+    const off = runMonteCarlo(deterministicParams());
+    const zeroFraction = runMonteCarlo(
+      deterministicParams({ glideTarget: 200_000, glideFraction: 0, glideRate: 0.05 }),
+    );
+    expect(Array.from(zeroFraction.finalBalance)).toEqual(Array.from(off.finalBalance));
+  });
+
+  it('with fraction 1 and the glide rate matching the real return, the path lands exactly on the target', () => {
+    const result = runMonteCarlo(
+      deterministicParams({ glideTarget: 200_000, glideFraction: 1, glideRate: 0.05 }),
+    );
+    expect(result.finalBalance[0]).toBeCloseTo(200_000, 2);
+  });
+
+  it('recycled surplus raises withdrawals and never causes depletion above the target', () => {
+    const off = runMonteCarlo(deterministicParams());
+    const on = runMonteCarlo(
+      deterministicParams({ glideTarget: 200_000, glideFraction: 1, glideRate: 0.05 }),
+    );
+    expect(on.totalWithdrawn[0]).toBeGreaterThan(off.totalWithdrawn[0]);
+    expect(on.depletionYear[0]).toBe(11); // horizon + 1 = never depleted
+  });
+
+  it('a larger recycle fraction spends the surplus down harder across a volatile Monte Carlo run', () => {
+    // Neutral guardrails isolate the glide lever inside the enabled section.
+    const base = {
+      ...lognormalParams().portfolio,
+      floorBalance: 0,
+      floorPenalty: 0,
+      ceilingBalance: Infinity,
+      ceilingBonus: 0,
+    };
+    const run = (glideFraction) =>
+      runMonteCarlo(
+        lognormalParams({
+          dynConfig: neutralEnabledDynConfig,
+          portfolio: { ...base, glideTarget: 1_000_000, glideFraction, glideRate: 0.02 },
+        }),
+      );
+    const off = runMonteCarlo(lognormalParams({ dynConfig: neutralEnabledDynConfig, portfolio: base }));
+    const half = run(0.5);
+    const full = run(1);
+    const medianOf = (arr) => {
+      const sorted = Array.from(arr).sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    expect(medianOf(half.finalBalance)).toBeLessThan(medianOf(off.finalBalance));
+    expect(medianOf(full.finalBalance)).toBeLessThan(medianOf(half.finalBalance));
+    expect(medianOf(full.totalWithdrawn)).toBeGreaterThan(medianOf(off.totalWithdrawn));
+  });
+});
+
 describe('runMonteCarlo determinism', () => {
   it('produces identical results for the same seed', () => {
     const a = runMonteCarlo(lognormalParams());

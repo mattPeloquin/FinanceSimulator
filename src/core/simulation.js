@@ -3,7 +3,12 @@
 
 import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
 import { median, irrFromPath } from './statistics.js';
-import { resolveAdjustment, balanceScaleMultiplier, buildBaseWithdrawalSchedule } from './withdrawal.js';
+import {
+  resolveAdjustment,
+  balanceScaleMultiplier,
+  buildBaseWithdrawalSchedule,
+  buildGlideRequiredBalances,
+} from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
@@ -80,6 +85,24 @@ function matVec(L, v) {
   return out;
 }
 
+// The unadjusted per-year withdrawal plan the glide path must keep funding —
+// mirrors the year loop's own `unadjustedTarget` derivation (schedule or
+// specific-list amount, clamped at 0 for non-deposit years, then floored by
+// the minimum-withdrawal series) so the glide path and the plan never drift.
+function buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears) {
+  const isSpecific = portfolio.strategy === 'specific';
+  const plan = new Array(horizonYears);
+  for (let j = 0; j < horizonYears; j++) {
+    const baseVal = isSpecific ? fittedWithdrawals[j] : portfolio.base;
+    let target = isSpecific ? fittedWithdrawals[j] : baseSchedule[j];
+    if (baseVal >= 0 && target < 0) target = 0;
+    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
+    if (target >= 0 && yearFloor > 0) target = Math.max(target, yearFloor);
+    plan[j] = target;
+  }
+  return plan;
+}
+
 // Run a single simulation deterministically from `rng`.
 // When `collectPath` is true the full per-year arrays are returned (used only
 // for the handful of paths we actually chart); otherwise only summary stats.
@@ -136,6 +159,25 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const baseSchedule =
     portfolio.strategy !== 'specific'
       ? buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, horizonYears)
+      : null;
+
+  // Glide-path spend-down (optional; glideTarget null/blank = off, engine
+  // behaves exactly as before). Precompute the per-year balance required to
+  // fund the remaining plan and still land on the glide target at this run's
+  // horizon; the year loop recycles a fraction of any surplus above it. Part
+  // of Dynamic Adjustments & Guardrails, so the section's enable toggle gates
+  // it just like the market adjustments and the balance-scale ramp.
+  const glideFraction = portfolio.glideFraction ?? 0;
+  const glideRequired =
+    dynConfig.enabled
+    && portfolio.glideTarget != null
+    && Number.isFinite(portfolio.glideTarget)
+    && glideFraction > 0
+      ? buildGlideRequiredBalances(
+          buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears),
+          portfolio.glideTarget,
+          portfolio.glideRate ?? 0,
+        )
       : null;
 
   // Log-normal setup (only used when distMethod === 'lognormal').
@@ -294,6 +336,17 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     }
     if (baseVal >= 0 && unadjustedTarget < 0) {
       unadjustedTarget = 0;
+    }
+
+    // Glide-path spend-down: recycle a fraction of any balance above this
+    // year's required glide balance into extra spending. Skipped on deposit
+    // years, and added after the balance-scale ramp so the ramp never
+    // compounds the recycled surplus.
+    if (glideRequired && targetWithdrawal >= 0) {
+      const glideSurplus = balance - glideRequired[j];
+      if (glideSurplus > 0) {
+        targetWithdrawal += glideFraction * glideSurplus;
+      }
     }
 
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;

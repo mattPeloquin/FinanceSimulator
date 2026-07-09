@@ -70,6 +70,36 @@ export function balanceScaleMultiplier(balance, portfolio) {
   return 1;
 }
 
+// Glide-path spend-down: per-year required balances toward a target ending
+// balance. required[j] is the balance needed just after year j's growth (i.e.
+// right before that year's withdrawal) such that withdrawing the plan and
+// growing at `glideRate` (real, decimal) each remaining year lands exactly on
+// `glideTarget` after the final year's withdrawal. Matches the engine's
+// grow-then-withdraw convention:
+//
+//   required[h-1] = plan[h-1] + target
+//   required[j]   = plan[j] + required[j+1] / (1 + glideRate)
+//
+// Any balance above required[j] is surplus the glide lever may recycle into
+// extra spending. Because required[] declines toward the target as the horizon
+// shrinks, the lever engages hardest in the late years of comfortable paths —
+// unlike a fixed ceiling threshold. Planned deposits (negative plan entries)
+// reduce the required balance, since they fund the target themselves.
+export function buildGlideRequiredBalances(plannedAmounts, glideTarget, glideRate = 0) {
+  const n = plannedAmounts.length;
+  const required = new Array(n);
+  const growth = 1 + glideRate;
+  // Required balance just after the following year's growth; for the last
+  // year that is simply the target itself (final balance is measured right
+  // after the last withdrawal, with no further growth).
+  let next = glideTarget;
+  for (let j = n - 1; j >= 0; j--) {
+    required[j] = plannedAmounts[j] + (j === n - 1 ? next : next / growth);
+    next = required[j];
+  }
+  return required;
+}
+
 // Build a per-year minimum-withdrawal backstop from staged tiers ($000s in tiers).
 // Intermediate tiers run for their year count; the final tier fills the horizon.
 export function buildWithdrawalFloorSeries(tiers, numYears, toDollarsFn) {

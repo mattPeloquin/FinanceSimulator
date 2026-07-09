@@ -7,6 +7,7 @@ import {
   buildGiftOverlaySeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
+  buildGlideRequiredBalances,
   getDynamicAdjustment,
   resolveAdjustment,
 } from '../src/core/withdrawal.js';
@@ -21,6 +22,43 @@ const defaultDynConfig = {
   med: { ret: 5, bal: 3_000_000, adj: 0 },
   high: { ret: 20, bal: 5_000_000, adj: 50_000 },
 };
+
+describe('buildGlideRequiredBalances', () => {
+  it('returns an empty array for an empty plan', () => {
+    expect(buildGlideRequiredBalances([], 100_000, 0.05)).toEqual([]);
+  });
+
+  it('at a 0% glide rate the required balance is the remaining plan plus the target', () => {
+    const required = buildGlideRequiredBalances([100, 100, 100], 50, 0);
+    expect(required).toEqual([350, 250, 150]);
+  });
+
+  it('discounts future requirements at the glide rate', () => {
+    const required = buildGlideRequiredBalances([100, 100], 110, 0.1);
+    // Final year needs plan + target; the year before needs its plan plus
+    // the discounted final-year requirement: 100 + 210 / 1.1.
+    expect(required[1]).toBeCloseTo(210, 9);
+    expect(required[0]).toBeCloseTo(100 + 210 / 1.1, 9);
+  });
+
+  it('planned deposits (negative plan entries) reduce the required balance', () => {
+    const required = buildGlideRequiredBalances([-100, 100], 0, 0);
+    expect(required).toEqual([0, 100]);
+  });
+
+  it('satisfies the engine recurrence: withdrawing the plan and growing at the rate walks the path to the target', () => {
+    const plan = [120, 80, 100, 90];
+    const rate = 0.07;
+    const target = 250;
+    const required = buildGlideRequiredBalances(plan, target, rate);
+    let balance = required[0];
+    for (let j = 0; j < plan.length; j++) {
+      expect(balance).toBeCloseTo(required[j], 9);
+      balance = (balance - plan[j]) * (j < plan.length - 1 ? 1 + rate : 1);
+    }
+    expect(balance).toBeCloseTo(target, 9);
+  });
+});
 
 describe('buildWithdrawalFloorSeries', () => {
   it('returns zeros when tiers are empty', () => {

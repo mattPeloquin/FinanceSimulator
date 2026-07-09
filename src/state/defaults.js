@@ -100,6 +100,26 @@ export const SCENARIO_DEFAULTS = {
   // Spending scale at/above ceilingBalance, as % bonus (e.g. 50 = +50%).
   ceilingBonus: 50,
 
+  // Glide-path spend-down target ($000s). Blank = disabled (engine behaves as
+  // today). When set, each year recycles part of any balance above the glide
+  // path — the balance that still funds the remaining plan and lands on this
+  // target at the horizon. 0 is a valid "land on zero" target. Lives in the
+  // Dynamic Adjustments & Guardrails section, so its enable toggle gates this
+  // lever too.
+  glideTarget: '',
+
+  // Share (%) of the surplus above the glide path withdrawn each year.
+  glideFraction: 50,
+
+  // Spend Timing (%/yr, -4..0): the assumed real return used to discount the
+  // glide path. More negative = "later" — the glide path sits higher, so early
+  // retirement stays invested and surplus is recycled in the later years
+  // (helps plans that would otherwise dip to minimum withdrawals
+  // mid-retirement). 0 = "sooner", the most aggressive setting; positive
+  // values are excluded because they lose on both lifetime spending and
+  // success rate (spending recycled early forfeits compounding).
+  glideRate: -2,
+
   // Staged minimum withdrawals ($000s). Intermediate tiers need a year count;
   // the last tier applies to all remaining years. Empty = no floor.
   withdrawalFloors: [{ amount: 100 }],
@@ -193,6 +213,7 @@ export const SCENARIO_DEFAULTS = {
   goalSeekIncludeSpendingOverTime: false,
   goalSeekIncludeMarketAdjustments: false,
   goalSeekIncludeBalanceOverrides: false,
+  goalSeekIncludeGlidePath: false,
 
   // Number of simulations run for each candidate the search evaluates.
   // Lower = faster search but noisier success-rate estimates; higher = slower

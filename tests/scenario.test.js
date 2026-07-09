@@ -104,6 +104,25 @@ describe('buildSimParams', () => {
     expect(p.dynConfig.high.adj).toBe(s.dynHighAdj * MONEY_SCALE);
   });
 
+  it('maps a blank glide target to null (lever off) and a typed value to dollars', () => {
+    const blank = buildSimParams(defaultScenario(), { years: [] });
+    expect(blank.portfolio.glideTarget).toBeNull();
+
+    const s = defaultScenario();
+    s.glideTarget = 500;
+    s.glideFraction = 75;
+    s.glideRate = -2;
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.glideTarget).toBe(500_000);
+    expect(p.portfolio.glideFraction).toBeCloseTo(0.75, 9);
+    expect(p.portfolio.glideRate).toBeCloseTo(-0.02, 9);
+
+    // A typed 0 is a real "land on zero" target, distinct from blank.
+    const zero = defaultScenario();
+    zero.glideTarget = 0;
+    expect(buildSimParams(zero, { years: [] }).portfolio.glideTarget).toBe(0);
+  });
+
   it('readDynConfigFromScenario matches buildSimParams dynConfig', () => {
     const s = defaultScenario();
     s.dynLowRet = -10;
@@ -254,6 +273,15 @@ describe('buildGoalSeekConfig', () => {
     expect(config.includeSpendingOverTime).toBe(true);
     expect(config.includeMarketAdjustments).toBe(false);
     expect(config.includeBalanceOverrides).toBe(false);
+    expect(config.includeGlidePath).toBe(false);
+  });
+
+  it('passes the glide-path lever through for both strategies', () => {
+    const s = defaultScenario();
+    s.goalSeekIncludeGlidePath = true;
+    expect(buildGoalSeekConfig(s).includeGlidePath).toBe(true);
+    s.withdrawalStrategy = 'specific';
+    expect(buildGoalSeekConfig(s).includeGlidePath).toBe(true);
   });
 
   it('clamps desired success rate to 0-1', () => {

@@ -55,6 +55,11 @@ const FIELDS = [
   field('floorPenalty', 'floorPenalty', 'float'),
   field('ceilingBalance', 'ceilingBalance', 'currency'),
   field('ceilingBonus', 'ceilingBonus', 'float'),
+  // 'string' (not 'currency'/'optionalCurrency') so blank stays distinct from
+  // a typed 0: blank disables the glide lever, 0 is a "land on zero" target.
+  field('glideTarget', 'glideTarget', 'string'),
+  field('glideFraction', 'glideFraction', 'float'),
+  field('glideRate', 'glideRate', 'float'),
 
   field('specificWithdrawals', 'specificWithdrawals', 'string'),
 
@@ -92,6 +97,7 @@ const FIELDS = [
   field('goalSeekIncludeSpendingOverTime', 'goalSeekIncludeSpendingOverTime', 'boolean'),
   field('goalSeekIncludeMarketAdjustments', 'goalSeekIncludeMarketAdjustments', 'boolean'),
   field('goalSeekIncludeBalanceOverrides', 'goalSeekIncludeBalanceOverrides', 'boolean'),
+  field('goalSeekIncludeGlidePath', 'goalSeekIncludeGlidePath', 'boolean'),
   field('goalSeekNumSimulations', 'goalSeekNumSimulations', 'int'),
   field('parallelCores', 'parallelCores', 'string'),
 ];
@@ -800,6 +806,14 @@ export function buildSimParams(scenario, samples) {
       floorPenalty: (scenario.floorPenalty || 0) / 100,
       ceilingBalance: toDollars(scenario.ceilingBalance) || Infinity,
       ceilingBonus: (scenario.ceilingBonus || 0) / 100,
+      // Glide-path spend-down. Blank/missing target = null = lever off (a
+      // typed 0 is a valid "land on zero" target, so blank and 0 differ here).
+      glideTarget:
+        scenario.glideTarget == null || scenario.glideTarget === ''
+          ? null
+          : toDollars(scenario.glideTarget),
+      glideFraction: num(scenario.glideFraction ?? SCENARIO_DEFAULTS.glideFraction) / 100,
+      glideRate: num(scenario.glideRate ?? SCENARIO_DEFAULTS.glideRate) / 100,
       withdrawalFloorSeries: (() => {
         if (scenario.withdrawalStrategy === 'specific') {
           const specificAmounts = fitSpecificWithdrawalsToHorizon(
@@ -913,6 +927,9 @@ export function buildGoalSeekConfig(scenario) {
       : spendingFirstTierYearsFromTiers(scenario.spendingOverTimeTiers),
     includeMarketAdjustments: !!scenario.goalSeekIncludeMarketAdjustments,
     includeBalanceOverrides: !!scenario.goalSeekIncludeBalanceOverrides,
+    // Works for both strategies — the glide lever recycles surplus on top of
+    // whatever schedule the engine is running.
+    includeGlidePath: !!scenario.goalSeekIncludeGlidePath,
     searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
     withdrawalMetric: resolveWithdrawalMetric(scenario),
   };
@@ -984,6 +1001,31 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     const ceiling = parseCurrency(scenario.ceilingBalance);
     if (floor > 0 && ceiling > 0 && floor >= ceiling) {
       errors.push('Floor Balance must be less than Ceiling Balance.');
+    }
+
+    // Glide-path spend-down (also gated by the Dynamic Adjustments toggle):
+    // a blank target means the lever is off and the other glide fields are
+    // ignored — unless Goal Seek is allowed to tune the lever, in which case
+    // the search supplies the target and the assumed return still matters.
+    // Blank fraction/rate fall back to defaults, matching buildSimParams.
+    const glideActive =
+      (scenario.glideTarget !== '' && scenario.glideTarget != null)
+      || (scenario.goalSeekMode && scenario.goalSeekIncludeGlidePath);
+    if (glideActive) {
+      if (scenario.glideTarget !== '' && scenario.glideTarget != null) {
+        const glideTarget = parseCurrency(scenario.glideTarget);
+        if (!Number.isFinite(glideTarget) || glideTarget < 0) {
+          errors.push('Glide Target must be blank (off) or a non-negative amount.');
+        }
+      }
+      const fraction = scenario.glideFraction ?? SCENARIO_DEFAULTS.glideFraction;
+      if (!Number.isFinite(fraction) || fraction < 0 || fraction > 100) {
+        errors.push('Glide Spend Rate must be between 0 and 100%.');
+      }
+      const rate = scenario.glideRate ?? SCENARIO_DEFAULTS.glideRate;
+      if (!Number.isFinite(rate) || rate < -4 || rate > 0) {
+        errors.push('Glide Spend Timing must be between -4% (later) and 0% (sooner).');
+      }
     }
   }
 
@@ -1090,9 +1132,11 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       // With a Specific List, each year's amount is fixed as typed — Goal Seek
       // can only tune the Market/Balance adjustment levers on top of it.
       const hasSpecificLever =
-        scenario.goalSeekIncludeMarketAdjustments || scenario.goalSeekIncludeBalanceOverrides;
+        scenario.goalSeekIncludeMarketAdjustments
+        || scenario.goalSeekIncludeBalanceOverrides
+        || scenario.goalSeekIncludeGlidePath;
       if (!hasSpecificLever) {
-        errors.push('With a Specific List, Goal Seek keeps each year\'s amount fixed and can only tune the Market adjustment or Balance adjustment levers — include at least one of those in the search.');
+        errors.push('With a Specific List, Goal Seek keeps each year\'s amount fixed and can only tune the Market adjustment, Balance adjustment, or Glide-path levers — include at least one of those in the search.');
       }
     } else if (!scenario.goalSeekIncludeBaseWithdrawal) {
       const base = parseCurrency(scenario.baseWithdrawal);
@@ -1102,7 +1146,8 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       const hasLever =
         scenario.goalSeekIncludeSpendingOverTime
         || scenario.goalSeekIncludeMarketAdjustments
-        || scenario.goalSeekIncludeBalanceOverrides;
+        || scenario.goalSeekIncludeBalanceOverrides
+        || scenario.goalSeekIncludeGlidePath;
       if (!hasLever) {
         errors.push('When the base withdrawal is not included in the search, at least one other lever must be included.');
       }

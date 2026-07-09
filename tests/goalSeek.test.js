@@ -515,9 +515,14 @@ describe('runGoalSeek', () => {
 
   // Regression test for the fixed-base scoring bug: since a spending cut only
   // pays off once the base is re-solved against it, a plan allowed to use
-  // guardrails should sustain a base withdrawal at least as high as one
-  // without any guardrails available.
-  it('sustains at least as high a base withdrawal with guardrails available as without', async () => {
+  // guardrails must never come out WORSE than one without them. The fair
+  // comparison is the search's own objective (median lifetime withdrawals):
+  // with the aggressive sub-1x ceiling grid the winner may legitimately trade
+  // a slightly lower base for balance-conditional boosts that spend more in
+  // total, so the base itself is no longer a one-directional proxy for plan
+  // quality. The small tolerance absorbs the $1,000 round-down of the final
+  // base re-bisection.
+  it('produces at least as good a plan with guardrails available as without', async () => {
     const baseParams = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -547,7 +552,9 @@ describe('runGoalSeek', () => {
 
     expect(withoutGuardrails.summary.feasible).toBe(true);
     expect(withGuardrails.summary.feasible).toBe(true);
-    expect(withGuardrails.summary.baseWithdrawal).toBeGreaterThanOrEqual(withoutGuardrails.summary.baseWithdrawal);
+    expect(withGuardrails.summary.achievedMedianTotalWithdrawn).toBeGreaterThanOrEqual(
+      withoutGuardrails.summary.achievedMedianTotalWithdrawn * 0.99,
+    );
   });
 
   // The early-years objective: when Bonus Years is included in the search,
@@ -880,5 +887,38 @@ describe('runGoalSeek', () => {
     expect(summary.marketAdjustments).toBeDefined();
     expect(summary.balanceAdjustment).toBeDefined();
     expect(summary.plannedScheduleTotal).toBe(70_000 * numYears);
+  });
+
+  it('pins the glide target to the goal-seek target and tunes the recycle fraction', async () => {
+    const params = makeParams({
+      numSimulations: 500,
+      portfolio: {
+        ...makeParams().portfolio,
+        // Pre-existing glide values: the search must override the target with
+        // its own, re-tune the fraction, and leave the typed rate alone.
+        glideTarget: 123_000,
+        glideFraction: 0.33,
+        glideRate: -0.02,
+      },
+    });
+    const { params: finalParams, summary } = await seek(params, {
+      targetEndingBalance: 500_000,
+      desiredSuccessRate: 0.75,
+      searchNumSimulations: 500,
+      maxRounds: 1,
+      includeGlidePath: true,
+      glideFractions: [0, 0.25, 0.5],
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.glideSpendDown).toBeDefined();
+    expect(summary.glideSpendDown.target).toBe(500_000);
+    expect(summary.glideSpendDown.rate).toBeCloseTo(-0.02, 9);
+    expect([0, 0.25, 0.5]).toContain(summary.glideSpendDown.fraction);
+    // Recycling surplus raises median lifetime spending in this setup (large
+    // start, modest target), so the search should not leave the lever at 0.
+    expect(summary.glideSpendDown.fraction).toBeGreaterThan(0);
+    expect(finalParams.portfolio.glideTarget).toBe(500_000);
+    expect(finalParams.portfolio.glideFraction).toBe(summary.glideSpendDown.fraction);
   });
 });
