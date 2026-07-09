@@ -59,6 +59,23 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#irrScatterLegend')).toContainText('IRR = Avg');
   await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
 
+  // Clicking a path dot opens the drill-down: withdrawal line chart with the
+  // linked balance bar chart underneath (same pairing as the 3D chart's popup).
+  // The dots cluster around the middle of the plot; sweep a small grid of click
+  // positions until one lands within a dot's hit radius.
+  const scatterCanvas = page.locator('#irrScatterCanvas');
+  const drilldown = page.locator('#irrScatterDrilldown');
+  const box = await scatterCanvas.boundingBox();
+  for (let fy = 0.2; fy <= 0.8 && !(await drilldown.isVisible()); fy += 0.15) {
+    for (let fx = 0.2; fx <= 0.8 && !(await drilldown.isVisible()); fx += 0.15) {
+      await scatterCanvas.click({ position: { x: box.width * fx, y: box.height * fy } });
+    }
+  }
+  await expect(drilldown).toBeVisible();
+  await expect(page.locator('#irrScatterDrilldownTitle')).toContainText('Simulation #');
+  await expect(page.locator('#irrScatterPathCanvas')).toBeVisible();
+  await expect(page.locator('#irrScatterBalanceCanvas')).toBeVisible();
+
   // Combined success card and Median End Balance IRR
   await expect(page.locator('#medianIrr')).toContainText('%');
 
@@ -74,4 +91,14 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   const surfaceChart = page.locator('#surfaceChart canvas');
   await expect(surfaceChart.first()).toBeVisible();
+});
+
+test('Historical IRR band survives a year selection shorter than the horizon', async ({ page }) => {
+  await page.goto('/');
+  // 2005–2025 is 21 years against the default 35-year horizon: no true rolling
+  // window fits, so the band must fall back to wrapped windows instead of vanishing.
+  await page.fill('#startYear', '2005');
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible();
+  await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
 });

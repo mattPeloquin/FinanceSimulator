@@ -81,7 +81,7 @@ function refreshHistoryView(startYear, endYear) {
   }
   const years = updateMiniCharts(startYear, endYear);
   renderYearLabels(years);
-  historicalSamples = { years: getSampleYears(startYear, endYear) };
+  historicalSamples = { startYear, endYear, years: getSampleYears(startYear, endYear) };
   return true;
 }
 

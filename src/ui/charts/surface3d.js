@@ -11,6 +11,8 @@ import { meetsWithdrawalTarget, median, isMedianYearlyMetric, withdrawalMetricLa
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
+import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
+import { createLinkedBalanceBars } from './balanceBars.js';
 
 let echartsModule = null;
 let chartInstance = null;
@@ -45,9 +47,6 @@ function computeCameraDistance(dom) {
   const distance = CAMERA_DISTANCE * (referenceAspect / aspect);
   return Math.max(MIN_CAMERA_DISTANCE, Math.min(MAX_CAMERA_DISTANCE, distance));
 }
-
-const RETURN_MIN = -0.5;
-const RETURN_MAX = 0.5;
 
 // Z axis is capped at this multiple of the starting portfolio value.
 const Z_CAP_MULTIPLE = 2;
@@ -112,33 +111,6 @@ async function loadEcharts() {
   await import('echarts-gl');
   echartsModule = echarts;
   return echarts;
-}
-
-function lerpColor(a, b, t) {
-  const r = Math.round(a[0] + (b[0] - a[0]) * t);
-  const g = Math.round(a[1] + (b[1] - a[1]) * t);
-  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
-  return `rgb(${r}, ${g}, ${bl})`;
-}
-
-// Map a nominal return to the red/green ramp color at that value.
-function colorForReturn(v) {
-  const clamped = Math.max(RETURN_MIN, Math.min(RETURN_MAX, v));
-  const deepRed = [127, 29, 29];
-  const lightRed = [248, 113, 113];
-  const lightGreen = [134, 239, 172];
-  const deepGreen = [21, 128, 61];
-
-  if (clamped < 0) {
-    const t = (clamped - RETURN_MIN) / (0 - RETURN_MIN);
-    return lerpColor(deepRed, lightRed, t);
-  }
-  return lerpColor(lightGreen, deepGreen, clamped / RETURN_MAX);
-}
-
-function returnColorWithAlpha(ret, alpha) {
-  const [r, g, b] = colorForReturn(ret).match(/\d+/g).map(Number);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // Depleted paths: warning orange with a narrow return span so variance stays vivid.
@@ -356,12 +328,7 @@ function applySurfaceTheme() {
     Object.assign(largeChart.options.plugins.legend.labels, { color: theme.legend });
     largeChart.update('none');
   }
-  if (largeBalanceChart && balanceChartSeries) {
-    Object.assign(largeBalanceChart.options, balanceBarOptions());
-    largeBalanceChart.data.datasets[0].backgroundColor =
-      balanceBarColorsByReturn(balanceChartSeries, balanceHighlightIndex);
-    largeBalanceChart.update('none');
-  }
+  largeBalanceBars?.applyTheme();
   if (surfaceState.pinnedCol != null) showFloatWithdrawal(surfaceState.pinnedCol);
 }
 
@@ -780,88 +747,10 @@ function showFloatWithdrawal(col) {
 }
 
 let largeChart = null;
-let largeBalanceChart = null;
-let balanceHighlightIndex = -1;
-let balanceChartSeries = null;
+let largeBalanceBars = null; // linked balance bar chart under the large dialog's line chart
 
-function balanceBarColorsByReturn(series, highlightIndex = -1) {
-  return series.returnData.map((ret, i) =>
-    returnColorWithAlpha(ret, i === highlightIndex ? 1 : 0.72)
-  );
-}
-
-function syncBalanceBarHighlight(index) {
-  if (index === balanceHighlightIndex) return;
-  balanceHighlightIndex = index;
-  if (!largeBalanceChart || !balanceChartSeries) return;
-  largeBalanceChart.data.datasets[0].backgroundColor =
-    balanceBarColorsByReturn(balanceChartSeries, balanceHighlightIndex);
-  largeBalanceChart.update('none');
-}
-
-// Drives the withdrawal line chart's own tooltip from a hover on the balance
-// bar chart, so the two stay in lockstep instead of showing separate tooltips.
-function showLineTooltipAtIndex(index) {
-  if (!largeChart?.tooltip) return;
-  if (index < 0) {
-    largeChart.setActiveElements([]);
-    largeChart.tooltip.setActiveElements([], { x: 0, y: 0 });
-    largeChart.update('none');
-    return;
-  }
-  const active = largeChart.data.datasets
-    .map((ds, datasetIndex) => ({ datasetIndex, value: ds.data[index] }))
-    .filter(({ value }) => value != null)
-    .map(({ datasetIndex }) => ({ datasetIndex, index }));
-  if (!active.length) return;
-  const point = largeChart.getDatasetMeta(active[0].datasetIndex).data[index];
-  const position = point ? { x: point.x, y: point.y } : { x: 0, y: 0 };
-  largeChart.setActiveElements(active);
-  largeChart.tooltip.setActiveElements(active, position);
-  largeChart.update('none');
-}
-
-// Belt-and-suspenders reset used on top of Chart.js's own hover handling: fires
-// on 'mouseleave' of either canvas so the tooltip/highlight can never get stuck
-// on when the pointer leaves the chart area (e.g. skipping between the two
-// stacked canvases faster than a 'mousemove' can land on the other one first).
 function resetWithdrawalHover() {
-  syncBalanceBarHighlight(-1);
-  showLineTooltipAtIndex(-1);
-}
-
-function balanceBarOptions() {
-  const theme = getChartTheme();
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false,
-    interaction: { mode: 'index', intersect: false },
-    scales: {
-      x: {
-        title: { display: true, text: 'Year', color: theme.axisTitle },
-        ticks: { color: theme.axisTick },
-        grid: { display: false },
-      },
-      y: {
-        beginAtZero: true,
-        title: { display: true, text: 'Balance ($)', color: theme.axisTitle },
-        ticks: { callback: (v) => formatK(v), maxTicksLimit: 4, color: theme.axisTick },
-        grid: { color: theme.gridLine },
-      },
-    },
-    plugins: {
-      legend: { display: false },
-      // The balance chart shows no tooltip of its own; hovering it drives the
-      // full tooltip on the withdrawal line chart above (see onHover below).
-      tooltip: { enabled: false },
-    },
-    onHover: (_evt, activeElements) => {
-      const index = activeElements.length > 0 ? activeElements[0].index : -1;
-      syncBalanceBarHighlight(index);
-      showLineTooltipAtIndex(index);
-    },
-  };
+  largeBalanceBars?.reset();
 }
 
 function openLargeWithdrawalChart(col) {
@@ -872,9 +761,6 @@ function openLargeWithdrawalChart(col) {
 
   const series = extractWithdrawalSeries(col);
   if (!series) return;
-
-  syncBalanceBarHighlight(-1);
-  balanceChartSeries = series;
 
   const title = document.getElementById('withdrawalChartDialogTitle');
   if (title) title.textContent = sampleRunTitle(col);
@@ -934,7 +820,7 @@ function openLargeWithdrawalChart(col) {
         },
         onHover: (_evt, activeElements) => {
           const index = activeElements.length > 0 ? activeElements[0].index : -1;
-          syncBalanceBarHighlight(index);
+          largeBalanceBars?.setHighlight(index);
         },
       },
     });
@@ -946,29 +832,10 @@ function openLargeWithdrawalChart(col) {
     }
   }
 
-  if (largeBalanceChart) {
-    largeBalanceChart.data.labels = series.labels;
-    largeBalanceChart.data.datasets[0].data = series.balanceData;
-    largeBalanceChart.data.datasets[0].backgroundColor =
-      balanceBarColorsByReturn(series, balanceHighlightIndex);
-    largeBalanceChart.update();
-  } else if (balanceCanvas) {
-    largeBalanceChart = new Chart(balanceCanvas.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: series.labels,
-        datasets: [{
-          label: 'Balance',
-          data: series.balanceData,
-          backgroundColor: balanceBarColorsByReturn(series),
-          borderWidth: 0,
-          borderRadius: 2,
-        }],
-      },
-      options: balanceBarOptions(),
-    });
-    balanceCanvas.addEventListener('mouseleave', resetWithdrawalHover);
+  if (!largeBalanceBars && balanceCanvas) {
+    largeBalanceBars = createLinkedBalanceBars(balanceCanvas, () => largeChart);
   }
+  largeBalanceBars?.setSeries(series);
 
   dialog.showModal();
 }

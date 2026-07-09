@@ -62,48 +62,6 @@ export function computeStandardizedYears(records, keys = LOGNORMAL_ORDER) {
   );
 }
 
-// Allocation-key mapping between the app's camelCase allocation object and the
-// snake_case historical dataset columns.
-const ALLOCATION_TO_DATA_KEY = {
-  usLgGrowth: 'us_lg_growth',
-  usLgValue: 'us_lg_value',
-  usSmMid: 'us_sm_mid',
-  exUs: 'ex_us',
-  bond: 'bond',
-  cash: 'cash',
-};
-
-// Annualized real return of a fixed allocation over every rolling
-// `horizonYears`-long window of the historical dataset, reduced to its
-// 10th–90th percentile band. For a buy-and-hold path the IRR equals the
-// annualized return, so this is the "typical historical IRR" for an investing
-// timeline of that length. Returns null when the horizon exceeds the data.
-export function rollingRealReturnBand(allocation, horizonYears, data = historicalData) {
-  if (!allocation || !horizonYears || horizonYears < 1) return null;
-  const years = Object.keys(data)
-    .map(Number)
-    .sort((a, b) => a - b);
-  if (years.length < horizonYears) return null;
-
-  const annualized = [];
-  for (let s = 0; s + horizonYears <= years.length; s++) {
-    let growth = 1;
-    for (let j = 0; j < horizonYears; j++) {
-      const yearData = data[years[s + j]];
-      let portfolioReturn = 0;
-      for (const [allocKey, dataKey] of Object.entries(ALLOCATION_TO_DATA_KEY)) {
-        portfolioReturn += ((yearData[dataKey] ?? 0) / 100) * (allocation[allocKey] ?? 0);
-      }
-      growth *= (1 + portfolioReturn) / (1 + yearData.inflation / 100);
-    }
-    annualized.push(growth ** (1 / horizonYears) - 1);
-  }
-
-  annualized.sort((a, b) => a - b);
-  const at = (p) => annualized[Math.min(annualized.length - 1, Math.floor(annualized.length * p))];
-  return { low: at(0.1), high: at(0.9), windows: annualized.length };
-}
-
 // Pearson correlation matrix (N×N) across `keys`, estimated from records. A key
 // with zero variance yields zero correlation with everything (diagonal stays 1).
 export function computeCorrelationMatrix(records, keys = LOGNORMAL_ORDER) {

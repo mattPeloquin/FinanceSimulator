@@ -91,6 +91,13 @@ const REQUIRED_IDS = [
   'allYearsStdDev',
   'allYearsChart',
   'surfaceChart',
+  'irrScatterCanvas',
+  'irrScatterLegend',
+  'irrScatterDrilldown',
+  'irrScatterPathCanvas',
+  'irrScatterBalanceCanvas',
+  'largeWithdrawalCanvas',
+  'largeBalanceCanvas',
 ];
 
 const PERCENTILE_CARD_IDS = [];

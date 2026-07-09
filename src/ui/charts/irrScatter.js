@@ -13,7 +13,8 @@ import { onThemeChange, isDarkMode } from '../theme.js';
 import { formatPercent, formatK } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
 import { median, percentileValue } from '../../core/statistics.js';
-import { rollingRealReturnBand } from '../../core/history.js';
+import { historicalIrrBand } from '../../core/historicalIrr.js';
+import { createLinkedBalanceBars } from './balanceBars.js';
 
 // Outcome status colors, one triplet per mode, in outcome-code order
 // (0 = met plan, 1 = below plan, 2 = ran out). Both triplets validated with
@@ -28,19 +29,20 @@ const OUTCOME_LABELS = ['Met plan', 'Below plan', 'Ran out'];
 
 const MARGIN = { top: 10, right: 14, bottom: 34, left: 52 };
 const HIT_RADIUS_PX = 10;
-// Both axes run from a fixed -5% up to at most +10%; the rare more-extreme
+// Both axes run from a fixed -4% up to at most +8%; the rare more-extreme
 // paths fall off the plot rather than compressing the region where the
 // sequence story lives.
-const AXIS_MIN = -0.05;
-const AXIS_CAP = 0.1;
+const AXIS_MIN = -0.04;
+const AXIS_CAP = 0.08;
 
 const state = {
   scatter: null,
   params: null,
   seed: null,
-  band: null, // historical rolling-window IRR band for the run's allocation/horizon
+  band: null, // P5–P60 rolling-window IRR band for the run's allocation/horizon/year selection
   selected: null, // sim index of the clicked path
   pathChart: null,
+  balanceBars: null, // linked balance bar chart under the drill-down's line chart
   resizeObserver: null,
 };
 
@@ -160,14 +162,27 @@ function drawAxes(ctx, theme, extents, geom, scales) {
   ctx.restore();
 }
 
-// Soft horizontal band: the 10th–90th percentile of annualized real returns
-// over rolling historical windows matching this run's horizon and allocation.
+// Soft horizontal band: the P5–P60 range of annualized real returns over
+// rolling windows of the user's selected historical years, matching this run's
+// horizon and allocation.
 function drawHistoricalBand(ctx, theme, geom, scales) {
   if (!state.band) return;
-  const yTop = scales.sy(state.band.high);
-  const yBottom = scales.sy(state.band.low);
+  const plotTop = geom.plotY;
+  const plotBottom = geom.plotY + geom.plotH;
+  const yTop = Math.max(plotTop, Math.min(plotBottom, scales.sy(state.band.high)));
+  const yBottom = Math.max(plotTop, Math.min(plotBottom, scales.sy(state.band.low)));
   ctx.fillStyle = theme.planFill;
   ctx.fillRect(geom.plotX, yTop, geom.plotW, yBottom - yTop);
+  // Solid edge lines: the P5–P60 band can be a narrow strip, and the soft fill
+  // alone disappears under the grid lines.
+  ctx.strokeStyle = theme.planLine;
+  ctx.lineWidth = 1;
+  for (const y of [yTop, yBottom]) {
+    ctx.beginPath();
+    ctx.moveTo(geom.plotX, y);
+    ctx.lineTo(geom.plotX + geom.plotW, y);
+    ctx.stroke();
+  }
 }
 
 function drawReferenceLines(ctx, theme, scatter, extents, geom, scales) {
@@ -285,8 +300,14 @@ function renderLegend() {
     );
   }
   if (state.band) {
+    const { startYear, endYear } = state.params?.samples ?? {};
+    const rangeNote =
+      startYear != null && endYear != null ? `your selected years (${startYear}–${endYear})` : 'your selected years';
+    const wrapNote = state.band.wrapped
+      ? '; the selection is shorter than the horizon, so windows wrap around it'
+      : '';
     items.push(
-      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="10th–90th percentile of annualized real returns for your allocation across all ${state.band.windows} rolling ${state.params?.numYears}-year windows in the historical dataset (1900+)">` +
+      `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="P5–P60 of annualized real returns for your allocation across all ${state.band.windows} rolling ${state.params?.numYears}-year windows in ${rangeNote}${wrapNote}">` +
         `<span class="inline-block w-4 h-3 rounded-sm shrink-0" style="background:${theme.planFill};border:1px solid ${theme.planLine}"></span>Historical IRR range (${state.params?.numYears}-yr windows)</span>`,
     );
   }
@@ -385,6 +406,7 @@ function renderPathChart(i) {
   const container = document.getElementById('irrScatterDrilldown');
   const titleEl = document.getElementById('irrScatterDrilldownTitle');
   const canvas = document.getElementById('irrScatterPathCanvas');
+  const balanceCanvas = document.getElementById('irrScatterBalanceCanvas');
   if (!container || !canvas || state.params == null || state.seed == null) return;
 
   const re = regeneratePath(state.params, state.seed, i);
@@ -400,12 +422,14 @@ function renderPathChart(i) {
 
   // Same withdrawal-vs-plan chart as the 3D chart's popup: actual withdrawals
   // against the original plan, with minimum-floor and gift-ceiling overlays,
-  // colored by the path's outcome.
+  // colored by the path's outcome, plus the linked balance bar chart below.
   const { withdrawals, unadjustedWithdrawals, balances, returns } = re.path;
   const series = {
     labels: withdrawals.map((_, y) => y + 1),
     actualData: withdrawals,
     unadjustedData: unadjustedWithdrawals,
+    balanceData: withdrawals.map((_, y) => Math.max(0, balances[y + 1])),
+    returnData: returns,
     depleted: outcome[i] === 2,
     belowPlan: outcome[i] === 1,
   };
@@ -433,7 +457,8 @@ function renderPathChart(i) {
       scales: chartJsCartesianScales(
         theme,
         { beginAtZero: true, ticks: { callback: (v) => formatK(v) } },
-        { title: { display: true, text: 'Year' } },
+        // The balance bar chart below carries the shared Year axis.
+        { title: { display: false }, ticks: { display: false }, grid: { display: false } },
       ),
       plugins: {
         legend: {
@@ -446,8 +471,18 @@ function renderPathChart(i) {
           callbacks: withdrawalChartTooltipCallbacks(detailsAt),
         },
       },
+      onHover: (_evt, activeElements) => {
+        const index = activeElements.length > 0 ? activeElements[0].index : -1;
+        state.balanceBars?.setHighlight(index);
+      },
     },
   });
+
+  if (!state.balanceBars && balanceCanvas) {
+    state.balanceBars = createLinkedBalanceBars(balanceCanvas, () => state.pathChart);
+    canvas.addEventListener('mouseleave', () => state.balanceBars?.reset());
+  }
+  state.balanceBars?.setSeries(series);
 }
 
 function onMouseMove(ev) {
@@ -485,7 +520,7 @@ export function drawIrrScatter(scatter, { params, seed } = {}) {
   state.scatter = scatter;
   state.params = params ?? null;
   state.seed = seed ?? null;
-  state.band = rollingRealReturnBand(params?.allocation, params?.numYears);
+  state.band = historicalIrrBand(params?.samples?.years, params?.allocation, params?.numYears);
   state.selected = null;
   if (state.pathChart) {
     state.pathChart.destroy();
