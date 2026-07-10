@@ -67,6 +67,8 @@ const FIELDS = [
   field('glideRate', 'glideRate', 'float'),
 
   field('specificWithdrawals', 'specificWithdrawals', 'string'),
+  field('maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawals', 'int'),
+  field('minWithdrawalPlanRecoveryYears', 'minWithdrawalPlanRecoveryYears', 'int'),
 
   field('enableDynamicAdjustments', 'enableDynamicAdjustments', 'boolean'),
   field('dynLowRet', 'dynLowRet', 'float'),
@@ -661,6 +663,12 @@ const PAIRED_SLIDER_IDS = {
   planRiskTolerancePct: 'planRiskTolerancePctSlider',
 };
 
+// Same scenario value shown in both Base and Specific minimum-withdrawal panels.
+const FIELD_DOM_MIRRORS = {
+  maxConsecutiveMinWithdrawals: ['maxConsecutiveMinWithdrawalsSpecific'],
+  minWithdrawalPlanRecoveryYears: ['minWithdrawalPlanRecoveryYearsSpecific'],
+};
+
 // Tier-list keys and their dedicated DOM writers (not in FIELDS).
 const TIER_WRITERS = {
   withdrawalFloors: writeWithdrawalFloorsToDom,
@@ -701,6 +709,18 @@ export function writeScenarioFieldsToDom(patch, doc = document) {
         el.checked = !!value;
       } else {
         el.value = formatField(value, f.type);
+      }
+    }
+    const mirrors = FIELD_DOM_MIRRORS[key];
+    if (mirrors) {
+      for (const mirrorId of mirrors) {
+        const mirror = doc.getElementById(mirrorId);
+        if (!mirror) continue;
+        if (f.type === 'boolean') {
+          mirror.checked = !!value;
+        } else {
+          mirror.value = formatField(value, f.type);
+        }
       }
     }
     const pairedId = PAIRED_SLIDER_IDS[key];
@@ -872,6 +892,8 @@ export function buildSimParams(scenario, samples) {
         maxYears,
         toDollars,
       ),
+      maxConsecutiveMinWithdrawals: Math.max(0, parseInt(scenario.maxConsecutiveMinWithdrawals, 10) || 0),
+      minWithdrawalPlanRecoveryYears: Math.max(0, parseInt(scenario.minWithdrawalPlanRecoveryYears, 10) || 0),
     },
     dynConfig: readDynConfigFromScenario(scenario),
     logNormal: {
@@ -1093,6 +1115,12 @@ export function validateScenario(scenario, { minYear, maxYear }) {
 
   // Minimum-withdrawal tiers: absolute $ for Base, percentage for Specific List.
   const baseTiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
+  if (scenario.withdrawalStrategy !== 'specific' && baseTiers.length > 0) {
+    const baseWithdrawal = parseCurrency(scenario.baseWithdrawal);
+    if (baseWithdrawal > 0 && baseTiers.some((tier) => tier.amount >= baseWithdrawal)) {
+      errors.push('Minimum withdrawal should be below your base withdrawal (the plan).');
+    }
+  }
   if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && baseTiers.length > 1) {
     for (let i = 0; i < baseTiers.length - 1; i++) {
       const years = baseTiers[i].years;
@@ -1104,6 +1132,11 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   }
 
   const specificTiers = normalizeSpecificWithdrawalFloors(scenario.specificWithdrawalFloors);
+  if (scenario.withdrawalStrategy === 'specific' && specificTiers.length > 0) {
+    if (specificTiers.some((tier) => tier.pct >= 100)) {
+      errors.push('Specific List minimum % should be below 100% of each year\'s plan amount.');
+    }
+  }
   if (scenario.withdrawalStrategy === 'specific' && Number.isFinite(minHorizon) && specificTiers.length > 1) {
     for (let i = 0; i < specificTiers.length - 1; i++) {
       const years = specificTiers[i].years;

@@ -246,12 +246,28 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'dynLowBal', 'dynMedBal', 'dynHighBal',
     'glideRate',
     'glideTarget',
+    'maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawalsSpecific',
+    'minWithdrawalPlanRecoveryYears', 'minWithdrawalPlanRecoveryYearsSpecific',
   ];
   for (const id of detachIds) {
     const input = el(id);
     if (!input) continue;
     input.addEventListener('input', maybeDetach);
     input.addEventListener('change', maybeDetach);
+  }
+
+  // Keep Base / Specific minimum-recovery twins in sync (same scenario keys).
+  const recoveryMirrors = [
+    ['maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawalsSpecific'],
+    ['minWithdrawalPlanRecoveryYears', 'minWithdrawalPlanRecoveryYearsSpecific'],
+  ];
+  for (const [primaryId, mirrorId] of recoveryMirrors) {
+    const primary = el(primaryId);
+    const mirror = el(mirrorId);
+    if (!primary || !mirror) continue;
+    const sync = (from, to) => () => { to.value = from.value; };
+    primary.addEventListener('input', sync(primary, mirror));
+    mirror.addEventListener('input', sync(mirror, primary));
   }
 
   const planDetachIds = [

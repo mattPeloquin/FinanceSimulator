@@ -41,11 +41,11 @@ const BASE_BISECTION_MAX_ITERATIONS = 30;
 const DEFAULT_GOGO_BONUS_FRACTIONS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3];
 
 // Glide-path spend-down candidates: the share of each year's surplus above the
-// glide path recycled into extra spending. Starts at 5% so the search always
+// glide path recycled into extra spending. Starts at 10% so the search always
 // applies some surplus pressure. Finer at the low end — moderate fractions
 // usually win because a full recycle leaves runs sitting knife-edge on the
 // target, where the strict end >= target check fails them.
-const DEFAULT_GLIDE_FRACTIONS = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1];
+const DEFAULT_GLIDE_FRACTIONS = [0.1, 0.2, 0.4, 0.6];
 
 // Each candidate scored via the re-solve scorer costs one inner bisection
 // (this many predicate evaluations at reduced fidelity) plus one confirming
@@ -77,10 +77,11 @@ function roundDownToThousand(value) {
   return Math.floor(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
 }
 
-// Unadjusted per-year withdrawal plan (base × compounding tiers + extras,
-// with minimum-withdrawal floors), or the fixed per-year specific-list amounts
-// when that strategy is in use. Deterministic — mirrors simulatePath's
-// unadjustedTarget logic without running a simulation.
+// Unadjusted per-year withdrawal plan (base × compounding tiers + extras),
+// or the fixed per-year specific-list amounts when that strategy is in use.
+// The minimum-withdrawal floor limits cuts at run time; it is not part of plan.
+// Deterministic — mirrors simulatePath's unadjustedTarget logic without
+// running a simulation.
 export function plannedYearlySchedule(portfolio, numYears) {
   const isSpecific = portfolio.strategy === 'specific';
   const baseSchedule = isSpecific
@@ -96,10 +97,6 @@ export function plannedYearlySchedule(portfolio, numYears) {
       unadjustedTarget = portfolio.specificWithdrawals?.[j] ?? 0;
     } else {
       unadjustedTarget = baseSchedule[j];
-    }
-    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
-    if (unadjustedTarget >= 0 && yearFloor > 0) {
-      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
     }
     yearlyAmounts[j] = unadjustedTarget;
   }

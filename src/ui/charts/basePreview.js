@@ -1,8 +1,7 @@
 // Live sparkline of the "Base + Spending Over Time" withdrawal schedule:
-// the base annual withdrawal, staged by spending-over-time tiers, then
-// clamped up to the staged minimum-withdrawal floor (mirroring simulatePath's
-// unadjustedTarget), all before any market/balance guardrail adjustments are
-// layered on at run time.
+// the base annual withdrawal staged by spending-over-time tiers (mirroring
+// simulatePath's unadjustedTarget). The minimum floor limits cuts at run time
+// and is shown as a separate dashed reference line on the chart.
 // Shares its chart look with the Specific List preview (see
 // schedulePreviewChart.js).
 import {
@@ -52,15 +51,8 @@ function readScheduleInputsFromForm() {
   return { numYears, base, spendingSeries };
 }
 
-function buildSchedule({ numYears, base, spendingSeries, floorSeries }) {
-  const amounts = buildBaseWithdrawalSchedule(base, spendingSeries, numYears);
-  for (let j = 0; j < numYears; j++) {
-    const yearFloor = floorSeries?.[j] ?? 0;
-    if (amounts[j] >= 0 && yearFloor > 0) {
-      amounts[j] = Math.max(amounts[j], yearFloor);
-    }
-  }
-  return amounts;
+function buildSchedule({ numYears, base, spendingSeries }) {
+  return buildBaseWithdrawalSchedule(base, spendingSeries, numYears);
 }
 
 function renderPreview() {
@@ -78,7 +70,7 @@ function renderPreview() {
     scheduleInputs.numYears,
     toDollars,
   );
-  const amounts = buildSchedule({ ...scheduleInputs, floorSeries });
+  const amounts = buildSchedule(scheduleInputs);
   const giftingSeries = buildGiftingSeries(
     normalizeGiftingTiers(readGiftingTiersFromDom()),
     scheduleInputs.numYears,

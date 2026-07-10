@@ -26,6 +26,11 @@ Each file has two sections:
     tracks Easy Mode before a search runs
   - `glideRate` (in `scenario`) — glide-path spend timing (-4 = later … 0 = sooner);
     Conservative is one tick later, Aggressive one tick sooner, the middle three at -2
+  - `maxConsecutiveMinWithdrawals` / `minWithdrawalPlanRecoveryYears` (in
+    `scenario`) — after this many years in a row at the minimum, spending returns
+    to the plan for that many years. Steps up from Conservative (2 / 2) to
+    Aggressive (4 / 2) — higher risk levels tolerate longer belt-tightening;
+    either 0 turns the feature off
   - **Spending plan (Easy Mode + Goal Seek off):** `baseWithdrawalPctOfStart`
     (4.0–6.0% in 0.5 steps), `floorBalanceMultipleOfStart` /
     `ceilingBalanceMultipleOfStart`, `floorPenalty`, `ceilingBonus`,

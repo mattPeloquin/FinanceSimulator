@@ -867,6 +867,140 @@ describe('variable horizon', () => {
   });
 });
 
+describe('minimum withdrawal vs plan', () => {
+  function flatParams(overrides = {}) {
+    return {
+      numYears: 1,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1e9,
+        base: 50_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [80_000],
+      },
+      dynConfig: {
+        enabled: false,
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  it('keeps the unadjusted plan at the schedule while the floor raises actual spending', () => {
+    const s = simulatePath(flatParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.unadjustedWithdrawals[0]).toBeCloseTo(50_000, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(80_000, 3);
+  });
+});
+
+describe('consecutive-min recovery', () => {
+  function recoveryParams(overrides = {}) {
+    return {
+      numYears: 4,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1_000_000,
+        base: 100_000,
+        floorBalance: 2_000_000,
+        floorPenalty: 0.5,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(10, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [80_000, 80_000, 80_000, 80_000],
+        maxConsecutiveMinWithdrawals: 2,
+        minWithdrawalPlanRecoveryYears: 2,
+      },
+      dynConfig: {
+        enabled: true,
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 1e12, adj: 0 },
+        high: { ret: 100, bal: 1e12, adj: 0 },
+      },
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  it('forces spending back to the plan after consecutive minimum years', () => {
+    const s = simulatePath(recoveryParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(80_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(80_000, 3);
+    expect(s.path.withdrawals[2]).toBeCloseTo(100_000, 3);
+    expect(s.path.withdrawals[3]).toBeCloseTo(100_000, 3);
+  });
+
+  it('is a no-op when recovery knobs are zero', () => {
+    const p = recoveryParams();
+    p.portfolio.maxConsecutiveMinWithdrawals = 0;
+    p.portfolio.minWithdrawalPlanRecoveryYears = 0;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals.every((w) => w === 80_000)).toBe(true);
+  });
+
+  it('caps forced-plan spending at the remaining balance', () => {
+    const p = recoveryParams({ numYears: 3 });
+    p.portfolio.start = 150_000;
+    p.portfolio.maxConsecutiveMinWithdrawals = 1;
+    p.portfolio.minWithdrawalPlanRecoveryYears = 1;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(80_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(70_000, 3);
+  });
+
+  it('does not count deposit years toward the consecutive-min streak', () => {
+    const p = recoveryParams({ numYears: 4 });
+    p.portfolio.strategy = 'specific';
+    p.portfolio.specificWithdrawals = [-50_000, 100_000, 100_000, 100_000];
+    p.portfolio.base = 0;
+    p.portfolio.start = 1_000_000;
+    p.portfolio.floorBalance = 5_000_000;
+    p.portfolio.floorPenalty = 0.5;
+    p.portfolio.withdrawalFloorSeries = [0, 80_000, 80_000, 80_000];
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: -100, bal: 0, adj: 0 };
+    p.dynConfig.med = { ret: 0, bal: 1e12, adj: 0 };
+    p.dynConfig.high = { ret: 100, bal: 1e12, adj: 0 };
+    p.portfolio.maxConsecutiveMinWithdrawals = 2;
+    p.portfolio.minWithdrawalPlanRecoveryYears = 1;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(-50_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(80_000, 3);
+    expect(s.path.withdrawals[2]).toBeCloseTo(80_000, 3);
+    expect(s.path.withdrawals[3]).toBeCloseTo(100_000, 3);
+  });
+});
+
 describe('tiered gifting', () => {
   function giftingParams(overrides = {}) {
     return {
@@ -931,6 +1065,19 @@ describe('tiered gifting', () => {
     p.dynConfig.enabled = true;
     const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
     expect(s.path.withdrawals[0]).toBeCloseTo(91_666.667, 2);
+    expect(s.path.unadjustedWithdrawals[0]).toBeCloseTo(100_000, 3);
+  });
+
+  it('skips the gift when only the minimum floor was met, not the plan', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.start = 3_000_000;
+    p.portfolio.withdrawalFloorSeries = [80_000];
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: 0, bal: 0, adj: -50_000 };
+    p.dynConfig.med = { ret: 0, bal: 0, adj: -50_000 };
+    p.dynConfig.high = { ret: 0, bal: 0, adj: -50_000 };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(80_000, 3);
     expect(s.path.unadjustedWithdrawals[0]).toBeCloseTo(100_000, 3);
   });
 

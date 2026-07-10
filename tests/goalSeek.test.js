@@ -294,14 +294,18 @@ describe('plannedScheduleTotal', () => {
     expect(plannedScheduleTotal(portfolio, 5)).toBe(540_000);
   });
 
-  it('applies spend-change rate and minimum-withdrawal floors', () => {
+  it('does not fold minimum-withdrawal floors into the planned schedule', () => {
     const portfolio = {
       base: 100_000,
       spendingOverTimeSeries: spendingSeries(5, [{ changePct: -2, extra: 0 }]),
       withdrawalFloorSeries: [120_000, 120_000, 0, 0, 0],
     };
-    // year 0: max(100k, 120k) = 120k; year 1: max(98k, 120k) = 120k; rest decline
-    const expected = 120_000 + 120_000 + 100_000 * 0.98 ** 2 + 100_000 * 0.98 ** 3 + 100_000 * 0.98 ** 4;
+    // Plan follows the schedule only; floors are backstops at run time.
+    const expected = 100_000
+      + 100_000 * 0.98
+      + 100_000 * 0.98 ** 2
+      + 100_000 * 0.98 ** 3
+      + 100_000 * 0.98 ** 4;
     expect(plannedScheduleTotal(portfolio, 5)).toBeCloseTo(expected, 0);
   });
 

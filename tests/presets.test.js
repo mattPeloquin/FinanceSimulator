@@ -49,6 +49,14 @@ describe('preset files', () => {
     }
   });
 
+  it('steps max consecutive minimums up from conservative to aggressive', () => {
+    const streaks = PRESETS.map((p) => p.scenario.maxConsecutiveMinWithdrawals);
+    expect(streaks).toEqual([2, 2, 3, 3, 4]);
+    for (const preset of PRESETS) {
+      expect(preset.scenario.minWithdrawalPlanRecoveryYears, preset.name).toBe(2);
+    }
+  });
+
   it('only uses allowed scenario keys, and they are real scenario fields', () => {
     for (const preset of PRESETS) {
       for (const key of Object.keys(preset.scenario)) {
@@ -122,7 +130,7 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 0, extra: 99 },
       ],
     });
-    expect(out.withdrawalFloors).toEqual([{ amount: 34 }]);
+    expect(out.withdrawalFloors).toEqual([{ amount: 51 }]);
     expect(out.dynLowBal).toBe(1000);
     expect(out.dynMedBal).toBe(3000);
     expect(out.dynHighBal).toBe(5000);
@@ -148,8 +156,8 @@ describe('computeDerivedPresetValues', () => {
       includePlanFields: true,
     });
     expect(out.baseWithdrawal).toBe(100);
-    expect(out.floorBalance).toBe(2000);
-    expect(out.ceilingBalance).toBe(4000);
+    expect(out.floorBalance).toBe(1600);
+    expect(out.ceilingBalance).toBe(2400);
     expect(out.floorPenalty).toBe(50);
     expect(out.ceilingBonus).toBe(50);
     expect(out.dynLowAdj).toBe(-33);
@@ -225,7 +233,7 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 1, extra: 55 },
       ],
     });
-    expect(out.withdrawalFloors).toEqual([{ amount: 34, years: 5 }, { amount: 44 }]);
+    expect(out.withdrawalFloors).toEqual([{ amount: 51, years: 5 }, { amount: 44 }]);
     expect(out.giftingTiers).toEqual([
       { amount: 30, balance: 3990, years: 3 },
       { amount: 5, balance: 500 },

@@ -506,6 +506,26 @@ describe('validateScenario', () => {
     expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(false);
   });
 
+  it('flags a minimum withdrawal at or above the base withdrawal', () => {
+    const s = defaultScenario();
+    s.withdrawalStrategy = 'base';
+    s.baseWithdrawal = 80;
+    s.withdrawalFloors = [{ amount: 80 }];
+    expect(validateScenario(s, range).some((e) => e.includes('below your base withdrawal'))).toBe(true);
+    s.withdrawalFloors = [{ amount: 60 }];
+    expect(validateScenario(s, range).some((e) => e.includes('below your base withdrawal'))).toBe(false);
+  });
+
+  it('flags a Specific List minimum at or above 100% of plan', () => {
+    const s = defaultScenario();
+    s.withdrawalStrategy = 'specific';
+    s.specificWithdrawals = '80\n85';
+    s.specificWithdrawalFloors = [{ pct: 100 }];
+    expect(validateScenario(s, range).some((e) => e.includes('below 100%'))).toBe(true);
+    s.specificWithdrawalFloors = [{ pct: 80 }];
+    expect(validateScenario(s, range).some((e) => e.includes('below 100%'))).toBe(false);
+  });
+
   it('allows gifting tiers that exceed the simulation horizon', () => {
     const s = defaultScenario();
     s.numYears = 10;

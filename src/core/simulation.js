@@ -87,8 +87,8 @@ function matVec(L, v) {
 
 // The unadjusted per-year withdrawal plan the glide path must keep funding —
 // mirrors the year loop's own `unadjustedTarget` derivation (schedule or
-// specific-list amount, clamped at 0 for non-deposit years, then floored by
-// the minimum-withdrawal series) so the glide path and the plan never drift.
+// specific-list amount, clamped at 0 for non-deposit years). The minimum
+// withdrawal floor is applied later in the year loop, not here.
 function buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears) {
   const isSpecific = portfolio.strategy === 'specific';
   const plan = new Array(horizonYears);
@@ -96,8 +96,6 @@ function buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears
     const baseVal = isSpecific ? fittedWithdrawals[j] : portfolio.base;
     let target = isSpecific ? fittedWithdrawals[j] : baseSchedule[j];
     if (baseVal >= 0 && target < 0) target = 0;
-    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
-    if (target >= 0 && yearFloor > 0) target = Math.max(target, yearFloor);
     plan[j] = target;
   }
   return plan;
@@ -179,6 +177,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
           portfolio.glideRate ?? 0,
         )
       : null;
+
+  // Consecutive-min → force-plan recovery: after X years at the minimum
+  // backstop, spend at least the plan for the next Y years (still balance-capped).
+  const maxConsecutiveMin = portfolio.maxConsecutiveMinWithdrawals ?? 0;
+  const planRecoveryYears = portfolio.minWithdrawalPlanRecoveryYears ?? 0;
+  const minRecoveryEnabled = maxConsecutiveMin > 0 && planRecoveryYears > 0;
+  let consecutiveMinYears = 0;
+  let forcedPlanYearsRemaining = 0;
 
   // Log-normal setup (only used when distMethod === 'lognormal').
   // Assets/inflation ordered to match the correlation Cholesky factor.
@@ -350,18 +356,37 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     }
 
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
-    if (unadjustedTarget >= 0 && yearFloor > 0) {
-      unadjustedTarget = Math.max(unadjustedTarget, yearFloor);
-    }
+    const plan = unadjustedTarget;
 
     let actualWithdrawal;
     if (targetWithdrawal < 0) {
-      // Negative target = deposit (adds to balance); floor does not apply.
+      // Negative target = deposit (adds to balance); floor and min-recovery do not apply.
       actualWithdrawal = targetWithdrawal;
       balance -= actualWithdrawal;
     } else {
-      if (yearFloor > 0) {
-        targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
+      if (minRecoveryEnabled && forcedPlanYearsRemaining > 0) {
+        // Recovery window: spend at least the plan even if adjustments cut lower.
+        targetWithdrawal = Math.max(targetWithdrawal, plan);
+        forcedPlanYearsRemaining--;
+        consecutiveMinYears = 0;
+      } else {
+        const preFloorTarget = targetWithdrawal;
+        if (yearFloor > 0) {
+          targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
+        }
+        if (minRecoveryEnabled && yearFloor > 0 && plan > yearFloor) {
+          if (preFloorTarget < yearFloor) {
+            consecutiveMinYears++;
+            if (consecutiveMinYears >= maxConsecutiveMin) {
+              forcedPlanYearsRemaining = planRecoveryYears;
+              consecutiveMinYears = 0;
+            }
+          } else {
+            consecutiveMinYears = 0;
+          }
+        } else if (minRecoveryEnabled) {
+          consecutiveMinYears = 0;
+        }
       }
       actualWithdrawal = Math.min(balance, targetWithdrawal);
       balance -= actualWithdrawal;

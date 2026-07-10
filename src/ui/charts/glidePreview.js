@@ -9,18 +9,12 @@ import {
   parseCurrency,
   MONEY_SCALE,
   toDollars,
-  normalizeWithdrawalFloors,
-  readWithdrawalFloorsFromDom,
   normalizeSpendingOverTimeTiers,
   readSpendingOverTimeTiersFromDom,
-  normalizeSpecificWithdrawalFloors,
-  readSpecificWithdrawalFloorsFromDom,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
 } from '../../state/scenario.js';
 import {
-  buildWithdrawalFloorSeries,
-  buildSpecificWithdrawalFloorSeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
   buildGlideRequiredBalances,
@@ -48,20 +42,12 @@ function readGlideInputsFromForm() {
 
 // The unadjusted per-year plan the glide path must keep funding — mirrors the
 // engine's unadjustedTarget (schedule or specific list, clamped at 0 for
-// non-deposit years, then floored by the minimum-withdrawal series).
+// non-deposit years). The minimum floor is applied at run time, not here.
 function readPlanFromForm({ numYears, strategy }) {
   if (strategy === 'specific') {
     const raw = document.getElementById('specificWithdrawals')?.value ?? '';
     const amounts = fitSpecificWithdrawalsToHorizon(parseSpecificWithdrawals(raw), numYears);
-    const floorSeries = buildSpecificWithdrawalFloorSeries(
-      normalizeSpecificWithdrawalFloors(readSpecificWithdrawalFloorsFromDom()),
-      amounts,
-      numYears,
-    );
-    return amounts.map((amount, j) => {
-      const yearFloor = floorSeries[j] ?? 0;
-      return amount >= 0 && yearFloor > 0 ? Math.max(amount, yearFloor) : amount;
-    });
+    return amounts.map((amount) => amount);
   }
 
   const base = parseCurrency(document.getElementById('baseWithdrawal')?.value) * MONEY_SCALE;
@@ -70,19 +56,7 @@ function readPlanFromForm({ numYears, strategy }) {
     numYears,
     toDollars,
   );
-  const floorSeries = buildWithdrawalFloorSeries(
-    normalizeWithdrawalFloors(readWithdrawalFloorsFromDom()),
-    numYears,
-    toDollars,
-  );
-  const amounts = buildBaseWithdrawalSchedule(base, spendingSeries, numYears);
-  for (let j = 0; j < numYears; j++) {
-    const yearFloor = floorSeries[j] ?? 0;
-    if (amounts[j] >= 0 && yearFloor > 0) {
-      amounts[j] = Math.max(amounts[j], yearFloor);
-    }
-  }
-  return amounts;
+  return buildBaseWithdrawalSchedule(base, spendingSeries, numYears);
 }
 
 function buildChart(canvas, required, target) {

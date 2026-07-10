@@ -49,6 +49,10 @@ export const PRESET_SCENARIO_KEYS = [
   'dynMedRet',
   'dynHighRet',
   'glideRate',
+  // Consecutive years at the minimum before forcing spending back to plan,
+  // and how many years that recovery stretch lasts (0 = off).
+  'maxConsecutiveMinWithdrawals',
+  'minWithdrawalPlanRecoveryYears',
 ];
 
 // Scalar scenario keys whose values are computed from the derived formulas

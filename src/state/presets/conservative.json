@@ -20,7 +20,9 @@
     "dynLowRet": -10,
     "dynMedRet": 5,
     "dynHighRet": 30,
-    "glideRate": -3
+    "glideRate": -3,
+    "maxConsecutiveMinWithdrawals": 2,
+    "minWithdrawalPlanRecoveryYears": 2
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 70,
