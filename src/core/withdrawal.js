@@ -230,6 +230,31 @@ export function buildGiftingSeries(tiers, numYears, toDollarsFn) {
   return series;
 }
 
+// Build a per-year major-events cashflow series from independent event rows.
+// Each event carries a signed amount in $000s, a 1-based start year, and an
+// optional consecutive year count (blank/null = one-time). Positive amounts
+// are inflows (house sale, inheritance); negative amounts are extra payments
+// on top of that year's spending plan. Overlapping events in the same year sum.
+export function buildMajorEventsSeries(events, numYears, toDollarsFn) {
+  const series = new Array(numYears).fill(0);
+  if (numYears <= 0 || !events || events.length === 0) return series;
+
+  for (const event of events) {
+    const amount = toDollarsFn(event.amount);
+    if (amount === 0) continue;
+
+    const startIndex = Math.max(0, (event.startYear ?? 1) - 1);
+    const span = event.years ?? 1;
+    for (let k = 0; k < span; k++) {
+      const j = startIndex + k;
+      if (j < numYears) {
+        series[j] += amount;
+      }
+    }
+  }
+  return series;
+}
+
 // Build per-year gift ceiling values for the schedule preview chart.
 // Shows baseline + gift amount where the tier gift is positive; null otherwise.
 export function buildGiftOverlaySeries(baselineAmounts, giftAmounts) {

@@ -16,7 +16,7 @@ function clampToWithdrawals(values) {
   return values.map((v) => Math.max(0, v));
 }
 
-export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, { floorStepped = true, giftAmounts = null } = {}) {
+export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, { floorStepped = true, giftAmounts = null, eventAmounts = null } = {}) {
   const theme = getChartTheme();
   const labels = amounts.map((_, i) => String(i + 1));
   const displayAmounts = clampToWithdrawals(amounts);
@@ -26,6 +26,11 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, {
     ? buildGiftOverlaySeries(displayAmounts, giftAmounts)
     : null;
   const showGift = giftOverlay?.some((v) => v != null);
+  const events = Array.isArray(eventAmounts) ? eventAmounts : null;
+  const eventMarkers = events
+    ? displayAmounts.map((y, j) => (events[j] !== 0 ? y : null))
+    : null;
+  const showEvents = eventMarkers?.some((v) => v != null);
 
   const datasets = [
     {
@@ -75,6 +80,21 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, {
     });
   }
 
+  if (showEvents) {
+    datasets.push({
+      label: 'Event',
+      data: eventMarkers,
+      showLine: false,
+      spanGaps: false,
+      borderColor: theme.eventMarker,
+      backgroundColor: theme.eventMarker,
+      pointRadius: 5,
+      pointHoverRadius: 6,
+      fill: false,
+      order: 3,
+    });
+  }
+
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: { labels, datasets },
@@ -105,6 +125,12 @@ export function buildSchedulePreviewChart(canvas, amounts, floorSeries = null, {
             label: (ctx) => {
               if (ctx.dataset.label === 'Minimum') return `Minimum: ${formatK(ctx.parsed.y)}k`;
               if (ctx.dataset.label === 'Gift') return `Gift ceiling: ${formatK(ctx.parsed.y)}k`;
+              if (ctx.dataset.label === 'Event') {
+                const ev = events?.[ctx.dataIndex] ?? 0;
+                if (!ev) return null;
+                const sign = ev > 0 ? '+' : '';
+                return `Event: ${sign}${formatK(ev)}k`;
+              }
               return `Withdrawal: ${formatK(ctx.parsed.y)}k`;
             },
           },

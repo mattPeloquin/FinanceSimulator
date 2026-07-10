@@ -1,6 +1,6 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom, readSpendingOverTimeTiersFromDom, writeSpendingOverTimeTiersToDom } from '../state/scenario.js';
+import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom, readSpendingOverTimeTiersFromDom, writeSpendingOverTimeTiersToDom, readMajorEventsFromDom, writeMajorEventsToDom } from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
@@ -437,6 +437,40 @@ export function setupGiftingTierList({ onChange }) {
   }, true);
 }
 
+export function setupMajorEventsList({ onChange }) {
+  const list = document.getElementById('majorEventsList');
+  const addBtn = document.getElementById('addMajorEvent');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const events = readMajorEventsFromDom();
+    events.push({ amount: 0, startYear: 1, years: null });
+    writeMajorEventsToDom(events);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-major-event');
+    if (!btn) return;
+    const events = readMajorEventsFromDom();
+    events.splice(Number(btn.closest('[data-major-event-row]')?.dataset.majorEventRow), 1);
+    writeMajorEventsToDom(events);
+    notify();
+  });
+
+  list.addEventListener('change', notify);
+  list.addEventListener('input', notify);
+
+  list.addEventListener('blur', (e) => {
+    if (e.target.matches('[data-major-event-amount]')) {
+      formatWithdrawalFloorCurrencyInput(e.target);
+      notify();
+    }
+  }, true);
+}
+
 export function renderYearLabels(years) {
   const container = document.getElementById('year-labels');
   let html = '';
@@ -682,6 +716,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   setupSpecificWithdrawalFloorList({ onChange: notify });
   setupSpendingOverTimeTierList({ onChange: notify });
   setupGiftingTierList({ onChange: notify });
+  setupMajorEventsList({ onChange: notify });
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever
   // a tier is typed into, added, or removed. Registered after
@@ -743,6 +778,16 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       syncBaseWithdrawalPreview();
       syncWithdrawalPreviewFromForm();
     });
+  }
+
+  const majorEventsList = document.getElementById('majorEventsList');
+  if (majorEventsList) {
+    majorEventsList.addEventListener('input', syncBaseWithdrawalPreview);
+    majorEventsList.addEventListener('click', syncBaseWithdrawalPreview);
+  }
+  const addMajorEventBtn = document.getElementById('addMajorEvent');
+  if (addMajorEventBtn) {
+    addMajorEventBtn.addEventListener('click', syncBaseWithdrawalPreview);
   }
 
   setupAccordionResize();

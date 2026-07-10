@@ -146,6 +146,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   // Per-year actual withdrawals — used to score each run by median yearly spending.
   const yearlyWithdrawals = new Array(horizonYears);
 
+  // Parallel IRR-only track: same market returns, but major-event inflows never
+  // land on the balance and event outflows are stripped from cash flows so IRR
+  // measures market timing, not house sales or known large payments.
+  let irrBalance = portfolio.start;
+  const irrYearlyWithdrawals = new Array(horizonYears);
+
   const sampleYears = samples ? samples.years : null;
   const sampleLen = sampleYears ? sampleYears.length : 0;
 
@@ -311,6 +317,15 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     totalRealGrowthFactor *= 1 + realReturn;
 
     balance = balance * (1 + realReturn);
+    irrBalance *= 1 + realReturn;
+
+    // Major events: inflows land on the portfolio after growth, before the
+    // year's withdrawal is computed. Outflows are applied later (after the
+    // minimum floor) so known payments sit on top of the spending plan.
+    const eventAmount = portfolio.majorEventsSeries?.[j] ?? 0;
+    if (portfolio.strategy !== 'specific' && eventAmount > 0) {
+      balance += eventAmount;
+    }
 
     const adjAmount = dynConfig.enabled 
       ? resolveAdjustment(balance, portfolioReturn * 100, dynConfig) 
@@ -388,6 +403,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
           consecutiveMinYears = 0;
         }
       }
+      // Known large payments from major events (negative amounts) are mandatory
+      // on top of the plan and floor — still capped by balance below.
+      if (portfolio.strategy !== 'specific' && eventAmount < 0) {
+        targetWithdrawal += -eventAmount;
+      }
       actualWithdrawal = Math.min(balance, targetWithdrawal);
       balance -= actualWithdrawal;
     }
@@ -406,6 +426,21 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
     totalWithdrawn += actualWithdrawal;
     yearlyWithdrawals[j] = actualWithdrawal;
+
+    // Shadow IRR cash flows: strip major-event outflows; inflows never entered
+    // actualWithdrawal and are not added to irrBalance above.
+    let irrWithdrawal = actualWithdrawal;
+    if (portfolio.strategy !== 'specific' && eventAmount < 0) {
+      irrWithdrawal = Math.max(0, actualWithdrawal + eventAmount);
+    }
+    if (irrWithdrawal < 0) {
+      irrBalance -= irrWithdrawal;
+    } else {
+      irrWithdrawal = Math.min(irrBalance, irrWithdrawal);
+      irrBalance -= irrWithdrawal;
+    }
+    irrYearlyWithdrawals[j] = irrWithdrawal;
+
     if (earlyWindow > 0 && j < earlyWindow) {
       earlyWithdrawn += actualWithdrawal;
     }
@@ -427,7 +462,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   }
 
   const avgReturn = horizonYears > 0 ? totalRealGrowthFactor ** (1 / horizonYears) - 1 : 0;
-  const irr = irrFromPath(portfolio.start, yearlyWithdrawals, balance, avgReturn);
+  const irr = irrFromPath(portfolio.start, irrYearlyWithdrawals, irrBalance, avgReturn);
 
   const summary = {
     avgReturn,

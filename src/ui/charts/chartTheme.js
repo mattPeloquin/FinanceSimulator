@@ -35,6 +35,8 @@ function buildChartTheme(mode) {
     // Thin dotted line for the gift ceiling above the planned withdrawal.
     // Softer than status.success so it reads as a guide, not a bright highlight.
     giftLine: mode === 'dark' ? '#5d9a6a' : hex('percentile.p40'),
+    // Marker dots for major cash events on the base schedule preview.
+    eventMarker: mode === 'dark' ? '#d4a853' : '#b8860b',
   };
 }
 

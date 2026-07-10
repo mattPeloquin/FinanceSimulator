@@ -1137,3 +1137,87 @@ describe('tiered gifting', () => {
     expect(w[3]).toBeCloseTo(150_000, 3);
   });
 });
+
+describe('major events (base strategy)', () => {
+  function flatParams() {
+    return {
+      numYears: 2,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        strategy: 'base',
+        start: 1_000_000,
+        base: 100_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(2, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [0, 0],
+        majorEventsSeries: [0, 0],
+      },
+      dynConfig: { enabled: false, low: { ret: 0, bal: 0, adj: 0 }, med: { ret: 0, bal: 0, adj: 0 }, high: { ret: 0, bal: 0, adj: 0 } },
+      samples: null,
+    };
+  }
+
+  it('adds an inflow to the balance before that year\'s withdrawal', () => {
+    const p = flatParams();
+    p.portfolio.majorEventsSeries = [500_000, 0];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(100_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_400_000, 3);
+  });
+
+  it('adds an outflow on top of the spending plan', () => {
+    const p = flatParams();
+    p.portfolio.majorEventsSeries = [0, -50_000];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawals[0]).toBeCloseTo(100_000, 3);
+    expect(s.path.withdrawals[1]).toBeCloseTo(150_000, 3);
+    expect(s.path.balances[2]).toBeCloseTo(750_000, 3);
+  });
+
+  it('ignores major events when using a specific list', () => {
+    const p = flatParams();
+    p.portfolio.strategy = 'specific';
+    p.portfolio.specificWithdrawals = [100_000, 100_000];
+    p.portfolio.majorEventsSeries = [500_000, 0];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.balances[1]).toBeCloseTo(900_000, 3);
+  });
+
+  it('keeps IRR unchanged when a major inflow is present', () => {
+    const baseline = flatParams();
+    const withInflow = flatParams();
+    withInflow.portfolio.majorEventsSeries = [500_000, 0];
+    const rng = createRng(deriveSeed(1, 0));
+    const baseResult = simulatePath(baseline, rng, true);
+    const inflowResult = simulatePath(withInflow, createRng(deriveSeed(1, 0)), true);
+    expect(inflowResult.irr).toBeCloseTo(baseResult.irr, 10);
+    expect(inflowResult.avgReturn).toBeCloseTo(baseResult.avgReturn, 10);
+    expect(inflowResult.path.balances[1]).not.toBeCloseTo(baseResult.path.balances[1], 3);
+  });
+
+  it('keeps IRR unchanged when a major outflow is present', () => {
+    const baseline = flatParams();
+    const withOutflow = flatParams();
+    withOutflow.portfolio.majorEventsSeries = [0, -50_000];
+    const baseResult = simulatePath(baseline, createRng(deriveSeed(1, 0)), true);
+    const outflowResult = simulatePath(withOutflow, createRng(deriveSeed(1, 0)), true);
+    expect(outflowResult.irr).toBeCloseTo(baseResult.irr, 10);
+    expect(outflowResult.avgReturn).toBeCloseTo(baseResult.avgReturn, 10);
+    expect(outflowResult.path.withdrawals[1]).not.toBeCloseTo(baseResult.path.withdrawals[1], 3);
+  });
+});

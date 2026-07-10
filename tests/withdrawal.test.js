@@ -7,6 +7,7 @@ import {
   buildGiftOverlaySeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
+  buildMajorEventsSeries,
   buildGlideRequiredBalances,
   getDynamicAdjustment,
   resolveAdjustment,
@@ -241,6 +242,46 @@ describe('buildGiftingSeries', () => {
       { amount: 25_000, balanceThreshold: 2_000_000 },
       { amount: 25_000, balanceThreshold: 2_000_000 },
       { amount: 25_000, balanceThreshold: 2_000_000 },
+    ]);
+  });
+});
+
+describe('buildMajorEventsSeries', () => {
+  it('returns zeros for an empty event list', () => {
+    expect(buildMajorEventsSeries([], 4, toDollars)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('places a one-time inflow on the start year', () => {
+    expect(buildMajorEventsSeries([{ amount: 250, startYear: 3, years: null }], 5, toDollars)).toEqual([
+      0, 0, 250_000, 0, 0,
+    ]);
+  });
+
+  it('repeats an event for consecutive years', () => {
+    expect(buildMajorEventsSeries([{ amount: 50, startYear: 2, years: 3 }], 6, toDollars)).toEqual([
+      0, 50_000, 50_000, 50_000, 0, 0,
+    ]);
+  });
+
+  it('sums overlapping events in the same year', () => {
+    const events = [
+      { amount: 100, startYear: 1, years: null },
+      { amount: 25, startYear: 1, years: 2 },
+    ];
+    expect(buildMajorEventsSeries(events, 3, toDollars)).toEqual([
+      125_000, 25_000, 0,
+    ]);
+  });
+
+  it('clips events that extend past the horizon', () => {
+    expect(buildMajorEventsSeries([{ amount: 10, startYear: 4, years: 5 }], 5, toDollars)).toEqual([
+      0, 0, 0, 10_000, 10_000,
+    ]);
+  });
+
+  it('supports negative outflow amounts', () => {
+    expect(buildMajorEventsSeries([{ amount: -80, startYear: 1, years: null }], 2, toDollars)).toEqual([
+      -80_000, 0,
     ]);
   });
 });

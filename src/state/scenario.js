@@ -7,7 +7,7 @@
 
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
-import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries } from '../core/withdrawal.js';
+import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries, buildMajorEventsSeries } from '../core/withdrawal.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
@@ -593,6 +593,99 @@ export function writeSpendingOverTimeTiersToDom(tiers, doc = document) {
   });
 }
 
+/** Normalize major-event rows; missing or empty list means no events. */
+export function normalizeMajorEvents(events) {
+  if (!Array.isArray(events) || events.length === 0) return [];
+  return events.map((event) => {
+    const amount = parseCurrency(event?.amount);
+    const startYear = parseInt(event?.startYear, 10);
+    const yearsRaw = event?.years;
+    let years = null;
+    if (yearsRaw !== null && yearsRaw !== undefined && yearsRaw !== '') {
+      const parsed = parseInt(yearsRaw, 10);
+      years = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    }
+    return {
+      amount,
+      startYear: Number.isFinite(startYear) && startYear >= 1 ? startYear : 1,
+      years,
+    };
+  });
+}
+
+export function readMajorEventsFromDom(doc = document) {
+  const list = doc.getElementById('majorEventsList');
+  if (!list) return normalizeMajorEvents(SCENARIO_DEFAULTS.majorEvents);
+
+  const rows = list.querySelectorAll('[data-major-event-row]');
+  if (rows.length === 0) return [];
+
+  const events = [];
+  rows.forEach((row) => {
+    const amountInput = row.querySelector('[data-major-event-amount]');
+    const startInput = row.querySelector('[data-major-event-start]');
+    const yearsInput = row.querySelector('[data-major-event-years]');
+    const amount = parseCurrency(amountInput?.value);
+    const startYear = parseInt(startInput?.value, 10);
+    const yearsRaw = yearsInput?.value;
+    const years = yearsRaw === '' || yearsRaw == null
+      ? null
+      : parseInt(yearsRaw, 10);
+    events.push({
+      amount,
+      startYear: Number.isFinite(startYear) ? startYear : 1,
+      years: Number.isFinite(years) ? years : null,
+    });
+  });
+  return events;
+}
+
+export function writeMajorEventsToDom(events, doc = document) {
+  const list = doc.getElementById('majorEventsList');
+  if (!list) return;
+
+  const normalized = normalizeMajorEvents(events);
+  list.innerHTML = '';
+
+  normalized.forEach((event, index) => {
+    const row = doc.createElement('div');
+    row.className = 'flex flex-wrap items-end gap-2 mb-2';
+    row.dataset.majorEventRow = String(index);
+
+    const amountWrap = doc.createElement('div');
+    amountWrap.className = 'flex-1 min-w-[7rem]';
+    amountWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Amount</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" data-major-event-amount class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(event.amount)}">
+        <span class="input-adorn-suffix">000s</span>
+      </div>`;
+    row.appendChild(amountWrap);
+
+    const startWrap = doc.createElement('div');
+    startWrap.className = 'w-20';
+    startWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Start year</label>
+      <input type="number" data-major-event-start min="1" step="1" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${event.startYear ?? 1}">`;
+    row.appendChild(startWrap);
+
+    const yearsWrap = doc.createElement('div');
+    yearsWrap.className = 'w-20';
+    yearsWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+      <input type="number" data-major-event-years min="1" step="1" placeholder="once" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${event.years ?? ''}">`;
+    row.appendChild(yearsWrap);
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-major-event text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
+    removeBtn.textContent = 'Remove';
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
+}
+
 /** Write Goal Seek's discovered first-tier extra withdrawal back into the form. */
 export function writeFirstSpendingTierExtra(dollars, doc = document) {
   const input = doc.querySelector('[data-spending-tier-row="0"] [data-spending-extra]');
@@ -650,6 +743,7 @@ export function readScenarioFromDom(doc = document) {
   scenario.specificWithdrawalFloors = readSpecificWithdrawalFloorsFromDom(doc);
   scenario.giftingTiers = readGiftingTiersFromDom(doc);
   scenario.spendingOverTimeTiers = readSpendingOverTimeTiersFromDom(doc);
+  scenario.majorEvents = readMajorEventsFromDom(doc);
 
   return scenario;
 }
@@ -675,6 +769,7 @@ const TIER_WRITERS = {
   specificWithdrawalFloors: writeSpecificWithdrawalFloorsToDom,
   giftingTiers: writeGiftingTiersToDom,
   spendingOverTimeTiers: writeSpendingOverTimeTiersToDom,
+  majorEvents: writeMajorEventsToDom,
 };
 
 // Write only the scenario keys present in `patch` back into the DOM. Handles
@@ -892,6 +987,13 @@ export function buildSimParams(scenario, samples) {
         maxYears,
         toDollars,
       ),
+      majorEventsSeries: scenario.withdrawalStrategy === 'specific'
+        ? new Array(maxYears).fill(0)
+        : buildMajorEventsSeries(
+            normalizeMajorEvents(scenario.majorEvents),
+            maxYears,
+            toDollars,
+          ),
       maxConsecutiveMinWithdrawals: Math.max(0, parseInt(scenario.maxConsecutiveMinWithdrawals, 10) || 0),
       minWithdrawalPlanRecoveryYears: Math.max(0, parseInt(scenario.minWithdrawalPlanRecoveryYears, 10) || 0),
     },
@@ -1180,6 +1282,20 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     if (tier.amount > 0 && tier.balance <= 0) {
       errors.push('Gifting tiers with a positive gift amount need a positive balance threshold.');
       break;
+    }
+  }
+
+  if (scenario.withdrawalStrategy !== 'specific') {
+    const majorEvents = normalizeMajorEvents(scenario.majorEvents);
+    for (const event of majorEvents) {
+      if (!Number.isFinite(event.startYear) || event.startYear < 1) {
+        errors.push('Each major event must start in year 1 or later.');
+        break;
+      }
+      if (event.years != null && (!Number.isFinite(event.years) || event.years < 1)) {
+        errors.push('Major event duration must be blank (one-time) or at least 1 year.');
+        break;
+      }
     }
   }
 

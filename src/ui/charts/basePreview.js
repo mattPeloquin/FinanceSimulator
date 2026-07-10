@@ -14,12 +14,15 @@ import {
   readGiftingTiersFromDom,
   normalizeSpendingOverTimeTiers,
   readSpendingOverTimeTiersFromDom,
+  normalizeMajorEvents,
+  readMajorEventsFromDom,
 } from '../../state/scenario.js';
 import {
   buildWithdrawalFloorSeries,
   buildGiftingSeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
+  buildMajorEventsSeries,
 } from '../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
 import { onThemeChange } from '../theme.js';
@@ -77,11 +80,16 @@ function renderPreview() {
     toDollars,
   );
   const giftAmounts = giftingSeries.map((entry) => entry.amount);
+  const eventAmounts = buildMajorEventsSeries(
+    normalizeMajorEvents(readMajorEventsFromDom()),
+    scheduleInputs.numYears,
+    toDollars,
+  );
   if (previewChart) {
     previewChart.destroy();
     previewChart = null;
   }
-  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries, { giftAmounts });
+  previewChart = buildSchedulePreviewChart(canvas, amounts, floorSeries, { giftAmounts, eventAmounts });
   renderSchedulePreviewTotal('baseWithdrawalPreviewTotal', amounts);
 }
 

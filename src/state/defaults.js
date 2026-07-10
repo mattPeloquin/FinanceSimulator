@@ -126,6 +126,11 @@ export const BASE_DEFAULTS = {
     { changePct: 0, extra: 0 },
   ],
 
+  // One-time or recurring major cash events (Base strategy only). Each entry:
+  // signed amount ($000s), 1-based start year, optional consecutive years
+  // (blank = one-time). Positive = inflow; negative = extra payment out.
+  majorEvents: [],
+
   // Year-by-year withdrawal list. Used when withdrawalStrategy is 'specific'.
   // Paste-friendly text; negative = deposit. Leave empty when using 'base'.
   specificWithdrawals: '',
