@@ -3,10 +3,10 @@
 // Each level is a JSON file with two sections:
 //   scenario — a subset of the save/restore scenario keys, applied verbatim.
 //              These configure the Goal Seek search (success %, risk tolerance,
-//              levers), the return model, the asset mix, and the market-return
-//              triggers. The actual spending plan (base withdrawal, spending
-//              adjustments, glide path) is NOT stored here — Goal Seek finds it
-//              when the user clicks Run.
+//              levers), the return model, the asset mix, the market-return
+//              triggers, and glide spend timing. The actual spending plan (base
+//              withdrawal, spending adjustments, glide spend rate) is NOT stored
+//              here — Goal Seek finds it when the user clicks Run.
 //   derived  — formula parameters for values that scale with the user's own
 //              starting balance / time horizon (minimum withdrawal, gifting,
 //              balance triggers, target ending balance, spending timeline).
@@ -49,6 +49,7 @@ export const PRESET_SCENARIO_KEYS = [
   'dynLowRet',
   'dynMedRet',
   'dynHighRet',
+  'glideRate',
 ];
 
 // Scalar scenario keys whose values are computed from the derived formulas
@@ -58,6 +59,10 @@ export const PRESET_DERIVED_SCALAR_KEYS = [
   'dynMedBal',
   'dynHighBal',
   'goalSeekTargetEndingBalance',
+  // Kept in lockstep with Goal Seek's target: Goal Seek pins the glide target
+  // to that value when the lever is included, and Easy Mode should show the
+  // same number in the Glide-path Target field before a search runs.
+  'glideTarget',
 ];
 
 // Everything the slider writes — used by the UI to decide which manual edits
@@ -102,8 +107,8 @@ function isPositiveFinite(n) {
  * @param context {
  *   startThousands — current starting portfolio ($000s); if not > 0, all
  *                    balance-derived writes are skipped (current values kept),
- *   numYears       — current horizon; if not > 0, the spending-timeline write
- *                    is skipped,
+ *   numYears       — current horizon; if not > 0, the minimum-withdrawal and
+ *                    spending-timeline writes are skipped,
  *   withdrawalFloors / giftingTiers / spendingOverTimeTiers — the CURRENT tier
  *                    lists to patch (arrays; may be empty/missing).
  * }
@@ -121,10 +126,23 @@ export function computeDerivedPresetValues(preset, {
   const hasStart = isPositiveFinite(startThousands);
   const hasYears = isPositiveFinite(numYears);
 
-  // --- Minimum withdrawal: first tier = X% of the starting portfolio. ------
-  // e.g. Balanced 3.3333% of a 3,000 start → a 100/yr spending floor.
-  if (hasStart && isPositiveFinite(d.minWithdrawalPctOfStart)) {
-    const amount = Math.round(startThousands * (d.minWithdrawalPctOfStart / 100));
+  // --- Minimum withdrawal: first tier = a lifetime floor spread over the
+  // horizon. lifetimePctOfStart is the total minimum spending (as % of start)
+  // guaranteed across all years; the annual amount is that total ÷ years.
+  // e.g. Balanced 40% of a 3,000 start over 35 years → 34/yr.
+  // Conservative uses a higher lifetime % (steadier cash flow); Aggressive a
+  // lower one (more willing to cut spending in bad markets). The absolute
+  // levels stay modest so Conservative's high success + high ending-balance
+  // targets remain Goal-Seek feasible.
+  if (
+    hasStart
+    && hasYears
+    && isPositiveFinite(d.minWithdrawalLifetimePctOfStart)
+  ) {
+    const amount = Math.max(
+      0,
+      Math.round(startThousands * (d.minWithdrawalLifetimePctOfStart / 100) / numYears),
+    );
     const floors = withdrawalFloors.map((t) => ({ ...t }));
     if (floors.length === 0) {
       floors.push({ amount });
@@ -188,10 +206,14 @@ export function computeDerivedPresetValues(preset, {
 
   // --- Goal Seek target ending balance: % of start the plan should leave
   // behind at the horizon (100 = preserve fully, 0 = spend down fully).
+  // The glide-path Target mirrors it so the UI (and preview chart) stay in
+  // sync with Easy Mode before Goal Seek runs and pins them together.
   if (hasStart && Number.isFinite(d.targetEndingBalancePctOfStart)) {
-    out.goalSeekTargetEndingBalance = Math.round(
+    const target = Math.round(
       startThousands * (d.targetEndingBalancePctOfStart / 100),
     );
+    out.goalSeekTargetEndingBalance = target;
+    out.glideTarget = target;
   }
 
   return out;

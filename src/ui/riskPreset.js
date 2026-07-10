@@ -5,6 +5,7 @@
 //   - editing Starting Portfolio / Years live-rescales the balance- and
 //     horizon-derived values (minimum withdrawal, gifting, balance triggers,
 //     target ending balance, spending timeline),
+//   - glide spend timing and other preset keys are applied verbatim,
 //   - manually editing any preset-controlled field DETACHES: the checkbox
 //     flips off and the user's values are kept. Re-checking re-applies the
 //     current level.
@@ -217,6 +218,8 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'planRiskTolerancePct', 'planRiskTolerancePctSlider',
     'dynLowRet', 'dynMedRet', 'dynHighRet',
     'dynLowBal', 'dynMedBal', 'dynHighBal',
+    'glideRate',
+    'glideTarget',
   ];
   for (const id of detachIds) {
     const input = el(id);

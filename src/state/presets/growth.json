@@ -14,19 +14,20 @@
     "planRiskTolerancePct": 5,
     "usLgGrowthAllocation": 30,
     "usLgValueAllocation": 25,
-    "usSmMidAllocation": 20,
+    "usSmMidAllocation": 15,
     "exUsAllocation": 15,
     "bondAllocation": 0,
-    "cashAllocation": 10,
+    "cashAllocation": 15,
     "dynLowRet": -18,
     "dynMedRet": 5,
-    "dynHighRet": 18
+    "dynHighRet": 18,
+    "glideRate": -2
   },
   "derived": {
-    "minWithdrawalPctOfStart": 3.5,
+    "minWithdrawalLifetimePctOfStart": 35,
     "gifting": { "amountPctOfStart": 1.5, "balanceMultipleOfStart": 1.25 },
     "spending": { "changePct": -2.5, "firstTierYearsFractionOfHorizon": 0.45 },
     "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
-    "targetEndingBalancePctOfStart": 25
+    "targetEndingBalancePctOfStart": 20
   }
 }

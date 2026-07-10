@@ -5,6 +5,8 @@ import {
   bisectMaxSatisfyingAsync,
   bisectMaxSatisfyingInt,
   buildAdjustmentGrid,
+  filterAdjustmentCandidatesAtOrAbove,
+  enforceAscendingMarketAdjustments,
   buildBalanceGrid,
   buildFractionGrid,
   buildBonusGrid,
@@ -74,6 +76,43 @@ describe('buildAdjustmentGrid', () => {
     const grid = buildAdjustmentGrid(100501, { minPct: -10, maxPct: 10, stepPct: 5 });
     for (const value of grid) expect(value % 1000 === 0).toBe(true);
     expect(grid).toEqual([-10000, -5000, 0, 5000, 10000]);
+  });
+});
+
+describe('filterAdjustmentCandidatesAtOrAbove', () => {
+  it('keeps only candidates at or above the lower-band floor', () => {
+    expect(filterAdjustmentCandidatesAtOrAbove([-20000, -10000, 0, 10000], -10000))
+      .toEqual([-10000, 0, 10000]);
+  });
+
+  it('pins to the floor when no grid point reaches it', () => {
+    expect(filterAdjustmentCandidatesAtOrAbove([-20000, -10000, 0], 5000)).toEqual([5000]);
+  });
+});
+
+describe('enforceAscendingMarketAdjustments', () => {
+  it('raises Expected and High so low ≤ expected ≤ high', () => {
+    const dynConfig = {
+      low: { adj: 0 },
+      med: { adj: -20000 },
+      high: { adj: -5000 },
+    };
+    enforceAscendingMarketAdjustments(dynConfig);
+    expect(dynConfig.low.adj).toBe(0);
+    expect(dynConfig.med.adj).toBe(0);
+    expect(dynConfig.high.adj).toBe(0);
+  });
+
+  it('leaves an already-ascending ladder unchanged', () => {
+    const dynConfig = {
+      low: { adj: -20000 },
+      med: { adj: 0 },
+      high: { adj: 30000 },
+    };
+    enforceAscendingMarketAdjustments(dynConfig);
+    expect(dynConfig.low.adj).toBe(-20000);
+    expect(dynConfig.med.adj).toBe(0);
+    expect(dynConfig.high.adj).toBe(30000);
   });
 });
 
@@ -420,6 +459,48 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(false);
   });
 
+  it('on early infeasible exit, still returns neutralized guardrail levers for the form', async () => {
+    // High minimum floor + unreachable ending target → fails the min-base
+    // feasibility check before any lever search. The summary must still carry
+    // the pinned/neutralized balance-adjustment band so the UI can clear a
+    // previous run's guardrails instead of leaving them stale.
+    const minWithdrawal = 80_000;
+    const params = makeParams({
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_000_000,
+        base: 200_000,
+        floorBalance: 999_000,
+        floorPenalty: 0.4,
+        ceilingBalance: 2_000_000,
+        ceilingBonus: 0.5,
+        withdrawalFloorSeries: new Array(25).fill(minWithdrawal),
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+      },
+    });
+    const { summary } = await seek(params, {
+      targetEndingBalance: 50_000_000,
+      desiredSuccessRate: 0.99,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: true,
+      includeGlidePath: true,
+      searchNumSimulations: 300,
+      ...DEFAULT_GOAL_SEEK_CONFIG,
+    });
+
+    expect(summary.feasible).toBe(false);
+    expect(summary.baseWithdrawal).toBe(minWithdrawal);
+    expect(summary.marketAdjustments).toEqual({ low: 0, med: 0, high: 0 });
+    expect(summary.marketBalanceOverrides).toBeUndefined();
+    expect(summary.balanceAdjustment.floorBalance).toBe(100_000); // 0.1 × start
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000); // 2.0 × start
+    expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
+    expect(summary.glideSpendDown.target).toBe(50_000_000);
+    expect(summary.glideSpendDown.fraction).toBeGreaterThan(0);
+  });
+
   it('does not search for a base below the highest minimum-withdrawal tier', async () => {
     const minWithdrawal = 100_000;
     const params = makeParams({
@@ -508,6 +589,32 @@ describe('runGoalSeek', () => {
     expect(summary.marketBalanceOverrides).toHaveProperty('low');
     expect(summary.marketBalanceOverrides).toHaveProperty('med');
     expect(summary.marketBalanceOverrides).toHaveProperty('high');
+  });
+
+  // Goal Seek may mathematically prefer an Expected cut deeper than Low, but
+  // that reads backwards in the form — keep the dollar ladder ascending.
+  it('keeps market dollar adjustments ascending low ≤ expected ≤ high', async () => {
+    const params = makeParams();
+    const { summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 300,
+      maxRounds: 2,
+      // Overlapping grids that can independently pick Expected < Low.
+      marketDownAdjGrid: { minPct: -40, maxPct: 0, stepPct: 20 },
+      marketMedAdjGrid: { minPct: -40, maxPct: 40, stepPct: 20 },
+      marketUpAdjGrid: { minPct: -20, maxPct: 60, stepPct: 20 },
+      floorMultiples: [0, 1],
+      ceilingMultiples: [0, 1],
+    });
+
+    expect(summary.feasible).toBe(true);
+    const { low, med, high } = summary.marketAdjustments;
+    expect(med).toBeGreaterThanOrEqual(low);
+    expect(high).toBeGreaterThanOrEqual(med);
   });
 
   it('tunes floor/ceiling balance and their cut/boost rates together', async () => {
@@ -1022,5 +1129,28 @@ describe('runGoalSeek', () => {
     expect(summary.glideSpendDown.fraction).toBeGreaterThan(0);
     expect(finalParams.portfolio.glideTarget).toBe(500_000);
     expect(finalParams.portfolio.glideFraction).toBe(summary.glideSpendDown.fraction);
+  });
+
+  it('never returns 0% glide spend rate with the default fraction grid', async () => {
+    const params = makeParams({
+      numSimulations: 500,
+      portfolio: {
+        ...makeParams().portfolio,
+        glideFraction: 0,
+      },
+    });
+    const { summary } = await seek(params, {
+      targetEndingBalance: 500_000,
+      desiredSuccessRate: 0.75,
+      searchNumSimulations: 500,
+      maxRounds: 1,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      includeGlidePath: true,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.glideSpendDown.fraction).toBeGreaterThanOrEqual(0.05);
   });
 });

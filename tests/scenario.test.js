@@ -119,8 +119,13 @@ describe('buildSimParams', () => {
   });
 
   it('maps a blank glide target to null (lever off) and a typed value to dollars', () => {
-    const blank = buildSimParams(defaultScenario(), { years: [] });
-    expect(blank.portfolio.glideTarget).toBeNull();
+    // Easy Mode defaults pin the glide target to the Balanced ending-balance target.
+    const defaults = buildSimParams(defaultScenario(), { years: [] });
+    expect(defaults.portfolio.glideTarget).toBe(1_500_000);
+
+    const blank = defaultScenario();
+    blank.glideTarget = '';
+    expect(buildSimParams(blank, { years: [] }).portfolio.glideTarget).toBeNull();
 
     const s = defaultScenario();
     s.glideTarget = 500;

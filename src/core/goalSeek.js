@@ -41,10 +41,11 @@ const BASE_BISECTION_MAX_ITERATIONS = 30;
 const DEFAULT_GOGO_BONUS_FRACTIONS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3];
 
 // Glide-path spend-down candidates: the share of each year's surplus above the
-// glide path recycled into extra spending. 0 = lever off. Finer at the low end
-// — moderate fractions usually win because a full recycle leaves runs sitting
-// knife-edge on the target, where the strict end >= target check fails them.
-const DEFAULT_GLIDE_FRACTIONS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1];
+// glide path recycled into extra spending. Starts at 5% so the search always
+// applies some surplus pressure. Finer at the low end — moderate fractions
+// usually win because a full recycle leaves runs sitting knife-edge on the
+// target, where the strict end >= target check fails them.
+const DEFAULT_GLIDE_FRACTIONS = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1];
 
 // Each candidate scored via the re-solve scorer costs one inner bisection
 // (this many predicate evaluations at reduced fidelity) plus one confirming
@@ -209,6 +210,24 @@ export function buildAdjustmentGrid(baseWithdrawal, { minPct, maxPct, stepPct } 
   return candidates;
 }
 
+// Keep only candidates at or above a lower-band floor so Goal Seek never
+// proposes an Expected cut deeper than Low, or a High cut deeper than Expected.
+// Manual edits can still invert the bands; the search itself always climbs
+// low → expected → high. If the grid has no point at/above the floor (custom
+// grids that barely overlap), pin to the floor so ordering still holds.
+export function filterAdjustmentCandidatesAtOrAbove(candidates, minAdj) {
+  const filtered = candidates.filter((value) => value >= minAdj);
+  if (filtered.length === 0) return [roundToThousand(minAdj)];
+  return filtered;
+}
+
+// After independently-tuned bands settle, nudge Expected/High up if needed so
+// the three dollar adjustments always read low ≤ expected ≤ high.
+export function enforceAscendingMarketAdjustments(dynConfig) {
+  dynConfig.med.adj = Math.max(dynConfig.med.adj, dynConfig.low.adj);
+  dynConfig.high.adj = Math.max(dynConfig.high.adj, dynConfig.med.adj);
+}
+
 // Balance-style candidates as round multiples of the starting balance. A
 // multiple of 0 maps to `offValue` — pass `null` for the dynLow/Med/HighBal
 // override fields (blank = off), `0` for floorBalance, or `Infinity` for
@@ -242,6 +261,10 @@ function minBalanceAdjustmentFraction(gridConfig) {
   return buildBalanceAdjustmentFractionGrid(gridConfig)[0];
 }
 
+function minGlideFraction(config) {
+  return (config.glideFractions || DEFAULT_GLIDE_FRACTIONS)[0];
+}
+
 function clampBalanceAdjustmentRates(config, portfolio) {
   portfolio.floorPenalty = Math.max(
     portfolio.floorPenalty,
@@ -251,6 +274,10 @@ function clampBalanceAdjustmentRates(config, portfolio) {
     portfolio.ceilingBonus,
     minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID),
   );
+}
+
+function clampGlideFraction(config, portfolio) {
+  portfolio.glideFraction = Math.max(portfolio.glideFraction, minGlideFraction(config));
 }
 
 // Bonus-amount candidates as round dollars, expressed as a fraction of the
@@ -519,7 +546,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     // glide target is pinned to it rather than searched; only the recycle
     // fraction is tuned. The assumed glide rate stays as the user typed it.
     working.portfolio.glideTarget = config.targetEndingBalance;
-    working.portfolio.glideFraction = 0;
+    working.portfolio.glideFraction = minGlideFraction(config);
   }
 
   if (pinBase && !hasIncludedLevers(config)) {
@@ -544,11 +571,36 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   const feasibleAtMinBase = await meetsTarget('Checking feasibility');
 
   if (!feasibleAtMinBase) {
+    // Still write back the neutralized / pinned lever state so the form does
+    // not keep showing a previous run's guardrails and adjustments after this
+    // early exit. Market balance overrides are omitted on purpose: they were
+    // cleared to null for the search, and blanking them would wipe the
+    // preset-derived dyn*Bal triggers the user just loaded.
     return {
       params: { ...working, numSimulations: params.numSimulations },
       summary: {
         feasible: false,
         baseWithdrawal: baseLowerBound,
+        marketAdjustments: config.includeMarketAdjustments
+          ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
+          : undefined,
+        balanceAdjustment: config.includeBalanceOverrides
+          ? {
+              floorBalance: working.portfolio.floorBalance,
+              ceilingBalance: Number.isFinite(working.portfolio.ceilingBalance)
+                ? working.portfolio.ceilingBalance
+                : null,
+              floorPenalty: working.portfolio.floorPenalty,
+              ceilingBonus: working.portfolio.ceilingBonus,
+            }
+          : undefined,
+        glideSpendDown: config.includeGlidePath
+          ? {
+              target: working.portfolio.glideTarget,
+              fraction: working.portfolio.glideFraction,
+              rate: working.portfolio.glideRate ?? 0,
+            }
+          : undefined,
         reason: baseLowerBound > 0
           ? 'Even a base withdrawal at the highest minimum-withdrawal tier cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.'
           : 'Even a $0 base withdrawal cannot meet the desired success rate with this target ending balance. Lower the target, lower the desired success rate, or reduce the minimum withdrawal.',
@@ -745,17 +797,31 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         med: config.marketMedAdjGrid || DEFAULT_MARKET_MED_ADJ_GRID,
         high: config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID,
       };
+      // Tune Low → Expected → High, restricting each band's candidates to
+      // values at or above the band below so the search never invents an
+      // inverted Low/Expected/High dollar ladder (confusing even when it
+      // can be mathematically useful — users can still type that by hand).
       for (const field of ['low', 'med', 'high']) {
-        const adjustmentGrid = buildAdjustmentGrid(solvedBase, marketAdjGrids[field]);
+        const rawGrid = buildAdjustmentGrid(solvedBase, marketAdjGrids[field]);
+        const minAdj = field === 'low'
+          ? -Infinity
+          : field === 'med'
+            ? working.dynConfig.low.adj
+            : working.dynConfig.med.adj;
+        const adjustmentGrid = filterAdjustmentCandidatesAtOrAbove(rawGrid, minAdj);
+        const currentAdj = working.dynConfig[field].adj;
         working.dynConfig[field].adj = await pickBestCandidateWithResolve(
           adjustmentGrid,
           (value) => {
             working.dynConfig[field].adj = value;
           },
           'Tuning market adjustments',
-          working.dynConfig[field].adj,
+          // If a prior round left this band below the new floor, start from
+          // the floor so "keep current" cannot re-introduce an inversion.
+          field === 'low' ? currentAdj : Math.max(currentAdj, minAdj),
         );
       }
+      enforceAscendingMarketAdjustments(working.dynConfig);
 
       const floorBalanceGrid = buildBalanceGrid(
         params.portfolio.start,
@@ -893,6 +959,12 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
 
   if (config.includeBalanceOverrides) {
     clampBalanceAdjustmentRates(config, working.portfolio);
+  }
+  if (config.includeGlidePath) {
+    clampGlideFraction(config, working.portfolio);
+  }
+  if (config.includeMarketAdjustments) {
+    enforceAscendingMarketAdjustments(working.dynConfig);
   }
 
   const finalMetrics = await evaluate('Finalizing');

@@ -3,10 +3,9 @@
 // HOW TO USE
 // - The app's out-of-the-box values are BASE_DEFAULTS below overlaid with the
 //   "Balanced" risk preset (src/state/presets/balanced.json) — the middle
-//   position of the Risk Level slider. Slider-controlled values (return
-//   method, Goal Seek settings, allocations, market/balance triggers, minimum
-//   withdrawal, gifting, spending timeline) live in balanced.json; everything
-//   else lives here. Edit whichever file owns the value you want to change.
+//   position of the Risk Level slider. Slider-controlled values live only in
+//   the preset JSON (and its derived formulas); BASE_DEFAULTS must not
+//   duplicate them. Edit whichever file owns the value you want to change.
 // - Currency fields are in thousands ($000s), matching the form labels.
 // - If you already have an autosaved session, clear browser storage or use a
 //   private window to see your changes on first load.
@@ -15,16 +14,21 @@
 import balanced from './presets/balanced.json';
 import { computeDerivedPresetValues, DEFAULT_PRESET_LEVEL } from './presets/index.js';
 
-const BASE_DEFAULTS = {
+// Non-preset starting values only. Slider-controlled keys (PRESET_SCENARIO_KEYS,
+// PRESET_DERIVED_SCALAR_KEYS) must not appear here — they come from balanced.json
+// via the SCENARIO_DEFAULTS composition below. spendingOverTimeTiers is the one
+// exception: the list shape and first-tier "extra" are Goal Seek seeds; the
+// preset overwrites changePct / years (and pins the second tier's extra to 0).
+export const BASE_DEFAULTS = {
 
   // Years to simulate (endpoint / target horizon). Valid range: 1–100.
-  numYears: 35,
+  numYears: 25,
 
   // Optional Monte Carlo range: years above/below the endpoint treated as
   // 2-sigma bounds (0 = fixed horizon). Each run draws a whole-year horizon
   // inside [numYears - minus, numYears + plus].
-  horizonPlusYears: 0,
-  horizonMinusYears: 0,
+  horizonPlusYears: 5,
+  horizonMinusYears: 5,
 
   // Monte Carlo paths to run. Valid range: 1–100,000. More = smoother stats, slower run.
   numSimulations: 10000,
@@ -74,7 +78,7 @@ const BASE_DEFAULTS = {
   // First year included when sampling history or computing profiles.
   // Must be within built-in history (see minAvailableYear–maxAvailableYear in
   // historicalData.js) and ≤ endYear.
-  startYear: 1960,
+  startYear: 1950,
 
   // Last year included. Must be within built-in history and ≥ startYear.
   endYear: 2025,
@@ -83,7 +87,7 @@ const BASE_DEFAULTS = {
   // (Asset allocation percentages come from the risk preset.)
 
   // Starting portfolio balance ($000s).
-  startBalance: 3000,
+  startBalance: 2000,
 
   // Base annual withdrawal. Used when withdrawalStrategy is 'base' ($000s).
   baseWithdrawal: 150,
@@ -100,36 +104,24 @@ const BASE_DEFAULTS = {
   // Spending scale at/above ceilingBalance, as % bonus (e.g. 50 = +50%).
   ceilingBonus: 50,
 
-  // Glide-path spend-down target ($000s). Blank = disabled (engine behaves as
-  // today). When set, each year recycles part of any balance above the glide
-  // path — the balance that still funds the remaining plan and lands on this
-  // target at the horizon. 0 is a valid "land on zero" target. Lives in the
-  // Dynamic Adjustments & Guardrails section, so its enable toggle gates this
-  // lever too.
-  glideTarget: '',
+  // (glideTarget — Glide-path Target — comes from the risk preset's derived
+  // target ending balance, kept in lockstep with goalSeekTargetEndingBalance.)
 
   // Share (%) of the surplus above the glide path withdrawn each year.
   glideFraction: 50,
 
-  // Spend Timing (%/yr, -4..0): the assumed real return used to discount the
-  // glide path. More negative = "later" — the glide path sits higher, so early
-  // retirement stays invested and surplus is recycled in the later years
-  // (helps plans that would otherwise dip to minimum withdrawals
-  // mid-retirement). 0 = "sooner", the most aggressive setting; positive
-  // values are excluded because they lose on both lifetime spending and
-  // success rate (spending recycled early forfeits compounding).
-  glideRate: -2,
+  // (glideRate — Spend Timing — comes from the risk preset.)
 
   // Front-loading (only when withdrawalStrategy is 'base')
 
   // Staged spending-over-time tiers: annual real % change, extra withdrawal,
   // and year count. Intermediate tiers need a year count; the last tier
-  // applies to all remaining years. The changePct and first-tier years below
-  // are placeholders — the risk preset overlay fills them in; the first-tier
-  // extra (50) is the starting point Goal Seek tunes from.
+  // applies to all remaining years. changePct / years are seeds the risk
+  // preset overwrites; the first-tier extra (50) is the starting point Goal
+  // Seek tunes from and is intentionally owned here.
   spendingOverTimeTiers: [
-    { changePct: -2, extra: 50, years: 15 },
-    { changePct: -2, extra: 0 },
+    { changePct: 0, extra: 50, years: 1 },
+    { changePct: 0, extra: 0 },
   ],
 
   // Year-by-year withdrawal list. Used when withdrawalStrategy is 'specific'.

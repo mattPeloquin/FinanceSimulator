@@ -4,7 +4,7 @@
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,
-    "goalSeekDesiredSuccessPct": 97,
+    "goalSeekDesiredSuccessPct": 95,
     "goalSeekRiskTolerancePct": 5,
     "goalSeekIncludeBaseWithdrawal": true,
     "goalSeekIncludeSpendingOverTime": true,
@@ -12,21 +12,22 @@
     "goalSeekIncludeBalanceOverrides": true,
     "goalSeekIncludeGlidePath": true,
     "planRiskTolerancePct": 5,
-    "usLgGrowthAllocation": 10,
-    "usLgValueAllocation": 10,
+    "usLgGrowthAllocation": 15,
+    "usLgValueAllocation": 20,
     "usSmMidAllocation": 5,
     "exUsAllocation": 10,
-    "bondAllocation": 40,
-    "cashAllocation": 25,
+    "bondAllocation": 30,
+    "cashAllocation": 20,
     "dynLowRet": -10,
     "dynMedRet": 5,
-    "dynHighRet": 25
+    "dynHighRet": 30,
+    "glideRate": -3
   },
   "derived": {
-    "minWithdrawalPctOfStart": 2.5,
+    "minWithdrawalLifetimePctOfStart": 50,
     "gifting": { "amountPctOfStart": 0.5, "balanceMultipleOfStart": 1.5 },
     "spending": { "changePct": -1, "firstTierYearsFractionOfHorizon": 0.35 },
     "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
-    "targetEndingBalancePctOfStart": 100
+    "targetEndingBalancePctOfStart": 80
   }
 }
