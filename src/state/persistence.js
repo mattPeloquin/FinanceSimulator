@@ -81,6 +81,46 @@ export function clearUnsavedStash() {
   }
 }
 
+// ---- Accordion open/closed (UI chrome, not scenario data) --------------------
+// Kept in a separate key so expand/collapse survives refresh and is independent
+// of autosaved settings, named sessions, and import/export.
+
+const ACCORDION_KEY = 'sor:ui-accordions';
+
+/** @returns {Record<string, boolean>} id → open */
+export function loadAccordionState() {
+  try {
+    const raw = localStorage.getItem(ACCORDION_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out = {};
+    for (const [id, open] of Object.entries(parsed)) {
+      if (typeof open === 'boolean') out[id] = open;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** @param {Record<string, boolean>} state */
+export function saveAccordionState(state) {
+  try {
+    localStorage.setItem(ACCORDION_KEY, JSON.stringify(state));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/** Merge one accordion's open flag into the persisted map. */
+export function setAccordionOpen(id, open) {
+  if (!id) return;
+  const state = loadAccordionState();
+  state[id] = !!open;
+  saveAccordionState(state);
+}
+
 // ---- Named sessions (IndexedDB) ---------------------------------------------
 
 function openDb() {

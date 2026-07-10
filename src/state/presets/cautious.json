@@ -1,6 +1,6 @@
 {
   "name": "Cautious",
-  "description": "Leans safe: 94% success, bond-tilted mix, modest spending decline, aims to keep three quarters of the starting portfolio.",
+  "description": "Safer tilt — bond-leaning mix, modest spending decline, leaves a solid cushion.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,

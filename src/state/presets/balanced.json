@@ -1,6 +1,6 @@
 {
   "name": "Balanced",
-  "description": "The middle path: 90% success, diversified stock-leaning mix, gradual spending decline, aims to keep half the starting portfolio.",
+  "description": "Middle path — diversified mix, gradual spending decline, draws the portfolio down.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,

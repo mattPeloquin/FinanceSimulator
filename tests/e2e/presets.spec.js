@@ -34,9 +34,8 @@ test('First open: simple-use mode with the Balanced preset and collapsed section
 
   // All major sections start collapsed; the horizon/balance/slider surface is
   // always visible.
+  expect(await page.locator('#section-investment').evaluate((el) => el.open)).toBe(false);
   expect(await page.locator('#section-withdrawal').evaluate((el) => el.open)).toBe(false);
-  expect(await page.locator('details:has(#startYear)').evaluate((el) => el.open)).toBe(false);
-  expect(await page.locator('details:has(#usLgGrowthAllocation)').evaluate((el) => el.open)).toBe(false);
   await expect(page.locator('#numYears')).toBeVisible();
   await expect(page.locator('#startBalance')).toBeVisible();
   await expect(page.locator('#presetLevel')).toBeVisible();
@@ -93,13 +92,13 @@ test('Editing a preset-controlled field detaches; values are kept across reload'
   await page.goto('/');
   await waitForInit(page);
 
-  // Allocations are preset-controlled — open the section and edit one.
-  await page.click('summary:has-text("Asset Allocation")');
+  // Allocations are preset-controlled — open Investment Planning and edit one.
+  await page.click('#section-investment > summary');
   await page.fill('#bondAllocation', '10');
 
   await expect(page.locator('#presetActive')).not.toBeChecked();
   await expect(page.locator('#presetLevel')).toBeDisabled();
-  await expect(page.locator('#presetDetachedNote')).toBeVisible();
+  await expect(page.locator('#risk-preset-control')).toHaveClass(/opacity-50/);
   await expect(page.locator('#bondAllocation')).toHaveValue('10');
 
   // Detached state survives a reload via autosave.
@@ -115,12 +114,13 @@ test('Re-attaching reloads the current level over manual edits', async ({ page }
   await page.goto('/');
   await waitForInit(page);
 
-  await page.click('summary:has-text("Asset Allocation")');
+  await page.click('#section-investment > summary');
   await page.fill('#bondAllocation', '10');
   await expect(page.locator('#presetActive')).not.toBeChecked();
 
   await page.check('#presetActive');
   await expect(page.locator('#presetLevel')).toBeEnabled();
+  await expect(page.locator('#risk-preset-control')).not.toHaveClass(/opacity-50/);
   // Balanced's bond allocation snaps back.
   await expect(page.locator('#bondAllocation')).toHaveValue('5');
 });

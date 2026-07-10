@@ -1,22 +1,25 @@
 <!-- Section 1: General Parameters -->
-<div class="border-t pt-6">
-    <h2 class="text-lg font-semibold text-theme-body mb-4"
-    >Investment Horizon</h2>
+<div class="">
+    <h2 class="text-2xl font-bold text-theme-body mb-4"
+    >Sequence of Returns</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
         <div>
             <label for="numYears" class="block text-sm font-medium text-theme-body">Years to simulate (endpoint)</label>
             <input type="number" id="numYears" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-            <div class="mt-2 grid grid-cols-2 gap-3">
-                <div>
-                    <label for="horizonMinusYears" class="block text-xs font-medium text-theme-muted">&minus; years (shorter)</label>
-                    <input type="number" id="horizonMinusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                </div>
-                <div>
-                    <label for="horizonPlusYears" class="block text-xs font-medium text-theme-muted">+ years (longer)</label>
-                    <input type="number" id="horizonPlusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+            <div class="mt-3 p-2 rounded-sm bg-theme-muted">
+                <label for="presetLevel" class="text-sm font-medium text-theme-body">Time Range</label>
+                <p class="text-xs text-theme-faint mt-1">Simulate a range of years around the endpoint. Leave both at 0 for a fixed timeline.</p>
+                <div class="mt-2 grid grid-cols-2 gap-3">
+                    <div>
+                        <input type="number" id="horizonMinusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                        <label for="horizonMinusYears" class="block text-xs font-medium text-theme-muted mt-1">&minus; years (shorter)</label>
+                    </div>
+                    <div>
+                        <input type="number" id="horizonPlusYears" min="0" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                        <label for="horizonPlusYears" class="block text-xs font-medium text-theme-muted mt-1">+ years (longer)</label>
+                    </div>
                 </div>
             </div>
-            <p class="text-xs text-theme-faint mt-1">Optional: model an uncertain end date. Each simulation picks a horizon between the endpoint minus/plus values; those bounds are treated as very likely (about 2-in-100 tails). Leave both at 0 for a fixed timeline.</p>
         </div>
         <div>
             <label for="startBalance" class="block text-sm font-medium text-theme-body">Starting Portfolio</label>
@@ -29,12 +32,12 @@
                  is on, moving the slider loads that level's settings and
                  balance/horizon-derived values track the inputs above; editing
                  any preset-controlled field switches it off automatically. -->
-            <div id="risk-preset-control" class="mt-3 p-3 border rounded-lg bg-theme-muted space-y-1">
-                <div class="flex items-center justify-between">
-                    <label for="presetLevel" class="text-sm font-medium text-theme-body">Risk Level</label>
+            <div id="risk-preset-control" class="mt-3 p-3 rounded-sm bg-theme-muted space-y-1">
+                <div class="flex items-center justify-between mb-2">
+                    <label for="presetLevel" class="text-sm font-medium text-theme-body">Easy Mode</label>
                     <label class="flex items-center gap-1.5 text-xs text-theme-muted cursor-pointer">
                         <input type="checkbox" id="presetActive" class="h-3.5 w-3.5 rounded input-theme">
-                        Use preset
+                        Use easy mode
                     </label>
                 </div>
                 <input type="range" id="presetLevel" min="0" max="4" step="1" list="presetLevelTicks" class="range-theme w-full">
@@ -45,90 +48,11 @@
                     <option value="3"></option>
                     <option value="4"></option>
                 </datalist>
-                <div class="grid grid-cols-3 text-[10px] text-theme-faint leading-tight">
+                <div class="grid grid-cols-3 text-xs text-theme-faint leading-tight">
                     <span>Conservative</span><span class="text-center">Balanced</span><span class="text-right">Aggressive</span>
                 </div>
-                <p id="presetLevelName" class="text-xs text-theme-muted"></p>
-                <p id="presetDetachedNote" class="text-[10px] text-theme-faint hidden">Preset off &mdash; your custom settings are kept. Re-check to reload the level.</p>
+                <p id="presetLevelName" class="text-xs text-theme-muted pt-2"></p>
             </div>
         </div>
     </div>
-    <details class="group mt-4 border rounded-lg">
-        <summary class="cursor-pointer select-none px-4 py-2 text-sm font-medium text-theme-muted flex items-center justify-between">
-            <span>Advanced simulation settings</span>
-            <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-        </summary>
-        <div class="px-4 pb-4 space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                <div>
-                    <label for="numSimulations" class="block text-sm font-medium text-theme-body">Number of Simulations</label>
-                    <input type="number" id="numSimulations" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                </div>
-                <div>
-                    <label for="randomSeed" class="block text-sm font-medium text-theme-body">Random Seed (optional)</label>
-                    <input type="number" id="randomSeed" placeholder="blank = random" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                </div>
-                <div>
-                    <label for="parallelCores" class="block text-sm font-medium text-theme-body">Core Usage</label>
-                    <select id="parallelCores" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                        <option value="low">Low (1 core)</option>
-                        <option value="med">Medium (3 cores)</option>
-                        <option value="high">High (up to 6 cores)</option>
-                    </select>
-                    <p class="text-xs text-theme-faint mt-1">How many CPU cores to use when running simulations. Higher is faster but uses more of your computer while the run is in progress.</p>
-                </div>
-                <div>
-                    <label for="smoothWindowPct" class="block text-sm font-medium text-theme-body">Percentile Smoothing (&plusmn;)</label>
-                    <div class="input-adorned has-suffix mt-1">
-                        <input type="number" id="smoothWindowPct" min="0" max="5" step="0.5" class="block w-full rounded-md input-theme sm:text-sm p-2">
-                        <span class="input-adorn-suffix">%</span>
-                    </div>
-                    <p class="text-xs text-theme-faint mt-1">Averages a band of runs around each percentile (P5&ndash;P65) to reduce noise. 0 = a single run.</p>
-                </div>
-                <div>
-                    <label for="withdrawalMetric" class="block text-sm font-medium text-theme-body">Withdrawal Success Metric</label>
-                    <select id="withdrawalMetric" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                        <option value="auto">Auto (total for fixed horizon, mean/yr for variable)</option>
-                        <option value="total">Total withdrawal (lifetime)</option>
-                        <option value="meanYearly">Mean withdrawal per year</option>
-                        <option value="medianYearly">Median withdrawal per year</option>
-                    </select>
-                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Goal Seek. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results.</p>
-                </div>
-                <div>
-                    <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
-                    <div class="flex items-center gap-3 mt-1">
-                        <input type="range" id="planRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
-                        <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
-                    </div>
-                    <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate and 3D chart coloring. Goal Seek uses its own Risk Tolerance when enabled.</p>
-                </div>
-            </div>
-
-            <!-- Persistence knob: average run length (resampling, smoothed historical) and smoothing strength (log-normal) -->
-            <div id="resampling-profiles" class="p-3 border rounded-lg bg-theme-muted space-y-2" title="Resampling and Smoothed Historical: draws runs of consecutive years averaging this length to preserve historical cycles. Log-Normal: adds year-to-year smoothing (serial correlation).">
-                <div class="flex items-center gap-3">
-                    <label for="blockSize" class="text-sm font-medium text-theme-body whitespace-nowrap">Persistence (avg yrs)</label>
-                    <input type="range" id="blockSizeSlider" min="1" max="6" class="range-theme flex-1">
-                    <input type="number" id="blockSize" min="1" max="6" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
-                </div>
-                <p class="text-xs text-theme-faint">Adds year-to-year persistence by drawing runs of consecutive years averaging this length (Historical Resampling and Smoothed Historical); set to 1 for fully independent years. Log-Normal uses it for year-to-year smoothing instead.</p>
-            </div>
-
-            <div id="smoothing-control" class="p-3 border rounded-lg bg-theme-muted space-y-2" title="Only used by Smoothed Historical: softens results so they aren't limited to only the exact years in your selected range.">
-                <div class="flex items-center gap-3">
-                    <label for="scaledHistoricalSmoothing" class="text-sm font-medium text-theme-body whitespace-nowrap">Smoothing</label>
-                    <input type="range" id="scaledHistoricalSmoothingSlider" min="0" max="100" class="range-theme flex-1">
-                    <input type="number" id="scaledHistoricalSmoothing" min="0" max="100" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
-                </div>
-                <p class="text-xs text-theme-faint">Softens Smoothed Historical's output so it isn't limited to only the exact years in your selected range. Not used by the other two methods.</p>
-            </div>
-
-            <div>
-                <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Goal Seek: Simulations per Search Step</label>
-                <input type="number" id="goalSeekNumSimulations" min="1" class="mt-1 block w-full max-w-xs rounded-md input-theme sm:text-sm p-2">
-                <p class="text-xs text-theme-faint mt-1">How many simulations Goal Seek runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
-            </div>
-        </div>
-    </details>
 </div>

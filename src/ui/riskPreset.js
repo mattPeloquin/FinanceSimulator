@@ -72,16 +72,14 @@ function updateLevelText() {
   if (nameEl) nameEl.textContent = `${preset.name} — ${preset.description}`;
 }
 
-// Reflect attached/detached state in the control (slider enable, note).
+// Reflect attached/detached state: when off, gray the whole Easy Mode block
+// (checkbox stays clickable so the user can turn it back on).
 function updateControlState() {
   const attached = isAttached();
   const slider = el('presetLevel');
-  if (slider) {
-    slider.disabled = !attached;
-    slider.classList.toggle('opacity-50', !attached);
-  }
-  const note = el('presetDetachedNote');
-  if (note) note.classList.toggle('hidden', attached);
+  if (slider) slider.disabled = !attached;
+  const control = el('risk-preset-control');
+  if (control) control.classList.toggle('opacity-50', !attached);
 }
 
 // Refresh the previews/toggles that depend on the fields a preset writes —

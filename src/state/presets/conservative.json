@@ -1,6 +1,6 @@
 {
   "name": "Conservative",
-  "description": "Highest certainty: 97% success, bond/cash heavy, spending reacts early to weak markets, aims to preserve the full starting portfolio.",
+  "description": "Safest path — bond-heavy mix, reacts early to weak markets, keeps most of the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,

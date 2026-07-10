@@ -1,6 +1,6 @@
 {
   "name": "Growth",
-  "description": "Leans bold: 85% success, mostly stocks, front-loaded spending, comfortable spending down to a quarter of the starting portfolio.",
+  "description": "Bolder tilt — stock-heavy mix, front-loaded spending, spends most of the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,

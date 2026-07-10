@@ -182,6 +182,14 @@ function terminateWorkers() {
   currentSubWorkers = [];
 }
 
+// Drop in-flight workers before Vite replaces this module so ports/threads
+// from a previous HMR generation cannot outlive the page logic that owns them.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    terminateWorkers();
+  });
+}
+
 // Sub-workers must be spawned here on the main thread: a worker created from a
 // blob/data URL (single-file build) has a null origin and cannot spawn its own
 // sub-workers, e.g. when the app is opened directly from disk (file://).
@@ -435,7 +443,7 @@ function updateSessionNoteDisplay() {
 
 function updateSessionActionButtons() {
   const hasNamedSession = Boolean(currentSessionName);
-  for (const id of ['copySessionButton', 'deleteSessionButton']) {
+  for (const id of ['resetSessionButton', 'copySessionButton', 'deleteSessionButton']) {
     const btn = document.getElementById(id);
     if (btn) btn.disabled = !hasNamedSession;
   }
@@ -542,6 +550,23 @@ function openSessionDialog(mode) {
 
 function handleSaveSession() {
   openSessionDialog('save');
+}
+
+async function handleResetSession() {
+  if (!currentSessionName) return;
+  try {
+    const loaded = await loadSession(currentSessionName);
+    if (!loaded) {
+      showAlert(`Could not find saved session "${currentSessionName}".`);
+      return;
+    }
+    currentSessionDescription = loaded.description || '';
+    applyScenario(loaded.scenario);
+    updateSessionNoteDisplay();
+    flushAutosave();
+  } catch (err) {
+    showAlert(`Could not reset session: ${err.message}`);
+  }
 }
 
 function handleCopySession() {
@@ -730,6 +755,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
 
     document.getElementById('newSessionButton').addEventListener('click', handleNewSession);
     document.getElementById('saveSessionButton').addEventListener('click', handleSaveSession);
+    document.getElementById('resetSessionButton').addEventListener('click', handleResetSession);
     document.getElementById('copySessionButton').addEventListener('click', handleCopySession);
     document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);
     document.getElementById('exportSessionButton').addEventListener('click', handleExportSession);

@@ -64,6 +64,8 @@ You do not need to know how to code to add new features to this app. Instead, yo
 
 To tweak the look of the app (backgrounds, text, accent buttons, chart colors, and more), edit **`themeTokens`** at the top of `src/ui/theme.js`. Those values flow automatically into the page, charts, and dark mode — no need to hunt through dozens of files.
 
+Your browser also remembers which settings panels you left open or closed on this device. That preference is separate from your saved simulation numbers, so resetting or importing a scenario won't change which sections are expanded.
+
 ### Changing the default starting values
 
 To change what the simulator loads with on a fresh visit (starting balance, withdrawal amount, year range, persistence slider, and more), edit **`BASE_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. Currency amounts in that file are in thousands ($000s), matching the form labels. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
@@ -135,7 +137,7 @@ flowchart TD
 Everything you type into the form — starting balance, yearly withdrawal, asset mix, year range, dynamic adjustment rules — is collected into one flat object called a **scenario** (`src/state/scenario.js`). This single object is the source of truth for the whole app:
 
 - It is **autosaved** to your browser's local storage as you type, so refreshing the page never loses your work.
-- It can be saved as a **named session** (stored in your browser via IndexedDB), or **exported/imported** as a JSON file to share with others. Use **New** to start a fresh scenario (your current named session is saved automatically first). **Save** updates the current session (name and optional description). **Copy** duplicates your current values under a new name without changing the original. The description appears below the session controls when set.
+- It can be saved as a **named session** (stored in your browser via IndexedDB), or **exported/imported** as a JSON file to share with others. Use **New** to start a fresh scenario (your current named session is saved automatically first). **Save** updates the current session (name and optional description). **Reset** discards unsaved edits and restores the selected session to its last Save. **Copy** duplicates your current values under a new name without changing the original. The description appears below the session controls when set.
 - Money fields are entered in thousands of dollars ($000s) and converted to real dollars just before the math runs.
 
 The **historical data** (`src/data/historicalData.js`) is a built-in table of yearly returns from 1900 onward for six asset classes (US large growth, US large value, US small/mid, international, bonds, cash) plus inflation. When you change the year range, the app instantly recomputes the average return and volatility "profiles" for that window, redraws the mini history charts, and refreshes the pool of years available for resampling (`src/core/history.js`). If you've typed your own numbers into the profile fields, the app keeps them and shows an "Overwrite from history" link instead of replacing your edits.
@@ -220,7 +222,7 @@ Turn the switch back off any time to return to typing in your own numbers and ru
 
 **Heads up on run time:** checking any of the "Include in search" boxes makes Goal Seek try substantially more combinations than a plain search (each candidate setting is tested by temporarily re-solving your withdrawal amount around it, so it can see the true payoff of a guardrail or a bonus before deciding whether it's worth it). Expect a full search with everything checked to take noticeably longer than Run Simulation — the progress bar will keep you posted.
 
-**Tuning search speed vs. accuracy:** open **Advanced simulation settings** near the top of the form and scroll to **Goal Seek: Simulations per Search Step** — how many simulations Goal Seek runs to score each candidate plan while it's searching. Lower it for a much faster search (useful while you're experimenting with the targets), or raise it if you want the search itself to be more precise. Either way, the final plan Goal Seek lands on is always double-checked using your full **Number of Simulations**, so the result you see is never less accurate than a normal run.
+**Tuning search speed vs. accuracy:** open **Advanced simulation settings** at the bottom of the form and scroll to **Goal Seek: Simulations per Search Step** — how many simulations Goal Seek runs to score each candidate plan while it's searching. Lower it for a much faster search (useful while you're experimenting with the targets), or raise it if you want the search itself to be more precise. Either way, the final plan Goal Seek lands on is always double-checked using your full **Number of Simulations**, so the result you see is never less accurate than a normal run.
 
 ### Where to look when vibe-coding
 

@@ -1,28 +1,34 @@
 <!-- Header Section -->
-<div class="flex items-start justify-between gap-4 flex-wrap">
-    <div class="flex-1 min-w-[260px]">
-        <h1 class="text-3xl font-bold text-theme-heading text-center">Sequence of Returns Simulator</h1>
-        <p class="text-theme-muted text-center mt-2">Monte Carlo analysis of returns, inflation, and dynamic withdrawals.</p>
-    </div>
-    <!-- Session controls -->
-    <div id="session-controls" class="flex items-start gap-2 text-sm">
-        <div class="flex flex-col gap-0.5 shrink-0">
-            <select id="sessionSelect" class="rounded-md input-theme text-sm p-1.5 w-[224px]">
-                <option value="">Unsaved session</option>
-            </select>
-            <p id="sessionNote" class="text-xs text-theme-faint w-[224px] text-left hidden"></p>
+<!-- Outer row never wraps so the theme toggle stays pinned on the right.
+     Title + session controls share the remaining width and wrap among themselves;
+     within session-controls, the button rows drop under the dropdown when narrow. -->
+<div class="pb-4 border-b flex items-start gap-3">
+    <div class="flex-1 min-w-0 flex flex-wrap items-start justify-between gap-4">
+        <div class="flex-1 min-w-[200px]">
+            <h1 class="text-xl font-semibold text-theme-heading text-center">Finanace Simulator</h1>
+            <p class="text-sm text-theme-muted text-center mt-1">Monte Carlo analysis of returns, inflation, and dynamic flows.</p>
         </div>
-        <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-1 flex-wrap">
-                <button id="saveSessionButton" class="bg-theme-control text-theme-on-accent font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover px-1.5 py-0.5 transition-all">Save</button>
-                <button id="copySessionButton" type="button" disabled title="Duplicate current values as a new named session; the original session is unchanged" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-theme-surface disabled:hover:text-theme-muted disabled:hover:border-theme-input">Copy</button>
-                <button id="deleteSessionButton" type="button" disabled class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-danger-bg hover:text-theme-on-accent hover:border-theme-danger-bg px-1.5 py-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-theme-surface disabled:hover:text-theme-muted disabled:hover:border-theme-input">Delete</button>
+        <!-- Session controls -->
+        <div id="session-controls" class="flex flex-wrap items-start gap-2 text-sm">
+            <div class="flex flex-col gap-0.5 shrink-0">
+                <select id="sessionSelect" class="rounded-md input-theme text-sm p-1.5 w-[224px]">
+                    <option value="">Unsaved session</option>
+                </select>
+                <p id="sessionNote" class="text-xs text-theme-faint w-[224px] text-left hidden"></p>
             </div>
-            <div class="flex items-center gap-1">
-                <button id="newSessionButton" type="button" title="Start a fresh scenario (saves the current named session first)" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">New</button>
-                <button id="exportSessionButton" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">Export</button>
-                <button id="importSessionButton" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">Import</button>
-                <input type="file" id="importFileInput" accept="application/json" class="hidden">
+            <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1 flex-wrap">
+                    <button id="saveSessionButton" class="bg-theme-control text-theme-on-accent font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover px-1.5 py-0.5 transition-all">Save</button>
+                    <button id="resetSessionButton" type="button" disabled title="Discard unsaved edits and restore this session to its last Save" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-theme-surface disabled:hover:text-theme-muted disabled:hover:border-theme-input">Reset</button>
+                    <button id="copySessionButton" type="button" disabled title="Duplicate current values as a new named session; the original session is unchanged" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-theme-surface disabled:hover:text-theme-muted disabled:hover:border-theme-input">Copy</button>
+                    <button id="deleteSessionButton" type="button" disabled class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-danger-bg hover:text-theme-on-accent hover:border-theme-danger-bg px-1.5 py-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-theme-surface disabled:hover:text-theme-muted disabled:hover:border-theme-input">Delete</button>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button id="newSessionButton" type="button" title="Start a fresh scenario (saves the current named session first)" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">New</button>
+                    <button id="exportSessionButton" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">Export</button>
+                    <button id="importSessionButton" class="bg-theme-surface border border-theme-input text-theme-muted font-medium text-[10px] leading-tight rounded-sm shadow-sm hover:bg-theme-control-hover hover:text-theme-on-accent hover:border-theme-control-hover px-1.5 py-0.5 transition-all">Import</button>
+                    <input type="file" id="importFileInput" accept="application/json" class="hidden">
+                </div>
             </div>
         </div>
     </div>

@@ -17,6 +17,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Expect the initial state
   await expect(page.locator('h1').filter({ hasText: 'Sequence of Returns Simulator' })).toBeVisible();
 
+  // Two peer master sections: Investment Planning and Withdrawal Strategy
+  await expect(page.locator('#section-investment > summary')).toContainText('Investment Planning');
+  await expect(page.locator('#section-withdrawal > summary')).toContainText('Withdrawal Strategy');
+  // Advanced settings sit at the bottom of the form (after results)
+  await expect(page.locator('#resultsSection + details > summary')).toHaveText('Advanced simulation settings');
+
   const themeToggle = page.locator('#themeToggle');
   await expect(themeToggle).toBeVisible();
   await themeToggle.click();
@@ -106,8 +112,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 test('Historical IRR band survives a year selection shorter than the horizon', async ({ page }) => {
   await page.goto('/');
   await disableGoalSeek(page);
-  // The year-range inputs live in the (now default-collapsed) Future Returns section.
-  await page.click('summary:has-text("Future Returns")');
+  // Year-range inputs live under Investment Planning → Historical Data.
+  await page.click('#section-investment > summary');
   // 2005–2025 is 21 years against the default 35-year horizon: no true rolling
   // window fits, so the band must fall back to wrapped windows instead of vanishing.
   await page.fill('#startYear', '2005');

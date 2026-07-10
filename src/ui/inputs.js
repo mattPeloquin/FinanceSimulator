@@ -9,12 +9,23 @@ import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
 import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
+import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
-// accordion is opened so they fill the now-visible container.
+// accordion is opened so they fill the now-visible container. Open/closed state for
+// any <details id="..."> is restored from (and written to) a device-local key that
+// is independent of scenario autosave.
 export function setupAccordionResize() {
+  const saved = loadAccordionState();
+  document.querySelectorAll('details[id]').forEach((details) => {
+    if (Object.prototype.hasOwnProperty.call(saved, details.id)) {
+      details.open = saved[details.id];
+    }
+  });
+
   document.querySelectorAll('details').forEach((details) => {
     details.addEventListener('toggle', () => {
+      if (details.id) setAccordionOpen(details.id, details.open);
       if (!details.open) return;
       details.querySelectorAll('canvas').forEach((canvas) => {
         Chart.getChart(canvas)?.resize();

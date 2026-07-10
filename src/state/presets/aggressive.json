@@ -1,6 +1,6 @@
 {
   "name": "Aggressive",
-  "description": "Maximum spending: 80% success, nearly all stocks, strongly front-loaded spending, plans to spend the portfolio down fully.",
+  "description": "Highest spending — nearly all stocks, strongly front-loaded, tries to deplete the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekMode": true,

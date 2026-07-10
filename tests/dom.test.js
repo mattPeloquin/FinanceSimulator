@@ -58,6 +58,7 @@ const REQUIRED_IDS = [
   'sessionSelect',
   'newSessionButton',
   'saveSessionButton',
+  'resetSessionButton',
   'copySessionButton',
   'deleteSessionButton',
   'exportSessionButton',
