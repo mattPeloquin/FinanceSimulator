@@ -3,13 +3,15 @@
 The five JSON files here back the "Risk Level" slider (conservative → aggressive)
 shown under Starting Portfolio. **All financial values are tunable** — edit the
 JSON and rebuild; no code changes needed. `balanced.json` doubles as the app's
-out-of-the-box defaults (see `src/state/defaults.js`).
+out-of-the-box preset configuration (see `src/state/defaults.js`).
 
 Each file has two sections:
 
 - `scenario` — applied verbatim when the slider moves. Only keys listed in
   `PRESET_SCENARIO_KEYS` (`index.js`) are allowed; a unit test enforces this.
   Allocations must sum to 100 and market triggers must satisfy low < med < high.
+  Goal Seek's on/off toggle lives in `BASE_DEFAULTS`, not here — toggling it
+  does not detach Easy Mode.
 - `derived` — formula parameters for values computed from the user's starting
   balance and horizon (see `computeDerivedPresetValues` in `index.js`):
   - `minWithdrawalLifetimePctOfStart` — total minimum spending across the
@@ -24,8 +26,13 @@ Each file has two sections:
     tracks Easy Mode before a search runs
   - `glideRate` (in `scenario`) — glide-path spend timing (-4 = later … 0 = sooner);
     Conservative is one tick later, Aggressive one tick sooner, the middle three at -2
+  - **Spending plan (Easy Mode + Goal Seek off):** `baseWithdrawalPctOfStart`
+    (4.0–6.0% in 0.5 steps), `floorBalanceMultipleOfStart` /
+    `ceilingBalanceMultipleOfStart`, `floorPenalty`, `ceilingBonus`,
+    `dynAdjPctOfBase.low/med/high` (% of base withdrawal), `spendingExtraPctOfBase`
+    (tier-0 go-go extra as % of base), `glideFraction`
 
-The spending plan itself (base withdrawal, adjustment amounts, glide path,
-first-tier extra) is deliberately absent: every level enables all Goal Seek
-levers, and clicking Run finds the best plan for the level's success target
-and risk tolerance.
+When **Use easy mode** is on and **Goal Seek** is off, the slider fills the full
+spending plan from those derived keys. With Goal Seek on, the slider configures
+the search (success target, levers, allocations, triggers) and Goal Seek finds
+the plan on **Find Best Plan**.

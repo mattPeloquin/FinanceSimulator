@@ -68,15 +68,15 @@ Your browser also remembers which settings panels you left open or closed on thi
 
 ### Changing the default starting values
 
-To change what the simulator loads with on a fresh visit (starting balance, withdrawal amount, year range, persistence slider, and more), edit **`BASE_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. Currency amounts in that file are in thousands ($000s), matching the form labels. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
+To change what the simulator loads with on a fresh visit (year range, Goal Seek default, and more), edit **`BASE_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. **Starting Portfolio** is blank on first load — enter a positive balance before running. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
 
-Values controlled by the **Risk Level slider** (return method, Goal Seek settings, asset mix, market/balance triggers, glide spend timing, minimum withdrawal, gifting, spending timeline) live in **`src/state/presets/balanced.json`** instead — the Balanced preset doubles as the app's out-of-the-box configuration. See the next section.
+Values controlled by the **Easy Mode** slider (return method, Goal Seek search settings, asset mix, market/balance triggers, glide spend timing, minimum withdrawal, gifting, spending timeline, and — when Goal Seek is off — the full spending plan) live in **`src/state/presets/balanced.json`** and the other preset files. See the next section.
 
 ### Tuning the Risk Level presets
 
-A **Risk Level** slider under Starting Portfolio gives first-time users a one-control way to run the simulator: type a horizon and a balance, pick a level from Conservative to Aggressive, and click **Find Best Plan**. Each level is a JSON file in **`src/state/presets/`** (see the README there) with two sections: fixed settings applied verbatim (success target, risk tolerance, asset mix, market triggers, glide spend timing, Goal Seek levers — all levers stay on), and formula parameters for values computed from your own inputs (minimum withdrawal scales with starting balance and horizon; gifting, balance triggers, and target ending balance scale with the starting balance; the spending timeline scales with the horizon). Every number is tunable by editing the JSON.
+**Easy Mode** under Starting Portfolio gives first-time users a simple path: enter a horizon and portfolio size, pick a level from Conservative to Aggressive, and run. Each level is a JSON file in **`src/state/presets/`** (see the README there). With **Goal Seek** on (the default), click **Find Best Plan** to search for the best spending plan for that level's success target. Turn Goal Seek off to use the preset's built-in spending plan instead and click **Run Simulation** — Easy Mode stays on either way.
 
-While **Use preset** is checked, changing the starting balance or horizon live-rescales those derived values. Manually editing any preset-controlled setting switches the preset off automatically and keeps your values — re-check the box to reload the level. Tiers you add beyond the first are yours; the slider only manages the first tier of each list.
+While **Use easy mode** is checked, changing the starting balance or horizon live-rescales derived values. Manually editing a preset-controlled setting switches Easy Mode off and keeps your values — re-check the box to reload the level. Tiers you add beyond the first are yours; the slider only manages the first tier of each list.
 
 ### How to Vibe Code with Cursor
 
@@ -201,7 +201,7 @@ Instead of guessing at a withdrawal amount and checking whether it works, **Goal
 
 To use it:
 
-1. Turn on the **Goal Seek** switch near the bottom of the form (above the Run button).
+1. Turn on the **Goal Seek** switch (below Sequence of Returns, above Investment Planning).
 2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out), a **Desired Success %** (how sure you want to be that the plan works), and a **Risk Tolerance** (how much of your planned lifetime spending you're willing to give up in bad markets — 0% means stay on plan; higher values allow a bigger headline plan with more guardrail belt-tightening when markets are rough).
 3. Under **Base Annual Withdrawal**, leave **Include in search** checked (default) to let Goal Seek find the best base amount, or uncheck it to keep your typed base fixed and search only the other levers — you'll need at least one other "Include in search" lever checked. If the goal isn't reachable at your fixed base, the simulator still shows the closest plan it found, with a warning at the top of the results.
    - Using the **Specific List** strategy instead? Goal Seek always keeps every year's typed amount exactly as you entered it and searches only the **Market adjustment** and **Balance adjustment** levers below — check at least one of those.

@@ -107,8 +107,16 @@ describe('defaultScenario', () => {
 });
 
 describe('buildSimParams', () => {
-  it('converts percentages to decimals and shapes engine params', () => {
+  function simScenario() {
     const s = defaultScenario();
+    s.startBalance = 3000;
+    s.horizonPlusYears = 0;
+    s.horizonMinusYears = 0;
+    return s;
+  }
+
+  it('converts percentages to decimals and shapes engine params', () => {
+    const s = simScenario();
     s.randomSeed = '7';
     const p = buildSimParams(s, { years: [] });
     expect(p.seed).toBe(7);
@@ -119,9 +127,11 @@ describe('buildSimParams', () => {
   });
 
   it('maps a blank glide target to null (lever off) and a typed value to dollars', () => {
-    // Easy Mode defaults pin the glide target to the Balanced ending-balance target.
-    const defaults = buildSimParams(defaultScenario(), { years: [] });
-    expect(defaults.portfolio.glideTarget).toBe(1_500_000);
+    const withTarget = defaultScenario();
+    withTarget.startBalance = 2000;
+    withTarget.glideTarget = Math.round(2000 * 0.4);
+    const defaults = buildSimParams(withTarget, { years: [] });
+    expect(defaults.portfolio.glideTarget).toBe(800_000);
 
     const blank = defaultScenario();
     blank.glideTarget = '';
@@ -167,7 +177,7 @@ describe('buildSimParams', () => {
   });
 
   it('fits specific withdrawals to the simulation horizon', () => {
-    const s = defaultScenario();
+    const s = simScenario();
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '80\n85\n90';
     const p = buildSimParams(s, { years: [] });
@@ -177,7 +187,7 @@ describe('buildSimParams', () => {
   });
 
   it('builds a per-year minimum withdrawal series from tiers', () => {
-    const s = defaultScenario();
+    const s = simScenario();
     s.numYears = 5;
     s.withdrawalFloors = [{ amount: 120, years: 2 }, { amount: 80 }];
     const p = buildSimParams(s, { years: [] });
@@ -214,7 +224,7 @@ describe('buildSimParams', () => {
   });
 
   it('builds percentage minimum floors for a Specific List strategy', () => {
-    const s = defaultScenario();
+    const s = simScenario();
     s.numYears = 3;
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '100\n90\n80';
@@ -224,7 +234,7 @@ describe('buildSimParams', () => {
   });
 
   it('builds a per-year gifting series from tiers', () => {
-    const s = defaultScenario();
+    const s = simScenario();
     s.numYears = 4;
     s.giftingTiers = [{ amount: 25, balance: 2000, years: 2 }, { amount: 10, balance: 1500 }];
     const p = buildSimParams(s, { years: [] });
@@ -244,7 +254,7 @@ describe('buildSimParams', () => {
   });
 
   it('assigns zero floor to deposit years in a Specific List strategy', () => {
-    const s = defaultScenario();
+    const s = simScenario();
     s.numYears = 2;
     s.withdrawalStrategy = 'specific';
     s.specificWithdrawals = '-50\n100';
@@ -387,8 +397,10 @@ describe('validateScenario', () => {
   // baseline switch to resampling with Goal Seek off.
   function plainScenario() {
     const s = defaultScenario();
+    s.startBalance = 3000;
     s.distMethod = 'resampling';
     s.goalSeekMode = false;
+    s.baseWithdrawal = 100;
     return s;
   }
 
@@ -396,18 +408,18 @@ describe('validateScenario', () => {
     expect(validateScenario(plainScenario(), range)).toEqual([]);
   });
 
-  it('reports only the missing-profiles error for the raw defaults', () => {
-    // The out-of-the-box scenario (Balanced preset) is valid except that its
-    // Smoothed Historical profiles are null until init fills them from history.
+  it('reports missing start and profiles errors for the raw defaults', () => {
     const errors = validateScenario(defaultScenario(), range);
     expect(errors).toEqual([
+      'Starting portfolio must be a positive amount.',
       'Return assumptions are incomplete. Adjust the year range or edit the Mean / Std Dev fields.',
     ]);
   });
 
   it('flags allocations that do not sum to 100', () => {
     const s = defaultScenario();
-    s.cashAllocation = 20; // total becomes 110
+    s.startBalance = 3000;
+    s.bondAllocation = 10; // total becomes 110
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('100%'))).toBe(true);
   });

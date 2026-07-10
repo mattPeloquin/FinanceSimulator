@@ -4,6 +4,7 @@ import {
   DEFAULT_PRESET_LEVEL,
   PRESET_SCENARIO_KEYS,
   PRESET_DERIVED_SCALAR_KEYS,
+  PRESET_PLAN_SCALAR_KEYS,
   presetForLevel,
   computeDerivedPresetValues,
   presetScenarioPatch,
@@ -30,13 +31,18 @@ describe('preset files', () => {
     expect(PRESETS).toHaveLength(5);
     for (let i = 1; i < PRESETS.length; i++) {
       expect(PRESETS[i].scenario.goalSeekDesiredSuccessPct)
-        .toBeLessThan(PRESETS[i - 1].scenario.goalSeekDesiredSuccessPct);
+        .toBeLessThanOrEqual(PRESETS[i - 1].scenario.goalSeekDesiredSuccessPct);
     }
+    expect(PRESETS[4].scenario.goalSeekDesiredSuccessPct)
+      .toBeLessThan(PRESETS[0].scenario.goalSeekDesiredSuccessPct);
+  });
+
+  it('steps base withdrawal pct up from conservative to aggressive in 0.5% steps', () => {
+    const rates = PRESETS.map((p) => p.derived.baseWithdrawalPctOfStart);
+    expect(rates).toEqual([4.0, 4.5, 5.0, 5.5, 6.0]);
   });
 
   it('steps minimum-withdrawal lifetime floors down from conservative to aggressive', () => {
-    // Conservative locks in more lifetime spending (steadier cash flow);
-    // Aggressive accepts a lower floor so Goal Seek can cut spending more.
     const lifetimes = PRESETS.map((p) => p.derived.minWithdrawalLifetimePctOfStart);
     for (let i = 1; i < lifetimes.length; i++) {
       expect(lifetimes[i], PRESETS[i].name).toBeLessThan(lifetimes[i - 1]);
@@ -52,9 +58,15 @@ describe('preset files', () => {
     }
   });
 
+  it('does not store goalSeekMode in preset scenario (lives in BASE_DEFAULTS)', () => {
+    for (const preset of PRESETS) {
+      expect(preset.scenario.goalSeekMode, preset.name).toBeUndefined();
+    }
+    expect(BASE_DEFAULTS.goalSeekMode).toBe(true);
+  });
+
   it('keeps every Goal Seek lever and gifting on at every level', () => {
     for (const preset of PRESETS) {
-      expect(preset.scenario.goalSeekMode, preset.name).toBe(true);
       expect(preset.scenario.goalSeekIncludeBaseWithdrawal, preset.name).toBe(true);
       expect(preset.scenario.goalSeekIncludeSpendingOverTime, preset.name).toBe(true);
       expect(preset.scenario.goalSeekIncludeMarketAdjustments, preset.name).toBe(true);
@@ -110,25 +122,52 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 0, extra: 99 },
       ],
     });
-    // 40% of start over 35 years → 34/yr minimum at the default balance.
     expect(out.withdrawalFloors).toEqual([{ amount: 34 }]);
-    // 0.3333/1/1.6667 × 3,000 → the classic 1,000/3,000/5,000 balance triggers.
     expect(out.dynLowBal).toBe(1000);
     expect(out.dynMedBal).toBe(3000);
     expect(out.dynHighBal).toBe(5000);
-    // Target ending % of start; glide Target mirrors it.
     expect(out.goalSeekTargetEndingBalance).toBe(
       Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
     );
     expect(out.glideTarget).toBe(out.goalSeekTargetEndingBalance);
-    // -2%/yr on both tiers; first tier spans 43% of 35 years ≈ 15; second
-    // tier's extra pinned to 0; first tier's extra untouched (Goal Seek's).
     expect(out.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 50, years: 15 },
       { changePct: -2, extra: 0 },
     ]);
-    // Gifting: 1% of start yearly while balance stays above 1.33 × start.
     expect(out.giftingTiers).toEqual([{ amount: 30, balance: 3990 }]);
+  });
+
+  it('fills the full spending plan when includePlanFields is true (Balanced @ 2,000)', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 2000,
+      numYears: 25,
+      spendingOverTimeTiers: [
+        { changePct: 0, extra: 0, years: 1 },
+        { changePct: 0, extra: 0 },
+      ],
+      includePlanFields: true,
+    });
+    expect(out.baseWithdrawal).toBe(100);
+    expect(out.floorBalance).toBe(2000);
+    expect(out.ceilingBalance).toBe(4000);
+    expect(out.floorPenalty).toBe(50);
+    expect(out.ceilingBonus).toBe(50);
+    expect(out.dynLowAdj).toBe(-33);
+    expect(out.dynMedAdj).toBe(0);
+    expect(out.dynHighAdj).toBe(33);
+    expect(out.glideFraction).toBe(50);
+    expect(out.spendingOverTimeTiers[0].extra).toBe(33);
+  });
+
+  it('omits plan fields when includePlanFields is false', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 2000,
+      numYears: 25,
+      includePlanFields: false,
+    });
+    expect(out.baseWithdrawal).toBeUndefined();
+    expect(out.floorBalance).toBeUndefined();
+    expect(out.glideFraction).toBeUndefined();
   });
 
   it('scales the derived amounts with the starting balance and horizon', () => {
@@ -141,7 +180,6 @@ describe('computeDerivedPresetValues', () => {
     expect(at6000.glideTarget).toBe(at6000.goalSeekTargetEndingBalance);
     expect(at6000.giftingTiers[0].amount).toBe(2 * at3000.giftingTiers[0].amount);
 
-    // Doubling the horizon halves the annual floor (same lifetime total).
     const at70y = computeDerivedPresetValues(balanced, { startThousands: 3000, numYears: 70 });
     expect(at70y.withdrawalFloors[0].amount).toBe(Math.round(3000 * (life / 100) / 70));
   });
@@ -155,12 +193,17 @@ describe('computeDerivedPresetValues', () => {
 
   it('skips balance-derived writes when the start is missing or non-positive', () => {
     for (const start of [0, -5, NaN, undefined]) {
-      const out = computeDerivedPresetValues(balanced, { startThousands: start, numYears: 35 });
+      const out = computeDerivedPresetValues(balanced, {
+        startThousands: start,
+        numYears: 35,
+        includePlanFields: true,
+      });
       expect(out.withdrawalFloors).toBeUndefined();
       expect(out.giftingTiers).toBeUndefined();
       expect(out.dynLowBal).toBeUndefined();
       expect(out.goalSeekTargetEndingBalance).toBeUndefined();
       expect(out.glideTarget).toBeUndefined();
+      expect(out.baseWithdrawal).toBeUndefined();
     }
   });
 
@@ -182,19 +225,29 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 1, extra: 55 },
       ],
     });
-    // Tier 0 amounts replaced, extra tiers (and their year spans) untouched.
     expect(out.withdrawalFloors).toEqual([{ amount: 34, years: 5 }, { amount: 44 }]);
     expect(out.giftingTiers).toEqual([
       { amount: 30, balance: 3990, years: 3 },
       { amount: 5, balance: 500 },
     ]);
-    // changePct on the first two tiers, years on tier 0, extra 0 on tier 1;
-    // tier 0's extra and the third tier stay exactly as the user left them.
     expect(out.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 77, years: 15 },
       { changePct: -2, extra: 0, years: 6 },
       { changePct: 1, extra: 55 },
     ]);
+  });
+
+  it('sets tier-0 extra from plan when includePlanFields is true', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 2000,
+      numYears: 25,
+      spendingOverTimeTiers: [
+        { changePct: 0, extra: 99, years: 1 },
+        { changePct: 0, extra: 0 },
+      ],
+      includePlanFields: true,
+    });
+    expect(out.spendingOverTimeTiers[0].extra).toBe(33);
   });
 
   it('only sets changePct when the spending list has a single tier', () => {
@@ -212,29 +265,29 @@ describe('defaults composition', () => {
     for (const key of [...PRESET_SCENARIO_KEYS, ...PRESET_DERIVED_SCALAR_KEYS]) {
       expect(Object.hasOwn(BASE_DEFAULTS, key), key).toBe(false);
     }
-    // Tier lists: floors/gifting are fully derived; spending keeps only the
-    // Goal Seek seed shape (first-tier extra), not preset changePct/years.
+    // Plan scalars may appear as zero/blank seeds for detached mode; presets own
+    // the live values while Easy Mode is on (Goal Seek off).
+    expect(BASE_DEFAULTS.baseWithdrawal).toBe(0);
+    expect(BASE_DEFAULTS.floorBalance).toBe(0);
     expect(Object.hasOwn(BASE_DEFAULTS, 'withdrawalFloors')).toBe(false);
     expect(Object.hasOwn(BASE_DEFAULTS, 'giftingTiers')).toBe(false);
-    expect(BASE_DEFAULTS.spendingOverTimeTiers[0].extra).toBe(50);
+    expect(BASE_DEFAULTS.startBalance).toBe('');
+    expect(BASE_DEFAULTS.goalSeekMode).toBe(true);
   });
 
-  it('bakes the Balanced preset into SCENARIO_DEFAULTS', () => {
+  it('bakes the Balanced preset into SCENARIO_DEFAULTS without a starting portfolio', () => {
     for (const [key, value] of Object.entries(balanced.scenario)) {
       expect(SCENARIO_DEFAULTS[key], key).toEqual(value);
     }
     expect(SCENARIO_DEFAULTS.presetLevel).toBe(DEFAULT_PRESET_LEVEL);
     expect(SCENARIO_DEFAULTS.presetActive).toBe(true);
-    expect(SCENARIO_DEFAULTS.withdrawalFloors).toEqual([{
-      amount: Math.round(3000 * (balanced.derived.minWithdrawalLifetimePctOfStart / 100) / 35),
-    }]);
-    expect(SCENARIO_DEFAULTS.goalSeekTargetEndingBalance).toBe(
-      Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
-    );
-    expect(SCENARIO_DEFAULTS.glideTarget).toBe(SCENARIO_DEFAULTS.goalSeekTargetEndingBalance);
+    expect(SCENARIO_DEFAULTS.startBalance).toBe('');
+    expect(SCENARIO_DEFAULTS.withdrawalFloors).toBeUndefined();
+    expect(SCENARIO_DEFAULTS.goalSeekTargetEndingBalance).toBeUndefined();
+    expect(SCENARIO_DEFAULTS.glideTarget).toBeUndefined();
     expect(SCENARIO_DEFAULTS.glideRate).toBe(-2);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 50, years: 15 },
+      { changePct: -2, extra: 0, years: 11 },
       { changePct: -2, extra: 0 },
     ]);
   });
@@ -249,9 +302,8 @@ describe('defaults composition', () => {
           withdrawalFloors: s.withdrawalFloors,
           giftingTiers: s.giftingTiers,
           spendingOverTimeTiers: s.spendingOverTimeTiers,
+          includePlanFields: true,
         }));
-        // Null return profiles are the only acceptable complaint (init fills
-        // them from history before any run).
         expect(validateScenario(s, range), `level ${level} @ ${start}`)
           .toEqual([PROFILES_ERROR]);
       }

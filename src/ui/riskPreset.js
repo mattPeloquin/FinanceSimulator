@@ -5,6 +5,7 @@
 //   - editing Starting Portfolio / Years live-rescales the balance- and
 //     horizon-derived values (minimum withdrawal, gifting, balance triggers,
 //     target ending balance, spending timeline),
+//   - when Goal Seek is off, also fills the full spending plan from presets,
 //   - glide spend timing and other preset keys are applied verbatim,
 //   - manually editing any preset-controlled field DETACHES: the checkbox
 //     flips off and the user's values are kept. Re-checking re-applies the
@@ -15,6 +16,8 @@
 // Goal Seek's write-back of found plan values does NOT detach: it assigns
 // element values directly without firing events, and that is by design —
 // presets configure the search; the search fills in the answer.
+//
+// Toggling Goal Seek on/off does NOT detach Easy Mode.
 
 import {
   parseCurrency,
@@ -30,7 +33,6 @@ import {
 } from '../state/presets/index.js';
 import {
   toggleDistMethod,
-  toggleGoalSeekMode,
   refreshDynamicAdjustmentPreviews,
   updateAllocationTotal,
 } from './inputs.js';
@@ -50,6 +52,10 @@ function isAttached() {
   return !!el('presetActive')?.checked;
 }
 
+function goalSeekEnabled() {
+  return !!el('goalSeekMode')?.checked;
+}
+
 function currentLevel() {
   const n = parseInt(el('presetLevel')?.value, 10);
   return Number.isFinite(n) ? n : DEFAULT_PRESET_LEVEL;
@@ -64,6 +70,7 @@ function derivedContext() {
     withdrawalFloors: readWithdrawalFloorsFromDom(),
     giftingTiers: readGiftingTiersFromDom(),
     spendingOverTimeTiers: readSpendingOverTimeTiersFromDom(),
+    includePlanFields: isAttached() && !goalSeekEnabled(),
   };
 }
 
@@ -87,21 +94,24 @@ function updateControlState() {
 // the same set applyScenario() re-runs after a full scenario load.
 function refreshDependentUi(patch) {
   if (patch.distMethod != null) toggleDistMethod(patch.distMethod);
-  if (patch.goalSeekMode != null) toggleGoalSeekMode(!!patch.goalSeekMode);
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
   syncBaseWithdrawalPreview();
 }
 
+function buildPresetPatch(level) {
+  const preset = presetForLevel(level);
+  return {
+    ...preset.scenario,
+    ...computeDerivedPresetValues(preset, derivedContext()),
+  };
+}
+
 /** Apply a slider level: static preset keys + derived values. Never simulates. */
 export function applyPresetLevel(level) {
-  const preset = presetForLevel(level);
   isApplyingPreset = true;
   try {
-    const patch = {
-      ...preset.scenario,
-      ...computeDerivedPresetValues(preset, derivedContext()),
-    };
+    const patch = buildPresetPatch(level);
     writeScenarioFieldsToDom(patch);
     refreshDependentUi(patch);
     updateLevelText();
@@ -111,14 +121,12 @@ export function applyPresetLevel(level) {
   notify();
 }
 
-// Recompute only the balance/horizon-derived values (called as the user types
-// a new Starting Portfolio or Years while attached).
+// Recompute derived (and plan when Goal Seek is off) while attached.
 function rescaleDerived() {
   if (!isAttached()) return;
-  const preset = presetForLevel(currentLevel());
   isApplyingPreset = true;
   try {
-    const patch = computeDerivedPresetValues(preset, derivedContext());
+    const patch = computeDerivedPresetValues(presetForLevel(currentLevel()), derivedContext());
     writeScenarioFieldsToDom(patch);
     refreshDynamicAdjustmentPreviews();
     syncBaseWithdrawalPreview();
@@ -126,6 +134,12 @@ function rescaleDerived() {
     isApplyingPreset = false;
   }
   notify();
+}
+
+/** When Goal Seek turns off while attached, fill the preset spending plan. */
+export function applyPlanFieldsIfAttached() {
+  if (!isAttached() || goalSeekEnabled()) return;
+  rescaleDerived();
 }
 
 /** Flip the preset off, keeping all current form values. */
@@ -139,6 +153,11 @@ export function detachPreset() {
 
 function maybeDetach() {
   if (isApplyingPreset || !isAttached()) return;
+  detachPreset();
+}
+
+function maybeDetachPlanField() {
+  if (isApplyingPreset || !isAttached() || goalSeekEnabled()) return;
   detachPreset();
 }
 
@@ -156,8 +175,8 @@ export function syncRiskPresetUi(scenario) {
 
 // Detach when the user edits a slider-managed tier field. Only the tiers the
 // slider manages count: row 0 of minimum-withdrawal and gifting; the change %
-// on the first two spending tiers and the years of spending tier 0. Extra
-// tiers (and spending tier 0's "extra", which Goal Seek owns) never detach.
+// on the first two spending tiers and the years of spending tier 0. Tier-0
+// extra detaches only when Goal Seek is off (Easy Mode owns it then).
 function isSliderManagedTierEdit(target) {
   const floorRow = target.closest('[data-withdrawal-floor-row]');
   if (floorRow) return floorRow.dataset.withdrawalFloorRow === '0';
@@ -170,6 +189,9 @@ function isSliderManagedTierEdit(target) {
     const row = spendingRow.dataset.spendingTierRow;
     if (target.matches('[data-spending-change]')) return row === '0' || row === '1';
     if (target.matches('[data-spending-years]')) return row === '0';
+    if (target.matches('[data-spending-extra]')) {
+      return row === '0' && !goalSeekEnabled();
+    }
   }
   return false;
 }
@@ -201,6 +223,11 @@ export function setupRiskPresetControl({ onChange } = {}) {
   el('startBalance')?.addEventListener('input', rescaleDerived);
   el('numYears')?.addEventListener('input', rescaleDerived);
 
+  // Goal Seek off while attached → fill the preset spending plan (no detach).
+  el('goalSeekMode')?.addEventListener('change', () => {
+    applyPlanFieldsIfAttached();
+  });
+
   // ---- Detach detection (user edits to preset-controlled fields) ----------
 
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
@@ -208,7 +235,6 @@ export function setupRiskPresetControl({ onChange } = {}) {
   });
 
   const detachIds = [
-    'goalSeekMode',
     'goalSeekDesiredSuccessPct', 'goalSeekDesiredSuccessPctSlider',
     'goalSeekRiskTolerancePct', 'goalSeekRiskTolerancePctSlider',
     'goalSeekTargetEndingBalance',
@@ -228,6 +254,19 @@ export function setupRiskPresetControl({ onChange } = {}) {
     input.addEventListener('change', maybeDetach);
   }
 
+  const planDetachIds = [
+    'baseWithdrawal',
+    'floorBalance', 'floorPenalty', 'ceilingBalance', 'ceilingBonus',
+    'dynLowAdj', 'dynMedAdj', 'dynHighAdj',
+    'glideFraction',
+  ];
+  for (const id of planDetachIds) {
+    const input = el(id);
+    if (!input) continue;
+    input.addEventListener('input', maybeDetachPlanField);
+    input.addEventListener('change', maybeDetachPlanField);
+  }
+
   document.querySelectorAll('.allocation-input').forEach((input) => {
     input.addEventListener('input', maybeDetach);
   });
@@ -237,7 +276,10 @@ export function setupRiskPresetControl({ onChange } = {}) {
     if (!list) continue;
     const handler = (e) => {
       if (isApplyingPreset || !isAttached()) return;
-      if (e.target instanceof Element && isSliderManagedTierEdit(e.target)) detachPreset();
+      if (e.target instanceof Element && isSliderManagedTierEdit(e.target)) {
+        if (e.target.matches('[data-spending-extra]')) maybeDetachPlanField();
+        else detachPreset();
+      }
     };
     list.addEventListener('input', handler);
     list.addEventListener('change', handler);

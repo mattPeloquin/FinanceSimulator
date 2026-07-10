@@ -973,6 +973,11 @@ export const MAX_NUM_SIMULATIONS = 100000;
 export function validateScenario(scenario, { minYear, maxYear }) {
   const errors = [];
 
+  const start = parseCurrency(scenario.startBalance);
+  if (!Number.isFinite(start) || start <= 0) {
+    errors.push('Starting portfolio must be a positive amount.');
+  }
+
   if (!Number.isFinite(scenario.numYears) || scenario.numYears < 1 || scenario.numYears > MAX_NUM_YEARS) {
     errors.push(`Investment horizon must be between 1 and ${MAX_NUM_YEARS} years.`);
   }

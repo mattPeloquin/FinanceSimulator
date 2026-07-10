@@ -3,7 +3,6 @@
   "description": "Safer tilt — bond-leaning mix, modest spending decline, leaves a solid cushion.",
   "scenario": {
     "distMethod": "scaledHistorical",
-    "goalSeekMode": true,
     "goalSeekDesiredSuccessPct": 95,
     "goalSeekRiskTolerancePct": 10,
     "goalSeekIncludeBaseWithdrawal": true,
@@ -24,10 +23,18 @@
     "glideRate": -2
   },
   "derived": {
-    "minWithdrawalLifetimePctOfStart": 45,
+    "minWithdrawalLifetimePctOfStart": 65,
     "gifting": { "amountPctOfStart": 0.75, "balanceMultipleOfStart": 1.4 },
     "spending": { "changePct": -1.5, "firstTierYearsFractionOfHorizon": 0.4 },
     "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
-    "targetEndingBalancePctOfStart": 60
+    "baseWithdrawalPctOfStart": 4.5,
+    "floorBalanceMultipleOfStart": 1.0,
+    "ceilingBalanceMultipleOfStart": 1.5,
+    "floorPenalty": 45,
+    "ceilingBonus": 45,
+    "dynAdjPctOfBase": { "low": -25, "med": 0, "high": 25 },
+    "spendingExtraPctOfBase": 25,
+    "targetEndingBalancePctOfStart": 40,
+    "glideFraction": 40
   }
 }

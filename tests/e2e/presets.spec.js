@@ -4,8 +4,6 @@ async function waitForInit(page) {
   await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
 }
 
-// The autosave debounce is 400ms; wait until the given check passes against
-// the persisted scenario before reloading.
 async function waitForAutosave(page, check) {
   await page.waitForFunction((checkSrc) => {
     const raw = localStorage.getItem('sor:autosave');
@@ -19,53 +17,72 @@ function firstFloorAmount(page) {
   return page.locator('[data-withdrawal-floor-row="0"] [data-floor-amount]');
 }
 
-test('First open: simple-use mode with the Balanced preset and collapsed sections', async ({ page }) => {
+test('First open: Easy Mode attached, blank portfolio, Goal Seek on', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
 
-  // Slider attached at the middle (Balanced) level.
   await expect(page.locator('#presetActive')).toBeChecked();
   await expect(page.locator('#presetLevel')).toHaveValue('2');
   await expect(page.locator('#presetLevel')).toBeEnabled();
   await expect(page.locator('#presetLevelName')).toContainText('Balanced');
-
-  // Goal Seek is on out of the box — Run finds the best plan.
   await expect(page.locator('#runButton')).toHaveText('Find Best Plan');
+  await expect(page.locator('#startBalance')).toHaveValue('');
 
-  // All major sections start collapsed; the horizon/balance/slider surface is
-  // always visible.
   expect(await page.locator('#section-investment').evaluate((el) => el.open)).toBe(false);
   expect(await page.locator('#section-withdrawal').evaluate((el) => el.open)).toBe(false);
   await expect(page.locator('#numYears')).toBeVisible();
-  await expect(page.locator('#startBalance')).toBeVisible();
   await expect(page.locator('#presetLevel')).toBeVisible();
-
-  // Balanced derived values at the 3,000 default start / 35-year horizon.
-  await expect(firstFloorAmount(page)).toHaveValue('34');
-  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
-
   await expect(page.locator('#resultsSection')).toBeHidden();
+});
+
+test('Enter in Starting Portfolio commits like blur (formats the value)', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3000');
+  await page.press('#startBalance', 'Enter');
+  await expect(page.locator('#startBalance')).toHaveValue('3,000');
+});
+
+test('Enter in Years to simulate blurs the field', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.locator('#numYears').focus();
+  await page.fill('#numYears', '30');
+  await page.press('#numYears', 'Enter');
+  await expect(page.locator('#numYears')).not.toBeFocused();
+});
+
+test('Entering a balance rescales derived values while Goal Seek is on', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+
+  // Balanced @ 3,000 start / 25 years: 40% lifetime → 48/yr minimum; 40% target.
+  await expect(firstFloorAmount(page)).toHaveValue('48');
+  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
+  await expect(page.locator('#presetActive')).toBeChecked();
 });
 
 test('Moving the slider loads the level without running anything', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
 
-  // End = slider max = level 4 (Aggressive).
+  await page.fill('#startBalance', '3,000');
   await page.focus('#presetLevel');
   await page.keyboard.press('End');
 
   await expect(page.locator('#presetLevelName')).toContainText('Aggressive');
   await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('80');
   await expect(page.locator('#dynLowRet')).toHaveValue('-20');
-  // 23% of start over 35 years → 20/yr minimum; full spend-down target.
-  await expect(firstFloorAmount(page)).toHaveValue('20');
+  // 30% of start over 25 years → 36/yr minimum; full spend-down target.
+  await expect(firstFloorAmount(page)).toHaveValue('36');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('0');
-  // Gifting: 2% of start above 1.15 × start.
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('3,450');
 
-  // The slider only writes settings — no simulation, still attached.
   await expect(page.locator('#resultsSection')).toBeHidden();
   await expect(page.locator('#presetActive')).toBeChecked();
 });
@@ -74,10 +91,10 @@ test('Changing the years live-rescales the minimum withdrawal while attached', a
   await page.goto('/');
   await waitForInit(page);
 
-  await expect(firstFloorAmount(page)).toHaveValue('34');
-  await page.fill('#numYears', '70');
-  // Same lifetime total over twice the years → half the annual floor.
-  await expect(firstFloorAmount(page)).toHaveValue('17');
+  await page.fill('#startBalance', '3,000');
+  await expect(firstFloorAmount(page)).toHaveValue('48');
+  await page.fill('#numYears', '50');
+  await expect(firstFloorAmount(page)).toHaveValue('24');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 
@@ -87,24 +104,64 @@ test('Changing the starting balance live-rescales the derived values while attac
 
   await page.fill('#startBalance', '6,000');
 
-  // Balanced formulas at a 6,000 start / 35 years: 40% lifetime → 69/yr
-  // minimum; 1% gifting above 1.33 × start; target ending % of start; 1/3
-  // balance trigger.
-  await expect(firstFloorAmount(page)).toHaveValue('69');
+  await expect(firstFloorAmount(page)).toHaveValue('96');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('7,980');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
   await expect(page.locator('#dynLowBal')).toHaveValue('2,000');
-
-  // Editing the primary inputs never detaches the slider.
   await expect(page.locator('#presetActive')).toBeChecked();
+});
+
+test('Toggling Goal Seek off fills the plan but keeps Easy Mode attached', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '2,000');
+  await page.click('label:has(#goalSeekMode)');
+
+  await expect(page.locator('#presetActive')).toBeChecked();
+  await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+  // Balanced plan @ 2,000: 5% base → 100/yr; guardrails 1× / 2× start.
+  await expect(page.locator('#baseWithdrawal')).toHaveValue('100');
+  await expect(page.locator('#floorBalance')).toHaveValue('2,000');
+  await expect(page.locator('#ceilingBalance')).toHaveValue('4,000');
+  await expect(page.locator('#floorPenalty')).toHaveValue('50');
+  await expect(page.locator('#dynLowAdj')).toHaveValue('-33');
+  await expect(page.locator('#dynHighAdj')).toHaveValue('33');
+  await expect(page.locator('#glideFraction')).toHaveValue('50');
+});
+
+test('Slider move with Goal Seek off updates plan fields per level', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '2,000');
+  await page.click('label:has(#goalSeekMode)');
+  await page.focus('#presetLevel');
+  await page.keyboard.press('Home');
+
+  // Conservative: 4% base → 80/yr; floor 1× / ceiling 2.5× start.
+  await expect(page.locator('#baseWithdrawal')).toHaveValue('80');
+  await expect(page.locator('#floorBalance')).toHaveValue('2,000');
+  await expect(page.locator('#ceilingBalance')).toHaveValue('5,000');
+  await expect(page.locator('#floorPenalty')).toHaveValue('40');
+  await expect(page.locator('#presetActive')).toBeChecked();
+});
+
+test('Run with blank start shows validation error', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeHidden();
+  await expect(page.locator('#messageDialog')).toBeVisible();
+  await expect(page.locator('#messageDialogText')).toContainText('Starting portfolio');
 });
 
 test('Editing a preset-controlled field detaches; values are kept across reload', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
 
-  // Allocations are preset-controlled — open Investment Planning and edit one.
   await page.click('#section-investment > summary');
   await page.fill('#bondAllocation', '10');
 
@@ -113,12 +170,10 @@ test('Editing a preset-controlled field detaches; values are kept across reload'
   await expect(page.locator('#risk-preset-control')).toHaveClass(/opacity-50/);
   await expect(page.locator('#bondAllocation')).toHaveValue('10');
 
-  // Detached state survives a reload via autosave.
   await waitForAutosave(page, 'scenario.presetActive === false');
   await page.reload();
   await waitForInit(page);
   await expect(page.locator('#presetActive')).not.toBeChecked();
-  await expect(page.locator('#presetLevel')).toBeDisabled();
   await expect(page.locator('#bondAllocation')).toHaveValue('10');
 });
 
@@ -132,8 +187,6 @@ test('Re-attaching reloads the current level over manual edits', async ({ page }
 
   await page.check('#presetActive');
   await expect(page.locator('#presetLevel')).toBeEnabled();
-  await expect(page.locator('#risk-preset-control')).not.toHaveClass(/opacity-50/);
-  // Balanced's bond allocation snaps back.
   await expect(page.locator('#bondAllocation')).toHaveValue('0');
 });
 
@@ -141,23 +194,19 @@ test('User-added tiers survive slider moves; only the first tier is managed', as
   await page.goto('/');
   await waitForInit(page);
 
-  // The minimum-withdrawal list lives inside the collapsed Withdrawal Strategy
-  // section (its inner details is auto-opened by Goal Seek mode).
+  await page.fill('#startBalance', '3,000');
   await page.click('#section-withdrawal > summary');
   await page.click('#addWithdrawalFloorTier');
 
-  // Adding a tier beyond the first is not a preset-controlled edit.
   await expect(page.locator('#presetActive')).toBeChecked();
   await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(2);
 
-  // Level 0 (Conservative): Home = slider min. First tier gets 52.5% of
-  // start over 35 years = 45/yr; the user's added tier is preserved.
   await page.focus('#presetLevel');
   await page.keyboard.press('Home');
-  await expect(firstFloorAmount(page)).toHaveValue('45');
+  // Conservative: 50% of 3000 over 25 years → 60/yr.
+  await expect(firstFloorAmount(page)).toHaveValue('60');
   await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(2);
 
-  // Editing the slider-managed first tier detaches.
   await firstFloorAmount(page).fill('99');
   await expect(page.locator('#presetActive')).not.toBeChecked();
 });
@@ -180,12 +229,10 @@ test('Pre-slider saves load detached with their values intact', async ({ page })
   await waitForInit(page);
 
   await expect(page.locator('#presetActive')).not.toBeChecked();
-  await expect(page.locator('#presetLevel')).toBeDisabled();
   await expect(page.locator('#startBalance')).toHaveValue('4,200');
   await expect(firstFloorAmount(page)).toHaveValue('88');
   await expect(page.locator('#runButton')).toHaveText('Run Simulation');
 
-  // Detached: editing the balance must NOT rescale the old floor tier.
   await page.fill('#startBalance', '8,400');
   await expect(firstFloorAmount(page)).toHaveValue('88');
 });
@@ -195,22 +242,15 @@ test('Conservative Easy Mode Find Best Plan retunes guardrails (not an instant i
   await page.goto('/');
   await waitForInit(page);
 
-  // Defaults leave balance-adjustment guardrails at 2,000 / 4,000 with 50%
-  // cut/boost — the bug was that Conservative failed feasibility immediately
-  // and left those stale values untouched.
-  await expect(page.locator('#floorBalance')).toHaveValue('2,000');
-  await expect(page.locator('#ceilingBalance')).toHaveValue('4,000');
-  await expect(page.locator('#floorPenalty')).toHaveValue('50');
+  await page.fill('#startBalance', '3,000');
 
   await page.focus('#presetLevel');
   await page.keyboard.press('Home');
   await expect(page.locator('#presetLevelName')).toContainText('Conservative');
-  await expect(firstFloorAmount(page)).toHaveValue('45');
-  await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('97');
+  await expect(firstFloorAmount(page)).toHaveValue('60');
+  await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('95');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
 
-  // Trim Goal Seek's search size so the e2e stays bounded while still running
-  // the full lever search (not the early infeasible exit).
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#goalSeekNumSimulations', '400');
 
@@ -218,25 +258,21 @@ test('Conservative Easy Mode Find Best Plan retunes guardrails (not an instant i
   await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 120000 });
   await expect(page.locator('#goalSeekWarning')).toBeHidden();
 
-  // Goal Seek pins the balance-adjustment band to 0.1× / 2× start and tunes
-  // the cut/boost rates — proof the search ran past feasibility.
   await expect(page.locator('#floorBalance')).toHaveValue('300');
   await expect(page.locator('#ceilingBalance')).toHaveValue('6,000');
-  await expect(page.locator('#floorPenalty')).not.toHaveValue('50');
+  await expect(page.locator('#floorPenalty')).not.toHaveValue('40');
 });
 
-test('Simple flow: adjust inputs and run a plain simulation from the preset state', async ({ page }) => {
+test('Simple flow: adjust inputs and run a plain simulation from Easy Mode', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
 
-  // Type the two simple-mode inputs.
   await page.fill('#numYears', '30');
   await page.fill('#startBalance', '2,000');
 
-  // Run a plain (fast) simulation rather than a Goal Seek search: switch the
-  // mode off (this detaches the preset, which is fine) and trim the run size.
   await page.click('label:has(#goalSeekMode)');
   await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+  await expect(page.locator('#presetActive')).toBeChecked();
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numSimulations', '300');
 

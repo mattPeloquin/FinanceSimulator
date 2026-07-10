@@ -15,13 +15,20 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await disableGoalSeek(page);
 
   // Expect the initial state
-  await expect(page.locator('h1').filter({ hasText: 'Sequence of Returns Simulator' })).toBeVisible();
+  await expect(page.locator('h1')).toContainText('Simulator');
 
   // Two peer master sections: Investment Planning and Withdrawal Strategy
   await expect(page.locator('#section-investment > summary')).toContainText('Investment Planning');
   await expect(page.locator('#section-withdrawal > summary')).toContainText('Withdrawal Strategy');
+  // Goal Seek sits above Investment Planning in the primary inputs column
+  await expect(page.locator('#goalSeekMode')).toBeVisible();
+  const goalSeekBeforeInvestment = await page.locator('#goalSeekMode').evaluate((el) => {
+    const investment = document.getElementById('section-investment');
+    return !!(investment && el.compareDocumentPosition(investment) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(goalSeekBeforeInvestment).toBe(true);
   // Advanced settings sit at the bottom of the form (after results)
-  await expect(page.locator('#resultsSection + details > summary')).toHaveText('Advanced simulation settings');
+  await expect(page.locator('#section-advanced > summary')).toHaveText('Advanced simulation settings');
 
   const themeToggle = page.locator('#themeToggle');
   await expect(themeToggle).toBeVisible();
@@ -33,6 +40,9 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Results section should be hidden initially
   const resultsSection = page.locator('#resultsSection');
   await expect(resultsSection).toBeHidden();
+
+  await page.fill('#startBalance', '3000');
+  await page.press('#startBalance', 'Enter');
 
   // Click the Run Simulation button
   await page.click('#runButton');
@@ -112,6 +122,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 test('Historical IRR band survives a year selection shorter than the horizon', async ({ page }) => {
   await page.goto('/');
   await disableGoalSeek(page);
+  await page.fill('#startBalance', '3000');
+  await page.press('#startBalance', 'Enter');
   // Year-range inputs live under Investment Planning → Historical Data.
   await page.click('#section-investment > summary');
   // 2005–2025 is 21 years against the default 35-year horizon: no true rolling

@@ -54,6 +54,16 @@ function formatPctInputValue(input) {
   input.value = formatPct1(roundPct1(n));
 }
 
+// Commit field edits on Enter the same way as tabbing or clicking away.
+function blurOnEnter(input) {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+    }
+  });
+}
+
 // Set min/max on the year-range fields, show data-quality help, and clamp on blur.
 export function setupHistoricalYearRangeInputs({ minYear, maxYear, styleIndexFromYear, onChange }) {
   const startEl = document.getElementById('startYear');
@@ -638,6 +648,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
 
   const numYears = document.getElementById('numYears');
   if (numYears) {
+    blurOnEnter(numYears);
     numYears.addEventListener('input', () => {
       const strategy = document.querySelector('input[name="withdrawal-strategy"]:checked')?.value;
       if (strategy === 'specific' && specificWithdrawals) {
@@ -645,6 +656,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       }
     });
   }
+
+  const startBalance = document.getElementById('startBalance');
+  if (startBalance) blurOnEnter(startBalance);
 
   // Catch-all for the remaining number/text inputs so autosave stays current.
   document.querySelectorAll('input:not(.currency-input):not(.allocation-input), textarea').forEach((input) => {

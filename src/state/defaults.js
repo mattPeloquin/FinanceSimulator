@@ -86,20 +86,22 @@ export const BASE_DEFAULTS = {
   // Portfolio & withdrawal ($000s unless noted)
   // (Asset allocation percentages come from the risk preset.)
 
-  // Starting portfolio balance ($000s).
-  startBalance: 2000,
+  // Starting portfolio balance ($000s). Blank on first load — enter a positive
+  // amount before running. Easy Mode rescales derived values once set.
+  startBalance: '',
 
   // Base annual withdrawal. Used when withdrawalStrategy is 'base' ($000s).
-  baseWithdrawal: 150,
+  // Filled by Easy Mode (Goal Seek off) or Goal Seek when attached.
+  baseWithdrawal: 0,
 
   // Balance ($000s) below which spending scale begins cutting withdrawals.
-  floorBalance: 2000,
+  floorBalance: 0,
 
   // Spending scale at/below floorBalance, as % of target (e.g. 50 = half).
   floorPenalty: 50,
 
   // Balance ($000s) above which spending scale begins boosting withdrawals.
-  ceilingBalance: 4000,
+  ceilingBalance: 0,
 
   // Spending scale at/above ceilingBalance, as % bonus (e.g. 50 = +50%).
   ceilingBonus: 50,
@@ -117,10 +119,10 @@ export const BASE_DEFAULTS = {
   // Staged spending-over-time tiers: annual real % change, extra withdrawal,
   // and year count. Intermediate tiers need a year count; the last tier
   // applies to all remaining years. changePct / years are seeds the risk
-  // preset overwrites; the first-tier extra (50) is the starting point Goal
-  // Seek tunes from and is intentionally owned here.
+  // preset overwrites; tier-0 extra is filled by Easy Mode (Goal Seek off) or
+  // Goal Seek when attached.
   spendingOverTimeTiers: [
-    { changePct: 0, extra: 50, years: 1 },
+    { changePct: 0, extra: 0, years: 1 },
     { changePct: 0, extra: 0 },
   ],
 
@@ -140,9 +142,9 @@ export const BASE_DEFAULTS = {
 
   // Adjustment amounts ($000s) at each market anchor. The return triggers
   // (dyn*Ret) and balance triggers (dyn*Bal) come from the risk preset.
-  dynLowAdj: -50,
+  dynLowAdj: 0,
   dynMedAdj: 0,
-  dynHighAdj: 50,
+  dynHighAdj: 0,
 
   // Log-normal profiles (% mean / std-dev)
   // Used only when distMethod is 'lognormal'. null = auto-filled from the
@@ -163,8 +165,10 @@ export const BASE_DEFAULTS = {
   inflationMean: null,
   inflationStdDev: null,
 
-  // Goal Seek mode
-  // The master toggle, targets, and lever checkboxes come from the risk preset.
+  // Goal Seek mode — on by default for new users. Independent of Easy Mode:
+  // toggling it does not detach the Risk Level slider. Search targets and
+  // lever checkboxes come from the risk preset.
+  goalSeekMode: true,
 
   // Number of simulations run for each candidate the search evaluates.
   // Lower = faster search but noisier success-rate estimates; higher = slower
@@ -185,7 +189,7 @@ export const SCENARIO_DEFAULTS = {
   ...BASE_DEFAULTS,
   ...balanced.scenario,
   ...computeDerivedPresetValues(balanced, {
-    startThousands: BASE_DEFAULTS.startBalance,
+    startThousands: 0,
     numYears: BASE_DEFAULTS.numYears,
     withdrawalFloors: [],
     giftingTiers: [],
