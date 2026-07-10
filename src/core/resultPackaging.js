@@ -11,6 +11,9 @@ import {
   withdrawalTargetSuccessRate,
   median,
   isMedianYearlyMetric,
+  isMeanYearlyMetric,
+  meanYearlyWithdrawals,
+  perRunWithdrawalMetric,
   buildHistogram,
   summarizeReturns,
   irrFromPath,
@@ -18,6 +21,8 @@ import {
 import {
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
+  plannedScheduleMeanYearly,
+  plannedScheduleBenchmark,
   plannedYearlySchedule,
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
@@ -115,14 +120,11 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
   };
 }
 
-function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedianYearly) {
+function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdrawalMetric) {
   const re = regeneratePath(params, result.baseSeed, simIndex);
   const h = re.horizonYears;
   if (!benchmarkCache.has(h)) {
-    benchmarkCache.set(
-      h,
-      useMedianYearly ? plannedScheduleMedianYearly(params.portfolio, h) : plannedScheduleTotal(params.portfolio, h),
-    );
+    benchmarkCache.set(h, plannedScheduleBenchmark(params.portfolio, h, withdrawalMetric));
   }
   return {
     balances: re.path.balances,
@@ -146,7 +148,6 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const maxYears = params.maxYears ?? endpointYears;
   const horizonVariable = params.horizonRange != null;
   const withdrawalMetric = params.withdrawalMetric || 'total';
-  const useMedianYearly = isMedianYearlyMetric(withdrawalMetric);
 
   const rankW = rankByWithdrawn(result, withdrawalMetric);
   const halfW = Math.round((params.smoothFraction || 0) * n);
@@ -164,7 +165,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   for (let i = 0; i < SURFACE_SAMPLES; i++) {
     const rankIndex = Math.min(p5i + i * step, p65i);
     const simIndex = rankW[rankIndex];
-    surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, useMedianYearly));
+    surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdrawalMetric));
   }
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
@@ -176,12 +177,17 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
 
   const plannedWithdrawn = plannedScheduleTotal(params.portfolio, endpointYears);
   const plannedMedianYearly = plannedScheduleMedianYearly(params.portfolio, endpointYears);
-  const onPlanBenchmark = useMedianYearly ? plannedMedianYearly : plannedWithdrawn;
-  const onPlanActuals = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
+  const plannedMeanYearly = plannedScheduleMeanYearly(params.portfolio, endpointYears);
+  const onPlanBenchmark = isMedianYearlyMetric(withdrawalMetric)
+    ? plannedMedianYearly
+    : isMeanYearlyMetric(withdrawalMetric)
+      ? plannedMeanYearly
+      : plannedWithdrawn;
+  const onPlanActuals = perRunWithdrawalMetric(result, withdrawalMetric);
   const perRunBenchmarks = buildPerRunPlanBenchmarks(
     params.portfolio,
     result.horizonYears,
-    useMedianYearly,
+    withdrawalMetric,
   );
 
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
@@ -221,8 +227,10 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     medianBalance: median(result.finalBalance),
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
+    meanYearlyWithdrawn: median(meanYearlyWithdrawals(result.totalWithdrawn, result.horizonYears)),
     plannedWithdrawn,
     plannedMedianYearly,
+    plannedMeanYearly,
     onPlanBenchmark,
     percentiles,
     surfacePaths,

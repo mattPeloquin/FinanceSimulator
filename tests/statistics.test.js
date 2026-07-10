@@ -15,6 +15,8 @@ import {
   summarizeReturns,
   buildHistogram,
   irrFromPath,
+  meanYearlyWithdrawals,
+  withdrawalMetricLabels,
 } from '../src/core/statistics.js';
 
 function makeSummary(arrs) {
@@ -25,6 +27,9 @@ function makeSummary(arrs) {
     totalWithdrawn: Float64Array.from(arrs.totalWithdrawn),
     medianYearlyWithdrawal: Float64Array.from(
       arrs.medianYearlyWithdrawal ?? arrs.totalWithdrawn,
+    ),
+    horizonYears: Int32Array.from(
+      arrs.horizonYears ?? arrs.totalWithdrawn.map(() => 1),
     ),
     depletionYear: Float64Array.from(arrs.depletionYear ?? []),
   };
@@ -58,6 +63,55 @@ describe('rankByWithdrawn', () => {
       medianYearlyWithdrawal: [20, 20, 20],
     });
     expect(Array.from(rankByWithdrawn(summary, 'medianYearly'))).toEqual([1, 2, 0]);
+  });
+
+  it('sorts by mean yearly withdrawal (total / horizon) when that metric is selected', () => {
+    // Means: 300/30=10, 200/10=20, 150/10=15 — differs from both total order
+    // (2, 1, 0) and median order.
+    const summary = makeSummary({
+      avgReturn: [0, 0, 0],
+      finalBalance: [10, 20, 30],
+      totalWithdrawn: [300, 200, 150],
+      medianYearlyWithdrawal: [30, 5, 5],
+      horizonYears: [30, 10, 10],
+    });
+    expect(Array.from(rankByWithdrawn(summary, 'meanYearly'))).toEqual([0, 2, 1]);
+  });
+
+  it('mean-yearly ranking matches total ranking at a fixed horizon', () => {
+    const summary = makeSummary({
+      avgReturn: [0, 0, 0],
+      finalBalance: [50, 10, 30],
+      totalWithdrawn: [100, 100, 90],
+      medianYearlyWithdrawal: [1, 2, 3],
+      horizonYears: [20, 20, 20],
+    });
+    expect(Array.from(rankByWithdrawn(summary, 'meanYearly'))).toEqual(
+      Array.from(rankByWithdrawn(summary, 'total')),
+    );
+  });
+});
+
+describe('meanYearlyWithdrawals', () => {
+  it('divides each total by its per-run horizon', () => {
+    const out = meanYearlyWithdrawals(
+      Float64Array.from([300, 200, 0]),
+      Int32Array.from([30, 10, 25]),
+    );
+    expect(Array.from(out)).toEqual([10, 20, 0]);
+  });
+
+  it('accepts a fixed scalar horizon and guards zero', () => {
+    expect(Array.from(meanYearlyWithdrawals(Float64Array.from([100, 50]), 25))).toEqual([4, 2]);
+    expect(Array.from(meanYearlyWithdrawals(Float64Array.from([100]), 0))).toEqual([0]);
+  });
+});
+
+describe('withdrawalMetricLabels', () => {
+  it('labels each metric with total as the secondary for yearly metrics', () => {
+    expect(withdrawalMetricLabels('total')).toEqual({ primary: 'Total Withdrawn', secondary: 'Median / Year' });
+    expect(withdrawalMetricLabels('medianYearly')).toEqual({ primary: 'Median / Year', secondary: 'Total Withdrawn' });
+    expect(withdrawalMetricLabels('meanYearly')).toEqual({ primary: 'Mean / Year', secondary: 'Total Withdrawn' });
   });
 });
 

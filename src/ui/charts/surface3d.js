@@ -7,7 +7,7 @@ import {
   buildDrilldownPaths,
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
-import { meetsWithdrawalTarget, median, isMedianYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
+import { meetsWithdrawalTarget, median, isMedianYearlyMetric, isMeanYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
 import { getChartTheme } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
@@ -153,6 +153,10 @@ function pathActualWithdrawal(path, withdrawalMetric) {
   if (isMedianYearlyMetric(withdrawalMetric)) {
     if (path.medianYearlyWithdrawal != null) return path.medianYearlyWithdrawal;
     return median(path.withdrawals || []);
+  }
+  if (isMeanYearlyMetric(withdrawalMetric)) {
+    const h = path.horizonYears ?? path.withdrawals?.length ?? 0;
+    return h > 0 ? (path.totalWithdrawn ?? 0) / h : 0;
   }
   return path.totalWithdrawn ?? 0;
 }
@@ -703,16 +707,21 @@ function applyFloatChartTheme(series) {
   dsActual.pointBackgroundColor = theme.point;
 }
 
-function withdrawalAmounts(total, medianYr) {
-  const useMedian = isMedianYearlyMetric(surfaceState.withdrawalMetric);
-  const { primary, secondary } = withdrawalMetricLabels(useMedian);
-  return useMedian
-    ? { primaryLabel: primary, primaryValue: medianYr, secondaryLabel: secondary, secondaryValue: total }
-    : { primaryLabel: primary, primaryValue: total, secondaryLabel: secondary, secondaryValue: medianYr };
+function withdrawalAmounts(total, medianYr, horizonYears = 0) {
+  const metric = surfaceState.withdrawalMetric;
+  const { primary, secondary } = withdrawalMetricLabels(metric);
+  if (isMedianYearlyMetric(metric)) {
+    return { primaryLabel: primary, primaryValue: medianYr, secondaryLabel: secondary, secondaryValue: total };
+  }
+  if (isMeanYearlyMetric(metric)) {
+    const meanYr = horizonYears > 0 ? total / horizonYears : 0;
+    return { primaryLabel: primary, primaryValue: meanYr, secondaryLabel: secondary, secondaryValue: total };
+  }
+  return { primaryLabel: primary, primaryValue: total, secondaryLabel: secondary, secondaryValue: medianYr };
 }
 
 function withdrawalSummaryHtml(total, medianYr, { includeHorizon = false, horizon = 0 } = {}) {
-  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } = withdrawalAmounts(total, medianYr);
+  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } = withdrawalAmounts(total, medianYr, horizon);
   const lines = [
     `${primaryLabel}: <b>${formatK(primaryValue)}</b>`,
     `${secondaryLabel}: <b>${formatK(secondaryValue)}</b>`,
@@ -731,7 +740,7 @@ function showFloatWithdrawal(col) {
   const status = pathStatusDisplay(series);
   const muted = getChartTheme().floatMutedText;
   const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
-    withdrawalAmounts(series.total, series.medianYearly);
+    withdrawalAmounts(series.total, series.medianYearly, series.horizonYears);
   const horizonNote = surfaceState.horizonVariable && series.horizonYears > 0
     ? `<div style="font-weight:normal;color:${muted};margin-top:1px">Horizon: ${series.horizonYears} years</div>`
     : '';
@@ -790,7 +799,7 @@ function openLargeWithdrawalChart(col) {
   
   const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
   const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
-    withdrawalAmounts(series.total, series.medianYearly);
+    withdrawalAmounts(series.total, series.medianYearly, series.horizonYears);
   if (subtitle) {
     subtitle.innerHTML =
       `${primaryLabel}: ${formatK(primaryValue)}<br>` +
@@ -1161,7 +1170,7 @@ function applySurfaceDataset(surfacePaths, numYears) {
 
 function enrichDrilldownPaths(paths) {
   const cache = surfaceState.surfaceMeta?.benchmarkCache ?? {};
-  const useMedian = isMedianYearlyMetric(surfaceState.withdrawalMetric);
+  const metric = surfaceState.withdrawalMetric;
   return paths.map((path) => {
     const h = path.horizonYears;
     let planBenchmark = path.planBenchmark;
@@ -1169,9 +1178,12 @@ function enrichDrilldownPaths(paths) {
       planBenchmark = cache[h];
     }
     if (planBenchmark == null && h != null && surfaceState.simParams?.portfolio) {
-      planBenchmark = useMedian
-        ? median(path.withdrawals || [])
-        : (path.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
+      if (isMedianYearlyMetric(metric)) {
+        planBenchmark = median(path.withdrawals || []);
+      } else {
+        const plannedTotal = (path.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
+        planBenchmark = isMeanYearlyMetric(metric) && h > 0 ? plannedTotal / h : plannedTotal;
+      }
     }
     return { ...path, planBenchmark: planBenchmark ?? 0 };
   });

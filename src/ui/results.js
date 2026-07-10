@@ -4,7 +4,7 @@ import { drawTimelineCharts } from './charts/timeline.js';
 import { drawDistributionChart, drawAllYearsDistributionChart, drawIrrDistributionChart } from './charts/distribution.js';
 import { drawIrrScatter } from './charts/irrScatter.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
-import { isMedianYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
+import { isMedianYearlyMetric, isMeanYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
 
@@ -18,6 +18,21 @@ function percentileWithdrawal(path) {
   if (!withdrawals || withdrawals.length === 0) return 0;
   return median(withdrawals);
 }
+
+// The two non-primary metrics share one line under an outcome card's main
+// value: median stays on the left and total on the right, with mean/yr
+// filling whichever slot the primary metric vacates.
+function secondaryMetricSlots(metric) {
+  if (isMedianYearlyMetric(metric)) return ['meanYearly', 'total'];
+  if (isMeanYearlyMetric(metric)) return ['medianYearly', 'total'];
+  return ['medianYearly', 'meanYearly'];
+}
+
+const METRIC_SHORT_LABELS = {
+  total: 'Total Withdrawn',
+  medianYearly: 'Median / Year',
+  meanYearly: 'Mean / Year',
+};
 
 // Show how far a percentile's withdrawals landed from the planned schedule:
 // green = withdrew more than planned, red = fell short of the plan.
@@ -68,23 +83,38 @@ function setSecondaryMetric(id, value) {
   el.textContent = formatK(value);
 }
 
-function applyMetricLabels(useMedianYearly, horizonVariable) {
-  const { primary, secondary } = withdrawalMetricLabels(useMedianYearly);
+function applyMetricLabels(metric, horizonVariable) {
+  const useMedianYearly = isMedianYearlyMetric(metric);
+  const useMeanYearly = isMeanYearlyMetric(metric);
+  const { primary } = withdrawalMetricLabels(metric);
+  const [secondary1, secondary2] = secondaryMetricSlots(metric);
   setText(
     'medianWithdrawnLabel',
-    useMedianYearly ? 'Median Withdrawal / Year' : 'Median Total Withdrawn',
+    useMedianYearly
+      ? 'Median Withdrawal / Year'
+      : useMeanYearly
+        ? 'Mean Withdrawal / Year'
+        : 'Median Total Withdrawn',
   );
-  setText('medianWithdrawnSecondaryLabel', secondary);
+  setText('medianWithdrawnSecondaryLabel', METRIC_SHORT_LABELS[secondary1]);
+  setText('medianWithdrawnSecondary2Label', METRIC_SHORT_LABELS[secondary2]);
   setText(
     'plannedWithdrawnLabel',
-    useMedianYearly ? 'Planned Median / Year' : 'Planned Total Withdrawal',
+    useMedianYearly
+      ? 'Planned Median / Year'
+      : useMeanYearly
+        ? 'Planned Mean / Year'
+        : 'Planned Total Withdrawal',
   );
-  setText('plannedWithdrawnSecondaryLabel', secondary);
+  setText('plannedWithdrawnSecondaryLabel', METRIC_SHORT_LABELS[secondary1]);
+  setText('plannedWithdrawnSecondary2Label', METRIC_SHORT_LABELS[secondary2]);
   setText(
     'outcomesDescription',
     useMedianYearly
       ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
-      : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
+      : useMeanYearly
+        ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by mean withdrawal per year.'
+        : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
   );
   const horizonNote = horizonVariable ? ' Horizons vary across runs.' : '';
   const descEl = document.getElementById('outcomesDescription');
@@ -92,10 +122,13 @@ function applyMetricLabels(useMedianYearly, horizonVariable) {
 
   const deltaTitle = useMedianYearly
     ? 'Difference from the planned median per year'
-    : 'Difference from the planned withdrawal total';
+    : useMeanYearly
+      ? 'Difference from the planned mean per year'
+      : 'Difference from the planned withdrawal total';
   for (const key of PERCENTILE_KEYS) {
     setText(`${key}WdLabel`, primary);
-    setText(`${key}WdSecondaryLabel`, secondary);
+    setText(`${key}WdSecondaryLabel`, METRIC_SHORT_LABELS[secondary1]);
+    setText(`${key}WdSecondary2Label`, METRIC_SHORT_LABELS[secondary2]);
     const deltaEl = document.getElementById(`${key}Delta`);
     if (deltaEl) deltaEl.title = deltaTitle;
   }
@@ -116,11 +149,28 @@ function setGoalSeekWarning(message) {
 
 export function renderResults(result, params, { goalSeekWarning } = {}) {
   setGoalSeekWarning(goalSeekWarning ?? null);
-  const useMedianYearly = isMedianYearlyMetric(result.withdrawalMetric);
-  const plannedBenchmark = result.onPlanBenchmark ?? (useMedianYearly ? result.plannedMedianYearly : result.plannedWithdrawn);
-  const medianActual = useMedianYearly ? result.medianYearlyWithdrawn : result.medianWithdrawn;
-  const secondaryActual = useMedianYearly ? result.medianWithdrawn : result.medianYearlyWithdrawn;
-  const secondaryPlanned = useMedianYearly ? result.plannedWithdrawn : result.plannedMedianYearly;
+  const metric = result.withdrawalMetric;
+  const useMedianYearly = isMedianYearlyMetric(metric);
+  const useMeanYearly = isMeanYearlyMetric(metric);
+  const plannedBenchmark = result.onPlanBenchmark
+    ?? (useMedianYearly ? result.plannedMedianYearly : useMeanYearly ? result.plannedMeanYearly : result.plannedWithdrawn);
+  const medianActual = useMedianYearly
+    ? result.medianYearlyWithdrawn
+    : useMeanYearly
+      ? result.meanYearlyWithdrawn
+      : result.medianWithdrawn;
+  // Same slotting as the outcome cards: the two non-primary metrics share
+  // one line, median left of total.
+  const actualValues = {
+    total: result.medianWithdrawn,
+    medianYearly: result.medianYearlyWithdrawn,
+    meanYearly: result.meanYearlyWithdrawn,
+  };
+  const plannedValues = {
+    total: result.plannedWithdrawn,
+    medianYearly: result.plannedMedianYearly,
+    meanYearly: result.plannedMeanYearly,
+  };
   const chartYears = result.maxYears ?? result.numYears;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
@@ -131,10 +181,12 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   if (onPlanCard) {
     onPlanCard.title = useMedianYearly
       ? `Share of runs whose median yearly withdrawal reached at least ${100 - tolerancePct}% of the planned median per year`
-      : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
+      : useMeanYearly
+        ? `Share of runs whose mean yearly withdrawal reached at least ${100 - tolerancePct}% of the planned mean per year`
+        : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
 
-  applyMetricLabels(useMedianYearly, result.horizonVariable);
+  applyMetricLabels(metric, result.horizonVariable);
 
   setText('successRate', formatPercent(result.successRate));
   setText(
@@ -144,17 +196,28 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianReturn', formatPercent(result.returnSummary.median));
   setText('medianIrr', formatPercent(result.irrSummary.median) || '—');
+  const [secondarySlot1, secondarySlot2] = secondaryMetricSlots(metric);
   setText('medianWithdrawn', formatK(medianActual));
-  setSecondaryMetric('medianWithdrawnSecondary', secondaryActual);
+  setSecondaryMetric('medianWithdrawnSecondary', actualValues[secondarySlot1]);
+  setSecondaryMetric('medianWithdrawnSecondary2', actualValues[secondarySlot2]);
   setText('plannedWithdrawn', formatK(plannedBenchmark));
-  setSecondaryMetric('plannedWithdrawnSecondary', secondaryPlanned);
-
+  setSecondaryMetric('plannedWithdrawnSecondary', plannedValues[secondarySlot1]);
+  setSecondaryMetric('plannedWithdrawnSecondary2', plannedValues[secondarySlot2]);
   for (const key of PERCENTILE_KEYS) {
     const p = result.percentiles[key];
-    const actual = useMedianYearly ? (p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path)) : p.totalWithdrawn;
-    const secondary = useMedianYearly ? p.totalWithdrawn : (p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path));
+    const metricValues = {
+      total: p.totalWithdrawn,
+      medianYearly: p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path),
+      meanYearly: p.horizonYears > 0 ? p.totalWithdrawn / p.horizonYears : 0,
+    };
+    const actual = useMedianYearly
+      ? metricValues.medianYearly
+      : useMeanYearly
+        ? metricValues.meanYearly
+        : metricValues.total;
     setText(`${key}Wd`, formatK(actual));
-    setSecondaryMetric(`${key}WdSecondary`, secondary);
+    setSecondaryMetric(`${key}WdSecondary`, metricValues[secondarySlot1]);
+    setSecondaryMetric(`${key}WdSecondary2`, metricValues[secondarySlot2]);
     setDelta(`${key}Delta`, actual - plannedBenchmark);
     setText(`${key}Bal`, formatK(p.finalBalance));
     setEndYear(`${key}EndYear`, p.path.balances, result.numYears, p.horizonYears);

@@ -593,12 +593,15 @@ export function isHorizonVariable(scenario) {
   return (scenario.horizonPlusYears || 0) > 0 || (scenario.horizonMinusYears || 0) > 0;
 }
 
-/** Resolve 'auto' to total (fixed horizon) or medianYearly (variable horizon). */
+/** Resolve 'auto' to total (fixed horizon) or meanYearly (variable horizon).
+ * Mean/yr is the horizon-normalized total, so at a fixed horizon it orders runs
+ * identically to 'total' — enabling a horizon range never reorders results. */
 export function resolveWithdrawalMetric(scenario) {
   const metric = scenario.withdrawalMetric ?? SCENARIO_DEFAULTS.withdrawalMetric;
   if (metric === 'medianYearly') return 'medianYearly';
+  if (metric === 'meanYearly') return 'meanYearly';
   if (metric === 'total') return 'total';
-  return isHorizonVariable(scenario) ? 'medianYearly' : 'total';
+  return isHorizonVariable(scenario) ? 'meanYearly' : 'total';
 }
 
 /** Max years any single run may simulate (endpoint + plus range). */

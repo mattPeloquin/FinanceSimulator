@@ -10,6 +10,8 @@ Because this is a financial simulator, calculations must be strictly verified, a
 
 - **Core Math (`src/core/`)**: Whenever changing or adding financial formulas (e.g., inflation adjustment, withdrawal strategies, tax logic), you MUST write or update accompanying unit tests in `tests/` using **Vitest**.
 - **UI & Interaction (`src/ui/`)**: Whenever adding new inputs, charts, or modifying the user flow, you MUST ensure the end-to-end tests in `tests/e2e/` using **Playwright** are updated. Chromium is installed automatically on `npm install`; run `npm run setup:e2e` if browser tests fail with a missing executable.
+- **Verify via e2e specs, not by running the app**: To verify UI behavior, add or update a permanent spec in `tests/e2e/*.spec.js` and run it (`npx playwright test <name>`). Do NOT launch the dev server and drive the app with one-off browser scripts or manual interaction unless the user explicitly asks for that — verification effort should always become a lasting regression test. (Playwright's `webServer` config starts/reuses the dev server for you.)
+  - Gotcha: advanced inputs (e.g., `#withdrawalMetric`) sit inside the collapsed `<details>` "Advanced simulation settings" — click its `summary` before interacting. Use `test.slow()` for specs that run multiple simulations.
 
 ```javascript
 // ❌ BAD: Adding a new financial function without tests

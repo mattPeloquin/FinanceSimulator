@@ -624,8 +624,14 @@ describe('variable horizon and withdrawal metric', () => {
 
   it('resolves auto metric from horizon mode', () => {
     expect(resolveWithdrawalMetric({ withdrawalMetric: 'auto', horizonPlusYears: 0, horizonMinusYears: 0 })).toBe('total');
-    expect(resolveWithdrawalMetric({ withdrawalMetric: 'auto', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('medianYearly');
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'auto', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('meanYearly');
     expect(resolveWithdrawalMetric({ withdrawalMetric: 'total', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('total');
+  });
+
+  it('passes explicit metrics through regardless of horizon mode', () => {
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'meanYearly', horizonPlusYears: 0, horizonMinusYears: 0 })).toBe('meanYearly');
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'medianYearly', horizonPlusYears: 0, horizonMinusYears: 0 })).toBe('medianYearly');
+    expect(resolveWithdrawalMetric({ withdrawalMetric: 'medianYearly', horizonPlusYears: 5, horizonMinusYears: 0 })).toBe('medianYearly');
   });
 
   it('buildSimParams uses maxYears for specific-withdrawal fitting', () => {
@@ -637,7 +643,7 @@ describe('variable horizon and withdrawal metric', () => {
     const p = buildSimParams(s, samples);
     expect(p.maxYears).toBe(35);
     expect(p.portfolio.specificWithdrawals).toHaveLength(35);
-    expect(p.withdrawalMetric).toBe('medianYearly');
+    expect(p.withdrawalMetric).toBe('meanYearly');
   });
 
   it('validates horizon range bounds', () => {

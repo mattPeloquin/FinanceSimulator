@@ -4,7 +4,13 @@
 // and DOM-free, like the rest of `core/`, so it can run inside the worker
 // and be unit-tested directly.
 
-import { goalSuccessRate, median, isMedianYearlyMetric } from './statistics.js';
+import {
+  goalSuccessRate,
+  median,
+  isMedianYearlyMetric,
+  isMeanYearlyMetric,
+  perRunWithdrawalMetric,
+} from './statistics.js';
 import { buildBaseWithdrawalSchedule } from './withdrawal.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
@@ -112,19 +118,29 @@ export function plannedScheduleMedianYearly(portfolio, numYears) {
   return median(plannedYearlySchedule(portfolio, numYears));
 }
 
+// Mean of the unadjusted per-year withdrawal schedule (total ÷ years) — the
+// plan benchmark when scoring runs by mean yearly spending.
+export function plannedScheduleMeanYearly(portfolio, numYears) {
+  return numYears > 0 ? plannedScheduleTotal(portfolio, numYears) / numYears : 0;
+}
+
+// Planned benchmark for one horizon length under the chosen withdrawal metric.
+export function plannedScheduleBenchmark(portfolio, numYears, metric) {
+  if (isMedianYearlyMetric(metric)) return plannedScheduleMedianYearly(portfolio, numYears);
+  if (isMeanYearlyMetric(metric)) return plannedScheduleMeanYearly(portfolio, numYears);
+  return plannedScheduleTotal(portfolio, numYears);
+}
+
 // Build a per-run planned benchmark array, memoizing by horizon length so
 // variable-horizon Monte Carlo runs only compute each distinct schedule once.
-export function buildPerRunPlanBenchmarks(portfolio, horizonYearsArray, useMedianYearly) {
+export function buildPerRunPlanBenchmarks(portfolio, horizonYearsArray, metric) {
   const n = horizonYearsArray.length;
   const benchmarks = new Float64Array(n);
   const cache = new Map();
   for (let i = 0; i < n; i++) {
     const h = horizonYearsArray[i];
     if (!cache.has(h)) {
-      cache.set(
-        h,
-        useMedianYearly ? plannedScheduleMedianYearly(portfolio, h) : plannedScheduleTotal(portfolio, h),
-      );
+      cache.set(h, plannedScheduleBenchmark(portfolio, h, metric));
     }
     benchmarks[i] = cache.get(h);
   }
@@ -428,10 +444,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     if (window > 0) {
       return median(result.earlyWithdrawn) / window;
     }
-    if (isMedianYearlyMetric(config.withdrawalMetric)) {
-      return median(result.medianYearlyWithdrawal);
-    }
-    return median(result.totalWithdrawn);
+    // Median ACROSS runs (robust to outlier simulations) of the per-run
+    // metric value — total, median/yr, or mean/yr.
+    return median(perRunWithdrawalMetric(result, config.withdrawalMetric));
   }
 
   async function evaluateWith(numSimulations, stage) {
@@ -440,16 +455,15 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const window = currentEarlyWindow();
     const searchParams = { ...working, numSimulations, earlyYearsWindow: window };
     const result = await simulateAsync(searchParams);
-    const useMedianYearly = isMedianYearlyMetric(config.withdrawalMetric);
     const endpointYears = params.numYears;
     const plannedTotal = plannedScheduleTotal(working.portfolio, endpointYears);
     const plannedMedianAtEndpoint = plannedScheduleMedianYearly(working.portfolio, endpointYears);
     const perRunBenchmarks = buildPerRunPlanBenchmarks(
       working.portfolio,
       result.horizonYears,
-      useMedianYearly,
+      config.withdrawalMetric,
     );
-    const actualWithdrawn = useMedianYearly ? result.medianYearlyWithdrawal : result.totalWithdrawn;
+    const actualWithdrawn = perRunWithdrawalMetric(result, config.withdrawalMetric);
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,

@@ -1,16 +1,42 @@
 // Statistical helpers operating on the packed simulation summaries.
 
-export const WITHDRAWAL_METRICS = ['total', 'medianYearly'];
+export const WITHDRAWAL_METRICS = ['total', 'medianYearly', 'meanYearly'];
 
 export function isMedianYearlyMetric(metric) {
   return metric === 'medianYearly';
 }
 
+export function isMeanYearlyMetric(metric) {
+  return metric === 'meanYearly';
+}
+
 /** Display labels for primary vs secondary withdrawal metrics in results UI. */
-export function withdrawalMetricLabels(useMedianYearly) {
-  return useMedianYearly
-    ? { primary: 'Median / Year', secondary: 'Total Withdrawn' }
-    : { primary: 'Total Withdrawn', secondary: 'Median / Year' };
+export function withdrawalMetricLabels(metric) {
+  if (isMedianYearlyMetric(metric)) return { primary: 'Median / Year', secondary: 'Total Withdrawn' };
+  if (isMeanYearlyMetric(metric)) return { primary: 'Mean / Year', secondary: 'Total Withdrawn' };
+  return { primary: 'Total Withdrawn', secondary: 'Median / Year' };
+}
+
+// Per-run mean yearly withdrawal — the horizon-normalized lifetime total, so
+// dollars in a minority of years (boost/bonus years) still count. Derived on
+// demand; never stored on the summary. `horizonYears` may be a single number
+// (fixed horizon) or a per-run array.
+export function meanYearlyWithdrawals(totalWithdrawn, horizonYears) {
+  const n = totalWithdrawn.length;
+  const out = new Float64Array(n);
+  const fixedHorizon = typeof horizonYears === 'number';
+  for (let i = 0; i < n; i++) {
+    const h = fixedHorizon ? horizonYears : horizonYears[i];
+    out[i] = h > 0 ? totalWithdrawn[i] / h : 0;
+  }
+  return out;
+}
+
+// Per-run values of the chosen withdrawal metric.
+export function perRunWithdrawalMetric(summary, metric) {
+  if (isMedianYearlyMetric(metric)) return summary.medianYearlyWithdrawal;
+  if (isMeanYearlyMetric(metric)) return meanYearlyWithdrawals(summary.totalWithdrawn, summary.horizonYears);
+  return summary.totalWithdrawn;
 }
 
 // Indices sorted by the chosen withdrawal metric (asc), tie-broken by total
@@ -19,8 +45,8 @@ export function rankByWithdrawn(summary, metric = 'total') {
   const n = summary.numSimulations;
   const idx = new Int32Array(n);
   for (let i = 0; i < n; i++) idx[i] = i;
-  const { totalWithdrawn, finalBalance, medianYearlyWithdrawal } = summary;
-  const primary = isMedianYearlyMetric(metric) ? medianYearlyWithdrawal : totalWithdrawn;
+  const { totalWithdrawn, finalBalance } = summary;
+  const primary = perRunWithdrawalMetric(summary, metric);
   return Array.prototype.sort.call(idx, (a, b) => {
     if (primary[a] !== primary[b]) return primary[a] - primary[b];
     if (totalWithdrawn[a] !== totalWithdrawn[b]) return totalWithdrawn[a] - totalWithdrawn[b];

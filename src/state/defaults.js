@@ -35,8 +35,9 @@ export const SCENARIO_DEFAULTS = {
   planRiskTolerancePct: 5,
 
   // How runs are ranked and scored against the plan. Options:
-  //   'auto'         — total for fixed horizon, median/yr when range is enabled (default)
+  //   'auto'         — total for fixed horizon, mean/yr when range is enabled (default)
   //   'total'        — lifetime total withdrawn
+  //   'meanYearly'   — mean withdrawal per year (total ÷ horizon; horizon-independent)
   //   'medianYearly' — median withdrawal per year (horizon-independent)
   withdrawalMetric: 'auto',
 

@@ -12,6 +12,7 @@ import {
   highestMinimumWithdrawal,
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
+  plannedScheduleMeanYearly,
   buildPerRunPlanBenchmarks,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
@@ -96,9 +97,9 @@ describe('buildBalanceGrid', () => {
 
 
 describe('buildFractionGrid', () => {
-  it('builds a 0-100% grid in 10-point steps as 0-1 fractions by default', () => {
+  it('builds a 5-65% grid in 10-point steps as 0-1 fractions by default', () => {
     const grid = buildFractionGrid();
-    expect(grid).toEqual([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]);
+    expect(grid).toEqual([0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65]);
   });
 
   it('respects a custom range/step', () => {
@@ -220,10 +221,23 @@ describe('buildPerRunPlanBenchmarks', () => {
       withdrawalFloorSeries: new Array(30).fill(0),
     };
     const horizons = Int32Array.from([25, 25, 30, 30, 28]);
-    const benchmarks = buildPerRunPlanBenchmarks(portfolio, horizons, false);
+    const benchmarks = buildPerRunPlanBenchmarks(portfolio, horizons, 'total');
     expect(benchmarks[0]).toBe(benchmarks[1]);
     expect(benchmarks[2]).toBe(benchmarks[3]);
     expect(benchmarks[2]).toBeGreaterThan(benchmarks[0]);
+  });
+
+  it('builds mean-yearly benchmarks as each horizon plan total over its years', () => {
+    const portfolio = {
+      strategy: 'base',
+      base: 100_000,
+      spendingOverTimeSeries: spendingSeries(30, [{ changePct: 0, extra: 0 }]),
+      withdrawalFloorSeries: new Array(30).fill(0),
+    };
+    const horizons = Int32Array.from([25, 30]);
+    const benchmarks = buildPerRunPlanBenchmarks(portfolio, horizons, 'meanYearly');
+    expect(benchmarks[0]).toBeCloseTo(plannedScheduleTotal(portfolio, 25) / 25, 6);
+    expect(benchmarks[1]).toBeCloseTo(plannedScheduleTotal(portfolio, 30) / 30, 6);
   });
 });
 
@@ -302,6 +316,22 @@ describe('plannedScheduleMedianYearly', () => {
   });
 });
 
+describe('plannedScheduleMeanYearly', () => {
+  it('returns the schedule total divided by the horizon', () => {
+    const portfolio = {
+      base: 100_000,
+      spendingOverTimeSeries: spendingSeries(5, [
+        { changePct: 0, extra: 20_000, years: 2 },
+        { changePct: 0, extra: 0 },
+      ]),
+      withdrawalFloorSeries: new Array(5).fill(0),
+    };
+    // years 0-1: 120k, years 2-4: 100k -> mean = 540k / 5 = 108k (median is 100k)
+    expect(plannedScheduleMeanYearly(portfolio, 5)).toBe(108_000);
+    expect(plannedScheduleMeanYearly(portfolio, 0)).toBe(0);
+  });
+});
+
 describe('highestMinimumWithdrawal', () => {
   it('returns the largest tier amount in the series', () => {
     expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [120_000, 80_000, 0] })).toBe(120_000);
@@ -353,6 +383,28 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(true);
     expect(summary.achievedMedianYearlyWithdrawn).toBeGreaterThan(0);
     expect(summary.achievedObjectiveValue).toBe(summary.achievedMedianYearlyWithdrawn);
+  });
+
+  it('optimizes mean yearly withdrawal when that metric is selected', async () => {
+    const params = makeParams();
+    const { summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: false,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 800,
+      withdrawalMetric: 'meanYearly',
+      ...DEFAULT_GOAL_SEEK_CONFIG,
+    });
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
+    // Fixed horizon: median of per-run means is exactly the median total / years.
+    expect(summary.achievedObjectiveValue).toBeCloseTo(
+      summary.achievedMedianTotalWithdrawn / params.numYears,
+      6,
+    );
   });
 
   it('reports infeasible when even a $0 withdrawal cannot hit the target', async () => {
@@ -474,7 +526,8 @@ describe('runGoalSeek', () => {
     const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
     expect(floorBalance).toBeGreaterThan(0);
     expect(Number.isFinite(ceilingBalance)).toBe(true);
-    expect(ceilingBalance).toBe(6_000_000);
+    // Ceiling pins to the highest default multiple (2.0x of the 2M start).
+    expect(ceilingBalance).toBe(4_000_000);
     expect(floorBalance).toBe(200_000);
     expect(floorPenalty).toBeGreaterThan(0);
     expect(floorPenalty).toBeLessThanOrEqual(1);

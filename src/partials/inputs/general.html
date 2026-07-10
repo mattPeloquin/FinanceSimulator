@@ -61,11 +61,12 @@
                 <div>
                     <label for="withdrawalMetric" class="block text-sm font-medium text-theme-body">Withdrawal Success Metric</label>
                     <select id="withdrawalMetric" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
-                        <option value="auto">Auto (total for fixed horizon, median/yr for variable)</option>
+                        <option value="auto">Auto (total for fixed horizon, mean/yr for variable)</option>
                         <option value="total">Total withdrawal (lifetime)</option>
+                        <option value="meanYearly">Mean withdrawal per year</option>
                         <option value="medianYearly">Median withdrawal per year</option>
                     </select>
-                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Goal Seek. Auto picks median/yr when a horizon range is set. The other metric is still shown alongside results.</p>
+                    <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Goal Seek. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results.</p>
                 </div>
                 <div>
                     <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
