@@ -1,8 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+// Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a
+// plain simulation run, so switch it off first (clicking the toggle also
+// detaches the risk preset, which is fine here).
+async function disableGoalSeek(page) {
+  await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
+  await page.click('label:has(#goalSeekMode)');
+  await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+}
+
 test('Core simulation flow runs and populates results', async ({ page }) => {
   // Go to the home page
   await page.goto('/');
+  await disableGoalSeek(page);
 
   // Expect the initial state
   await expect(page.locator('h1').filter({ hasText: 'Sequence of Returns Simulator' })).toBeVisible();
@@ -95,6 +105,9 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
 test('Historical IRR band survives a year selection shorter than the horizon', async ({ page }) => {
   await page.goto('/');
+  await disableGoalSeek(page);
+  // The year-range inputs live in the (now default-collapsed) Future Returns section.
+  await page.click('summary:has-text("Future Returns")');
   // 2005–2025 is 21 years against the default 35-year horizon: no true rolling
   // window fits, so the band must fall back to wrapped windows instead of vanishing.
   await page.fill('#startYear', '2005');

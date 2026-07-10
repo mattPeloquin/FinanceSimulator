@@ -12,7 +12,7 @@ import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -28,6 +28,11 @@ function field(key, dom, type) {
 }
 
 const FIELDS = [
+  // Risk Level slider: the range input itself is the canonical field (no
+  // paired number input), plus the "use preset" on/off checkbox.
+  field('presetLevel', 'presetLevel', 'int'),
+  field('presetActive', 'presetActive', 'boolean'),
+
   field('numYears', 'numYears', 'int'),
   field('horizonPlusYears', 'horizonPlusYears', 'int'),
   field('horizonMinusYears', 'horizonMinusYears', 'int'),
@@ -192,6 +197,14 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     migrated.goalSeekIncludeBaseWithdrawal = !migrated.goalSeekPinBaseWithdrawal;
   }
   delete migrated.goalSeekPinBaseWithdrawal;
+
+  if (schemaVersion < 5) {
+    // Scenarios saved before the Risk Level slider existed are, by
+    // definition, hand-built — load them detached so the slider never
+    // overwrites their values unless the user re-enables it.
+    if (migrated.presetActive == null) migrated.presetActive = false;
+    if (migrated.presetLevel == null) migrated.presetLevel = SCENARIO_DEFAULTS.presetLevel;
+  }
 
   return migrated;
 }
@@ -639,63 +652,77 @@ export function readScenarioFromDom(doc = document) {
   return scenario;
 }
 
-// Write a scenario object back into the DOM inputs.
-export function writeScenarioToDom(scenario, doc = document) {
-  for (const f of FIELDS) {
+// Number inputs that mirror into a paired range slider; keep both in sync.
+const PAIRED_SLIDER_IDS = {
+  blockSize: 'blockSizeSlider',
+  scaledHistoricalSmoothing: 'scaledHistoricalSmoothingSlider',
+  goalSeekDesiredSuccessPct: 'goalSeekDesiredSuccessPctSlider',
+  goalSeekRiskTolerancePct: 'goalSeekRiskTolerancePctSlider',
+  planRiskTolerancePct: 'planRiskTolerancePctSlider',
+};
+
+// Tier-list keys and their dedicated DOM writers (not in FIELDS).
+const TIER_WRITERS = {
+  withdrawalFloors: writeWithdrawalFloorsToDom,
+  specificWithdrawalFloors: writeSpecificWithdrawalFloorsToDom,
+  giftingTiers: writeGiftingTiersToDom,
+  spendingOverTimeTiers: writeSpendingOverTimeTiersToDom,
+};
+
+// Write only the scenario keys present in `patch` back into the DOM. Handles
+// typed formatting, the two radio groups, tier lists, and paired-slider sync.
+// Used by writeScenarioToDom (full write) and the risk preset slider (subset).
+export function writeScenarioFieldsToDom(patch, doc = document) {
+  for (const key of Object.keys(patch)) {
+    const value = patch[key];
+
+    if (key === 'distMethod') {
+      const method = value || SCENARIO_DEFAULTS.distMethod;
+      const radio = doc.querySelector(`input[name="distribution-method"][value="${method}"]`);
+      if (radio) radio.checked = true;
+      continue;
+    }
+    if (key === 'withdrawalStrategy') {
+      const strat = value || SCENARIO_DEFAULTS.withdrawalStrategy;
+      const stratRadio = doc.querySelector(`input[name="withdrawal-strategy"][value="${strat}"]`);
+      if (stratRadio) stratRadio.checked = true;
+      continue;
+    }
+    if (TIER_WRITERS[key]) {
+      TIER_WRITERS[key](value ?? SCENARIO_DEFAULTS[key], doc);
+      continue;
+    }
+
+    const f = FIELD_BY_KEY.get(key);
+    if (!f) continue;
     const el = doc.getElementById(f.dom);
-    if (!el) continue;
-    if (f.type === 'boolean') {
-      el.checked = !!scenario[f.key];
-    } else {
-      const value = scenario[f.key];
-      el.value = formatField(value, f.type);
+    if (el) {
+      if (f.type === 'boolean') {
+        el.checked = !!value;
+      } else {
+        el.value = formatField(value, f.type);
+      }
+    }
+    const pairedId = PAIRED_SLIDER_IDS[key];
+    if (pairedId && value != null) {
+      const slider = doc.getElementById(pairedId);
+      if (slider) slider.value = value;
     }
   }
+}
 
-  const method = scenario.distMethod || SCENARIO_DEFAULTS.distMethod;
-  const radio = doc.querySelector(`input[name="distribution-method"][value="${method}"]`);
-  if (radio) radio.checked = true;
-
-  const strat = scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy;
-  const stratRadio = doc.querySelector(`input[name="withdrawal-strategy"][value="${strat}"]`);
-  if (stratRadio) stratRadio.checked = true;
-
-  // Keep the block-size and smoothing sliders in sync with their number inputs.
-  const slider = doc.getElementById('blockSizeSlider');
-  if (slider && scenario.blockSize != null) slider.value = scenario.blockSize;
-  const smoothSlider = doc.getElementById('scaledHistoricalSmoothingSlider');
-  if (smoothSlider && scenario.scaledHistoricalSmoothing != null) {
-    smoothSlider.value = scenario.scaledHistoricalSmoothing;
+// Write a scenario object back into the DOM inputs.
+export function writeScenarioToDom(scenario, doc = document) {
+  // Every declared field is written (missing keys clear to ''), plus the
+  // radios and the four tier lists (falling back to defaults when absent).
+  const patch = {};
+  for (const f of FIELDS) patch[f.key] = scenario[f.key];
+  patch.distMethod = scenario.distMethod || SCENARIO_DEFAULTS.distMethod;
+  patch.withdrawalStrategy = scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy;
+  for (const key of Object.keys(TIER_WRITERS)) {
+    patch[key] = scenario[key] ?? SCENARIO_DEFAULTS[key];
   }
-  const goalSeekSuccessSlider = doc.getElementById('goalSeekDesiredSuccessPctSlider');
-  if (goalSeekSuccessSlider && scenario.goalSeekDesiredSuccessPct != null) {
-    goalSeekSuccessSlider.value = scenario.goalSeekDesiredSuccessPct;
-  }
-  const goalSeekRiskSlider = doc.getElementById('goalSeekRiskTolerancePctSlider');
-  if (goalSeekRiskSlider && scenario.goalSeekRiskTolerancePct != null) {
-    goalSeekRiskSlider.value = scenario.goalSeekRiskTolerancePct;
-  }
-  const planRiskSlider = doc.getElementById('planRiskTolerancePctSlider');
-  if (planRiskSlider && scenario.planRiskTolerancePct != null) {
-    planRiskSlider.value = scenario.planRiskTolerancePct;
-  }
-
-  writeWithdrawalFloorsToDom(
-    scenario.withdrawalFloors ?? SCENARIO_DEFAULTS.withdrawalFloors,
-    doc,
-  );
-  writeSpecificWithdrawalFloorsToDom(
-    scenario.specificWithdrawalFloors ?? SCENARIO_DEFAULTS.specificWithdrawalFloors,
-    doc,
-  );
-  writeGiftingTiersToDom(
-    scenario.giftingTiers ?? SCENARIO_DEFAULTS.giftingTiers,
-    doc,
-  );
-  writeSpendingOverTimeTiersToDom(
-    scenario.spendingOverTimeTiers ?? SCENARIO_DEFAULTS.spendingOverTimeTiers,
-    doc,
-  );
+  writeScenarioFieldsToDom(patch, doc);
 }
 
 function parseField(raw, type) {

@@ -1,0 +1,32 @@
+{
+  "name": "Conservative",
+  "description": "Highest certainty: 97% success, bond/cash heavy, spending reacts early to weak markets, aims to preserve the full starting portfolio.",
+  "scenario": {
+    "distMethod": "scaledHistorical",
+    "goalSeekMode": true,
+    "goalSeekDesiredSuccessPct": 97,
+    "goalSeekRiskTolerancePct": 5,
+    "goalSeekIncludeBaseWithdrawal": true,
+    "goalSeekIncludeSpendingOverTime": true,
+    "goalSeekIncludeMarketAdjustments": true,
+    "goalSeekIncludeBalanceOverrides": true,
+    "goalSeekIncludeGlidePath": true,
+    "planRiskTolerancePct": 5,
+    "usLgGrowthAllocation": 10,
+    "usLgValueAllocation": 10,
+    "usSmMidAllocation": 5,
+    "exUsAllocation": 10,
+    "bondAllocation": 40,
+    "cashAllocation": 25,
+    "dynLowRet": -10,
+    "dynMedRet": 5,
+    "dynHighRet": 25
+  },
+  "derived": {
+    "minWithdrawalPctOfStart": 2.5,
+    "gifting": { "amountPctOfStart": 0.5, "balanceMultipleOfStart": 1.5 },
+    "spending": { "changePct": -1, "firstTierYearsFractionOfHorizon": 0.35 },
+    "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
+    "targetEndingBalancePctOfStart": 100
+  }
+}

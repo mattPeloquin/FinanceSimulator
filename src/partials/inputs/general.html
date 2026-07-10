@@ -24,6 +24,33 @@
                 <input type="text" id="startBalance" class="currency-input block w-full rounded-md input-theme sm:text-sm p-2">
                 <span class="input-adorn-suffix">000s</span>
             </div>
+
+            <!-- Risk Level preset slider (simple-use mode). While "Use preset"
+                 is on, moving the slider loads that level's settings and
+                 balance/horizon-derived values track the inputs above; editing
+                 any preset-controlled field switches it off automatically. -->
+            <div id="risk-preset-control" class="mt-3 p-3 border rounded-lg bg-theme-muted space-y-1">
+                <div class="flex items-center justify-between">
+                    <label for="presetLevel" class="text-sm font-medium text-theme-body">Risk Level</label>
+                    <label class="flex items-center gap-1.5 text-xs text-theme-muted cursor-pointer">
+                        <input type="checkbox" id="presetActive" class="h-3.5 w-3.5 rounded input-theme">
+                        Use preset
+                    </label>
+                </div>
+                <input type="range" id="presetLevel" min="0" max="4" step="1" list="presetLevelTicks" class="range-theme w-full">
+                <datalist id="presetLevelTicks">
+                    <option value="0"></option>
+                    <option value="1"></option>
+                    <option value="2"></option>
+                    <option value="3"></option>
+                    <option value="4"></option>
+                </datalist>
+                <div class="grid grid-cols-3 text-[10px] text-theme-faint leading-tight">
+                    <span>Conservative</span><span class="text-center">Balanced</span><span class="text-right">Aggressive</span>
+                </div>
+                <p id="presetLevelName" class="text-xs text-theme-muted"></p>
+                <p id="presetDetachedNote" class="text-[10px] text-theme-faint hidden">Preset off &mdash; your custom settings are kept. Re-check to reload the level.</p>
+            </div>
         </div>
     </div>
     <details class="group mt-4 border rounded-lg">

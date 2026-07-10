@@ -647,6 +647,8 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       input.id === 'goalSeekRiskTolerancePctSlider' ||
       input.id === 'planRiskTolerancePctSlider'
     ) return;
+    // The Risk Level control notifies through its own module (riskPreset.js).
+    if (input.id === 'presetLevel' || input.id === 'presetActive') return;
     if (input.id === 'specificWithdrawals') return;
     input.addEventListener('change', notify);
   });

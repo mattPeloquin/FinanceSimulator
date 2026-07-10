@@ -681,6 +681,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
 
   // Same as above, but for a pair of jointly-coupled fields (e.g. floor
   // balance + max cut, which are each a no-op without the other).
+  // eslint-disable-next-line no-unused-vars -- not called by any current stage; kept for future paired-lever searches
   async function pickBestPairWithResolve(pairs, applyPair, stageLabel, currentPair) {
     let best = currentPair;
     let bestObjective = -Infinity;

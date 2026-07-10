@@ -11,9 +11,19 @@ async function runSimulation(page) {
   await expect(page.locator('#medianWithdrawn')).not.toBeEmpty({ timeout: 20000 });
 }
 
+// Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a
+// plain simulation run, so switch it off first (clicking the toggle also
+// detaches the risk preset, which is fine here).
+async function disableGoalSeek(page) {
+  await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
+  await page.click('label:has(#goalSeekMode)');
+  await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+}
+
 test('Auto metric switches from totals to mean/yr when a horizon range is set', async ({ page }) => {
   test.slow(); // two full simulation runs
   await page.goto('/');
+  await disableGoalSeek(page);
 
   // Fixed horizon + auto -> lifetime totals everywhere; the outcome cards
   // show the two per-year metrics side by side underneath, median first.
@@ -60,6 +70,7 @@ test('Auto metric switches from totals to mean/yr when a horizon range is set', 
 test('Explicit median/yr and mean/yr metric selections drive the labels', async ({ page }) => {
   test.slow(); // two full simulation runs
   await page.goto('/');
+  await disableGoalSeek(page);
 
   // The metric selector sits inside the collapsed advanced-settings block.
   await page.click('summary:has-text("Advanced simulation settings")');

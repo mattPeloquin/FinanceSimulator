@@ -1,0 +1,32 @@
+{
+  "name": "Balanced",
+  "description": "The middle path: 90% success, diversified stock-leaning mix, gradual spending decline, aims to keep half the starting portfolio.",
+  "scenario": {
+    "distMethod": "scaledHistorical",
+    "goalSeekMode": true,
+    "goalSeekDesiredSuccessPct": 90,
+    "goalSeekRiskTolerancePct": 20,
+    "goalSeekIncludeBaseWithdrawal": true,
+    "goalSeekIncludeSpendingOverTime": true,
+    "goalSeekIncludeMarketAdjustments": true,
+    "goalSeekIncludeBalanceOverrides": true,
+    "goalSeekIncludeGlidePath": true,
+    "planRiskTolerancePct": 5,
+    "usLgGrowthAllocation": 25,
+    "usLgValueAllocation": 25,
+    "usSmMidAllocation": 15,
+    "exUsAllocation": 15,
+    "bondAllocation": 5,
+    "cashAllocation": 15,
+    "dynLowRet": -15,
+    "dynMedRet": 5,
+    "dynHighRet": 20
+  },
+  "derived": {
+    "minWithdrawalPctOfStart": 3.3333,
+    "gifting": { "amountPctOfStart": 1, "balanceMultipleOfStart": 1.33 },
+    "spending": { "changePct": -2, "firstTierYearsFractionOfHorizon": 0.43 },
+    "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
+    "targetEndingBalancePctOfStart": 50
+  }
+}

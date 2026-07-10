@@ -76,13 +76,27 @@ describe('migrateScenario', () => {
     expect(v4.goGoBonus).toBeUndefined();
     expect(v4.goGoYears).toBeUndefined();
   });
-  it('leaves v4 scenarios unchanged', () => {
+  it('leaves v4 scenarios unchanged apart from marking the preset detached', () => {
     const s = {
       startBalance: 4000,
       withdrawalFloors: [{ amount: 80 }],
       spendingOverTimeTiers: [{ changePct: 0, extra: 0 }],
     };
-    expect(migrateScenario(s, 4)).toEqual(s);
+    // Pre-v5 saves predate the Risk Level slider: they load detached so the
+    // slider never overwrites their hand-built values.
+    expect(migrateScenario(s, 4)).toEqual({
+      ...s,
+      presetActive: false,
+      presetLevel: SCENARIO_DEFAULTS.presetLevel,
+    });
+  });
+  it('leaves v5 scenarios untouched', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 4,
+    };
+    expect(migrateScenario(s, 5)).toEqual(s);
   });
 });
 
@@ -266,6 +280,11 @@ describe('buildGoalSeekConfig', () => {
     s.goalSeekDesiredSuccessPct = 85;
     s.goalSeekRiskTolerancePct = 20;
     s.goalSeekIncludeSpendingOverTime = true;
+    // Defaults (Balanced preset) turn every lever on; pin the rest off so the
+    // pass-through mapping below is unambiguous.
+    s.goalSeekIncludeMarketAdjustments = false;
+    s.goalSeekIncludeBalanceOverrides = false;
+    s.goalSeekIncludeGlidePath = false;
     const config = buildGoalSeekConfig(s);
     expect(config.targetEndingBalance).toBe(500 * MONEY_SCALE);
     expect(config.desiredSuccessRate).toBeCloseTo(0.85, 6);
@@ -357,9 +376,28 @@ describe('fitSpecificWithdrawalsToHorizon', () => {
 describe('validateScenario', () => {
   const range = { minYear: 1900, maxYear: 2025 };
 
-  it('passes for the default scenario (resampling)', () => {
+  // Defaults now ship with Goal Seek on and Smoothed Historical selected (the
+  // Balanced risk preset). Raw defaults have null return profiles (filled from
+  // history at runtime), so validation tests that want a clean plain-run
+  // baseline switch to resampling with Goal Seek off.
+  function plainScenario() {
     const s = defaultScenario();
-    expect(validateScenario(s, range)).toEqual([]);
+    s.distMethod = 'resampling';
+    s.goalSeekMode = false;
+    return s;
+  }
+
+  it('passes for a plain-run scenario (resampling, Goal Seek off)', () => {
+    expect(validateScenario(plainScenario(), range)).toEqual([]);
+  });
+
+  it('reports only the missing-profiles error for the raw defaults', () => {
+    // The out-of-the-box scenario (Balanced preset) is valid except that its
+    // Smoothed Historical profiles are null until init fills them from history.
+    const errors = validateScenario(defaultScenario(), range);
+    expect(errors).toEqual([
+      'Return assumptions are incomplete. Adjust the year range or edit the Mean / Std Dev fields.',
+    ]);
   });
 
   it('flags allocations that do not sum to 100', () => {
@@ -409,14 +447,14 @@ describe('validateScenario', () => {
   });
 
   it('allows a floor with no ceiling (ceiling = 0)', () => {
-    const s = defaultScenario();
+    const s = plainScenario();
     s.floorBalance = 5000;
     s.ceilingBalance = 0;
     expect(validateScenario(s, range)).toEqual([]);
   });
 
   it('ignores trigger ordering when dynamic adjustments are disabled', () => {
-    const s = defaultScenario();
+    const s = plainScenario();
     s.enableDynamicAdjustments = false;
     s.dynLowRet = 5;
     s.dynMedRet = 5;
@@ -460,7 +498,7 @@ describe('validateScenario', () => {
   });
 
   it('allows zero-gift placeholder tiers but requires balance when gift is positive', () => {
-    const s = defaultScenario();
+    const s = plainScenario();
     s.giftingTiers = [{ amount: 0, balance: 0, years: 5 }, { amount: 25, balance: 2000 }];
     expect(validateScenario(s, range)).toEqual([]);
     s.giftingTiers = [{ amount: 25, balance: 0 }];
@@ -485,7 +523,7 @@ describe('validateScenario', () => {
   });
 
   it('ignores Goal Seek fields when the mode is off', () => {
-    const s = defaultScenario();
+    const s = plainScenario();
     s.goalSeekTargetEndingBalance = -50;
     s.goalSeekDesiredSuccessPct = 500;
     expect(validateScenario(s, range)).toEqual([]);
@@ -543,6 +581,11 @@ describe('validateScenario', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.goalSeekIncludeBaseWithdrawal = false;
+    // Defaults (Balanced preset) turn every lever on; this test needs them all off.
+    s.goalSeekIncludeSpendingOverTime = false;
+    s.goalSeekIncludeMarketAdjustments = false;
+    s.goalSeekIncludeBalanceOverrides = false;
+    s.goalSeekIncludeGlidePath = false;
     s.baseWithdrawal = 150;
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('at least one other lever'))).toBe(true);
@@ -562,6 +605,11 @@ describe('validateScenario', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.withdrawalStrategy = 'specific';
+    // Defaults (Balanced preset) turn every lever on; this test needs the
+    // specific-list-compatible ones off.
+    s.goalSeekIncludeMarketAdjustments = false;
+    s.goalSeekIncludeBalanceOverrides = false;
+    s.goalSeekIncludeGlidePath = false;
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('Specific List'))).toBe(true);
   });

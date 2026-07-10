@@ -1,13 +1,21 @@
 // Default starting values for a new simulation scenario.
 //
 // HOW TO USE
-// - Edit values here to change what the app loads on a fresh visit.
+// - The app's out-of-the-box values are BASE_DEFAULTS below overlaid with the
+//   "Balanced" risk preset (src/state/presets/balanced.json) — the middle
+//   position of the Risk Level slider. Slider-controlled values (return
+//   method, Goal Seek settings, allocations, market/balance triggers, minimum
+//   withdrawal, gifting, spending timeline) live in balanced.json; everything
+//   else lives here. Edit whichever file owns the value you want to change.
 // - Currency fields are in thousands ($000s), matching the form labels.
 // - If you already have an autosaved session, clear browser storage or use a
 //   private window to see your changes on first load.
 // - Each field below has inline comments for valid options and limits.
 
-export const SCENARIO_DEFAULTS = {
+import balanced from './presets/balanced.json';
+import { computeDerivedPresetValues, DEFAULT_PRESET_LEVEL } from './presets/index.js';
+
+const BASE_DEFAULTS = {
 
   // Years to simulate (endpoint / target horizon). Valid range: 1–100.
   numYears: 35,
@@ -29,11 +37,6 @@ export const SCENARIO_DEFAULTS = {
   // 0 = show a single run at that rank; higher = smoother, less noisy curves.
   smoothWindowPct: 1,
 
-  // Max lifetime spending shortfall vs. plan (%) when scoring regular runs.
-  // Drives the "on plan" success rate and 3D below-plan coloring.
-  // Valid UI range: 0–35. Goal Seek uses its own Risk Tolerance when enabled.
-  planRiskTolerancePct: 5,
-
   // How runs are ranked and scored against the plan. Options:
   //   'auto'         — total for fixed horizon, mean/yr when range is enabled (default)
   //   'total'        — lifetime total withdrawn
@@ -49,17 +52,21 @@ export const SCENARIO_DEFAULTS = {
   // Valid UI range: 0–100. 0 = no jitter; 35 = moderate smoothing (default).
   scaledHistoricalSmoothing: 35,
 
-  // Mode selectors (radio buttons)
+  // Risk Level slider (simple-use mode)
 
-  // How returns are generated. Options:
-  //   'resampling'       — sample real historical years (with year-to-year persistence)
-  //   'scaledHistorical' — Smoothed Historical: resample real years, rescaled + jittered
-  //   'lognormal'        — draw from mean/std-dev profiles (requires fields below)
-  distMethod: 'resampling',
+  // Slider position 0 (Conservative) – 4 (Aggressive). See src/state/presets/.
+  presetLevel: DEFAULT_PRESET_LEVEL,
+
+  // Whether the slider drives the preset-controlled settings. Manually editing
+  // a preset-controlled field flips this off ("detach") and keeps your values.
+  presetActive: true,
+
+  // Mode selectors (radio buttons)
 
   // How withdrawals are chosen. Options:
   //   'base'     — fixed base amount plus optional front-loading / go-go years
   //   'specific' — paste a year-by-year list (see specificWithdrawals)
+  // (distMethod — how returns are generated — comes from the risk preset.)
   withdrawalStrategy: 'base',
 
   // Historical range
@@ -72,16 +79,8 @@ export const SCENARIO_DEFAULTS = {
   // Last year included. Must be within built-in history and ≥ startYear.
   endYear: 2025,
 
-  // Asset allocation (%). All six fields must sum to exactly 100.
-
-  usLgGrowthAllocation: 25,
-  usLgValueAllocation: 25,
-  usSmMidAllocation: 15,
-  exUsAllocation: 15,
-  bondAllocation: 5,
-  cashAllocation: 15,
-
   // Portfolio & withdrawal ($000s unless noted)
+  // (Asset allocation percentages come from the risk preset.)
 
   // Starting portfolio balance ($000s).
   startBalance: 3000,
@@ -121,19 +120,13 @@ export const SCENARIO_DEFAULTS = {
   // success rate (spending recycled early forfeits compounding).
   glideRate: -2,
 
-  // Staged minimum withdrawals ($000s). Intermediate tiers need a year count;
-  // the last tier applies to all remaining years. Empty = no floor.
-  withdrawalFloors: [{ amount: 100 }],
-
-  // Staged gifting ($000s gift + balance threshold). Intermediate tiers need a
-  // year count; the last tier applies to all remaining years. Empty = no gifting.
-  giftingTiers: [],
-
   // Front-loading (only when withdrawalStrategy is 'base')
 
   // Staged spending-over-time tiers: annual real % change, extra withdrawal,
   // and year count. Intermediate tiers need a year count; the last tier
-  // applies to all remaining years. Empty normalizes to one flat tier.
+  // applies to all remaining years. The changePct and first-tier years below
+  // are placeholders — the risk preset overlay fills them in; the first-tier
+  // extra (50) is the starting point Goal Seek tunes from.
   spendingOverTimeTiers: [
     { changePct: -2, extra: 50, years: 15 },
     { changePct: -2, extra: 0 },
@@ -153,19 +146,10 @@ export const SCENARIO_DEFAULTS = {
   // Master toggle for market-return and balance-based withdrawal adjustments.
   enableDynamicAdjustments: true,
 
-  // Low market-return anchor (%). Triggers must increase: low < med < high.
-  dynLowRet: -15,
-  dynLowBal: 1000,
+  // Adjustment amounts ($000s) at each market anchor. The return triggers
+  // (dyn*Ret) and balance triggers (dyn*Bal) come from the risk preset.
   dynLowAdj: -50,
-
-  // Expected market-return anchor (%).
-  dynMedRet: 5,
-  dynMedBal: 3000,
   dynMedAdj: 0,
-
-  // High market-return anchor (%).
-  dynHighRet: 20,
-  dynHighBal: 5000,
   dynHighAdj: 50,
 
   // Log-normal profiles (% mean / std-dev)
@@ -188,33 +172,7 @@ export const SCENARIO_DEFAULTS = {
   inflationStdDev: null,
 
   // Goal Seek mode
-  // When enabled, clicking "Run" searches for spending settings that hit the
-  // targets below instead of just simulating whatever is currently typed in.
-
-  // Master toggle for Goal Seek mode.
-  goalSeekMode: false,
-
-  // Balance ($000s) the search tries to leave behind at the end of the
-  // horizon (on top of never running out of money along the way).
-  goalSeekTargetEndingBalance: 0,
-
-  // Minimum acceptable success rate (%) for the searched plan.
-  goalSeekDesiredSuccessPct: 90,
-
-  // Max lifetime spending shortfall vs. plan (%) the search allows in bad
-  // markets. 0 = guardrail cuts effectively off; higher = bigger plan, more
-  // belt-tightening allowed. Minimum-withdrawal tiers still protect essentials.
-  goalSeekRiskTolerancePct: 20,
-
-  // When false, Goal Seek keeps the typed base withdrawal fixed and searches
-  // only the other included levers. Default true = base is searched like before.
-  goalSeekIncludeBaseWithdrawal: true,
-
-  // Which additional levers the search is allowed to tune (checkboxes).
-  goalSeekIncludeSpendingOverTime: false,
-  goalSeekIncludeMarketAdjustments: false,
-  goalSeekIncludeBalanceOverrides: false,
-  goalSeekIncludeGlidePath: false,
+  // The master toggle, targets, and lever checkboxes come from the risk preset.
 
   // Number of simulations run for each candidate the search evaluates.
   // Lower = faster search but noisier success-rate estimates; higher = slower
@@ -224,4 +182,21 @@ export const SCENARIO_DEFAULTS = {
   // How aggressively to use CPU cores during simulation runs.
   // Options: 'low' (1 core), 'med' (3 cores), 'high' (up to 6 cores).
   parallelCores: 'high',
+};
+
+// Out-of-the-box scenario = base values + the Balanced preset's static keys +
+// its balance/horizon-derived values (minimum withdrawal, gifting, balance
+// triggers, target ending balance, spending timeline) computed at the default
+// starting portfolio and horizon. This keeps balanced.json the single source
+// of every slider-controlled default while defaultScenario() stays complete.
+export const SCENARIO_DEFAULTS = {
+  ...BASE_DEFAULTS,
+  ...balanced.scenario,
+  ...computeDerivedPresetValues(balanced, {
+    startThousands: BASE_DEFAULTS.startBalance,
+    numYears: BASE_DEFAULTS.numYears,
+    withdrawalFloors: [],
+    giftingTiers: [],
+    spendingOverTimeTiers: BASE_DEFAULTS.spendingOverTimeTiers,
+  }),
 };

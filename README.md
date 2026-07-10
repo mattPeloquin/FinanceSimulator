@@ -66,7 +66,15 @@ To tweak the look of the app (backgrounds, text, accent buttons, chart colors, a
 
 ### Changing the default starting values
 
-To change what the simulator loads with on a fresh visit (starting balance, withdrawal amount, asset mix, year range, persistence slider, and more), edit **`SCENARIO_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. Currency amounts in that file are in thousands ($000s), matching the form labels. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
+To change what the simulator loads with on a fresh visit (starting balance, withdrawal amount, year range, persistence slider, and more), edit **`BASE_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. Currency amounts in that file are in thousands ($000s), matching the form labels. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
+
+Values controlled by the **Risk Level slider** (return method, Goal Seek settings, asset mix, market/balance triggers, minimum withdrawal, gifting, spending timeline) live in **`src/state/presets/balanced.json`** instead — the Balanced preset doubles as the app's out-of-the-box configuration. See the next section.
+
+### Tuning the Risk Level presets
+
+A **Risk Level** slider under Starting Portfolio gives first-time users a one-control way to run the simulator: type a horizon and a balance, pick a level from Conservative to Aggressive, and click **Find Best Plan**. Each level is a JSON file in **`src/state/presets/`** (see the README there) with two sections: fixed settings applied verbatim (success target, risk tolerance, asset mix, market triggers, Goal Seek levers — all levers stay on), and formula parameters for values computed from your own inputs (minimum withdrawal, gifting, balance triggers, and target ending balance scale with the starting balance; the spending timeline scales with the horizon). Every number is tunable by editing the JSON.
+
+While **Use preset** is checked, changing the starting balance or horizon live-rescales those derived values. Manually editing any preset-controlled setting switches the preset off automatically and keeps your values — re-check the box to reload the level. Tiers you add beyond the first are yours; the slider only manages the first tier of each list.
 
 ### How to Vibe Code with Cursor
 
@@ -223,6 +231,7 @@ Turn the switch back off any time to return to typing in your own numbers and ru
 | Goal Seek's search logic            | `src/core/goalSeek.js`                                                                               |
 | The historical dataset              | `src/data/historicalData.js`                                                                        |
 | An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
+| The Risk Level slider presets       | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)              |
 | A chart's look or behavior          | `src/ui/charts/` (one file per chart)                                                               |
 | The summary numbers shown           | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                     |
 | Saving/loading sessions             | `src/state/persistence.js`                                                                          |

@@ -1,9 +1,19 @@
 import { test, expect } from '@playwright/test';
 
+// Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a
+// plain simulation run, so switch it off first (clicking the toggle also
+// detaches the risk preset, which is fine here).
+async function disableGoalSeek(page) {
+  await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
+  await page.click('label:has(#goalSeekMode)');
+  await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+}
+
 test('Charts receive the expected data arrays (robust validation)', async ({ page }) => {
   await page.goto('/');
+  await disableGoalSeek(page);
 
-  // Override inputs for a predictable run. 
+  // Override inputs for a predictable run.
   // We specify a fixed seed and 1 simulation block to keep lengths deterministic.
   // numSimulations is inside an advanced details block, open it first
   await page.click('summary:has-text("Advanced simulation settings")');
@@ -63,6 +73,7 @@ test('Charts receive the expected data arrays (robust validation)', async ({ pag
 
 test('3D surface drill-down updates title and axis, then returns to overview', async ({ page }) => {
   await page.goto('/');
+  await disableGoalSeek(page);
 
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
@@ -134,6 +145,7 @@ test('3D surface drill-down updates title and axis, then returns to overview', a
 
 test('3D surface double-click triggers drill-down', async ({ page }) => {
   await page.goto('/');
+  await disableGoalSeek(page);
 
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
@@ -162,6 +174,7 @@ test('3D surface double-click triggers drill-down', async ({ page }) => {
 
 test('3D surface tooltip shows original plan from stored bar data when hover value is truncated', async ({ page }) => {
   await page.goto('/');
+  await disableGoalSeek(page);
 
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');

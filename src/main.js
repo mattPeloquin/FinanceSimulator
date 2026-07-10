@@ -46,6 +46,7 @@ import {
   toggleGoalSeekMode,
   refreshDynamicAdjustmentPreviews,
 } from './ui/inputs.js';
+import { setupRiskPresetControl, syncRiskPresetUi } from './ui/riskPreset.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderResults } from './ui/results.js';
 import { openDialog, showAlert } from './ui/dialogs.js';
@@ -658,6 +659,9 @@ function applyScenario(scenario) {
   toggleGoalSeekMode(merged.goalSeekMode ?? false);
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
+  // Reflect the loaded scenario's slider state only — never re-apply the
+  // preset patch here; the saved values are the truth.
+  syncRiskPresetUi(merged);
   // Refresh charts/samples for the range; keep the scenario's own profiles.
   const hasProfiles = merged.usLgGrowthMean != null && merged.usLgGrowthMean !== '';
   if (hasProfiles) {
@@ -699,6 +703,9 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
       onChange: scheduleAutosave,
       onDistMethodChange: () => {},
     });
+
+    setupRiskPresetControl({ onChange: scheduleAutosave });
+    syncRiskPresetUi(initial);
 
     setupHistoricalYearRangeInputs({
       minYear: minAvailableYear,

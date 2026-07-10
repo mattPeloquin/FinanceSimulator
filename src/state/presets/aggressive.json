@@ -1,0 +1,32 @@
+{
+  "name": "Aggressive",
+  "description": "Maximum spending: 80% success, nearly all stocks, strongly front-loaded spending, plans to spend the portfolio down fully.",
+  "scenario": {
+    "distMethod": "scaledHistorical",
+    "goalSeekMode": true,
+    "goalSeekDesiredSuccessPct": 80,
+    "goalSeekRiskTolerancePct": 30,
+    "goalSeekIncludeBaseWithdrawal": true,
+    "goalSeekIncludeSpendingOverTime": true,
+    "goalSeekIncludeMarketAdjustments": true,
+    "goalSeekIncludeBalanceOverrides": true,
+    "goalSeekIncludeGlidePath": true,
+    "planRiskTolerancePct": 5,
+    "usLgGrowthAllocation": 35,
+    "usLgValueAllocation": 25,
+    "usSmMidAllocation": 20,
+    "exUsAllocation": 15,
+    "bondAllocation": 0,
+    "cashAllocation": 5,
+    "dynLowRet": -20,
+    "dynMedRet": 5,
+    "dynHighRet": 15
+  },
+  "derived": {
+    "minWithdrawalPctOfStart": 4,
+    "gifting": { "amountPctOfStart": 2, "balanceMultipleOfStart": 1.15 },
+    "spending": { "changePct": -3, "firstTierYearsFractionOfHorizon": 0.5 },
+    "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
+    "targetEndingBalancePctOfStart": 0
+  }
+}
