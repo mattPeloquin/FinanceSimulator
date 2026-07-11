@@ -282,6 +282,26 @@ test('Simple flow: adjust inputs and run a plain simulation from Easy Mode', asy
   await expect(page.locator('#successRate')).not.toBeEmpty({ timeout: 20000 });
 });
 
+test('Easy Mode recreates the minimum tier when the slider moves after all tiers are removed', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#section-withdrawal > summary');
+  await page.locator('#details-min-withdrawal').evaluate((el) => { el.open = true; });
+  await expect(firstFloorAmount(page)).toHaveValue('72');
+
+  await page.click('.remove-withdrawal-floor-tier');
+  await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(0);
+
+  await page.focus('#presetLevel');
+  await page.keyboard.press('Home');
+  // Conservative: 70% of 3000 over 25 years → 84/yr.
+  await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(1);
+  await expect(firstFloorAmount(page)).toHaveValue('84');
+  await expect(page.locator('#presetActive')).toBeChecked();
+});
+
 test('Minimum recovery controls follow the Balanced preset and persist in autosave', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);

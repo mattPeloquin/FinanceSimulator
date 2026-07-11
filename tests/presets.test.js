@@ -120,6 +120,19 @@ describe('preset files', () => {
 });
 
 describe('computeDerivedPresetValues', () => {
+  it('creates a minimum-withdrawal tier from an empty list', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 35,
+      withdrawalFloors: [],
+      spendingOverTimeTiers: [
+        { changePct: 0, extra: 50, years: 1 },
+        { changePct: 0, extra: 99 },
+      ],
+    });
+    expect(out.withdrawalFloors).toEqual([{ amount: 51 }]);
+  });
+
   it('reproduces the classic defaults at a 3,000 start and 35-year horizon (Balanced)', () => {
     const out = computeDerivedPresetValues(balanced, {
       startThousands: 3000,

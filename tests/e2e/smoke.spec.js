@@ -84,6 +84,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#irrScatterLegend')).toContainText('Met plan');
   await expect(page.locator('#irrScatterLegend')).toContainText('IRR = Avg');
   await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
+  await expect(page.locator('#irrScatterZoom')).toHaveValue('50');
+  await expect(page.locator('#irrScatterZoomLabel')).toContainText('% of paths');
 
   // Clicking a path dot opens the drill-down: withdrawal line chart with the
   // linked balance bar chart underneath (same pairing as the 3D chart's popup).

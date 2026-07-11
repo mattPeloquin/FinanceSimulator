@@ -25,6 +25,8 @@ import {
   readWithdrawalFloorsFromDom,
   readGiftingTiersFromDom,
   readSpendingOverTimeTiersFromDom,
+  writeWithdrawalFloorsToDom,
+  writeGiftingTiersToDom,
 } from '../state/scenario.js';
 import {
   presetForLevel,
@@ -107,12 +109,37 @@ function buildPresetPatch(level) {
   };
 }
 
+// Easy Mode toggle/slider: (re)seed tier 0 of the managed lists when balance
+// and horizon are set — including when the user removed every row.
+function seedManagedPresetTiers(level) {
+  if (!isAttached()) return;
+
+  const startThousands = parseCurrency(el('startBalance')?.value);
+  const numYears = parseInt(el('numYears')?.value, 10);
+  if (!(startThousands > 0 && Number.isFinite(numYears) && numYears > 0)) return;
+
+  const preset = presetForLevel(level);
+  const derived = computeDerivedPresetValues(preset, {
+    ...derivedContext(),
+    withdrawalFloors: readWithdrawalFloorsFromDom(),
+    giftingTiers: readGiftingTiersFromDom(),
+  });
+
+  if (derived.withdrawalFloors?.length) {
+    writeWithdrawalFloorsToDom(derived.withdrawalFloors);
+  }
+  if (derived.giftingTiers?.length) {
+    writeGiftingTiersToDom(derived.giftingTiers);
+  }
+}
+
 /** Apply a slider level: static preset keys + derived values. Never simulates. */
 export function applyPresetLevel(level) {
   isApplyingPreset = true;
   try {
     const patch = buildPresetPatch(level);
     writeScenarioFieldsToDom(patch);
+    seedManagedPresetTiers(level);
     refreshDependentUi(patch);
     updateLevelText();
   } finally {

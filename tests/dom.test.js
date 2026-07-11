@@ -94,6 +94,8 @@ const REQUIRED_IDS = [
   'surfaceChart',
   'irrScatterCanvas',
   'irrScatterLegend',
+  'irrScatterZoom',
+  'irrScatterZoomLabel',
   'irrScatterDrilldown',
   'irrScatterPathCanvas',
   'irrScatterBalanceCanvas',

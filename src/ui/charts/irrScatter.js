@@ -30,11 +30,17 @@ const OUTCOME_LABELS = ['Met plan', 'Below plan', 'Ran out'];
 
 const MARGIN = { top: 10, right: 14, bottom: 34, left: 52 };
 const HIT_RADIUS_PX = 10;
-// Both axes run from a fixed -4% up to at most +8%; the rare more-extreme
-// paths fall off the plot rather than compressing the region where the
-// sequence story lives.
+// Default plot window: both axes span −4% to +8%. The zoom control scales this
+// window in and out around its center; zoom-out stops at the data envelope.
 const AXIS_MIN = -0.04;
 const AXIS_CAP = 0.08;
+const AXIS_CENTER = (AXIS_MIN + AXIS_CAP) / 2;
+const AXIS_HALF = (AXIS_CAP - AXIS_MIN) / 2;
+const ZOOM_SLIDER_DEFAULT = 50;
+const MIN_AXIS_HALF = 0.002;
+const ZOOM_IN_MAX = 4;
+const ZOOM_OUT_MIN = 0.25;
+const ZOOM_DRAW_DEBOUNCE_MS = 16;
 
 const state = {
   scatter: null,
@@ -42,6 +48,9 @@ const state = {
   seed: null,
   simRank: null, // withdrawal-rank of each simulation (inverse of surfaceMeta.rankW)
   band: null, // P5–P65 of the plan's IRR backtested over contiguous historical windows
+  dataProfile: null, // finite-point envelope used to cap zoom-out
+  zoomSlider: ZOOM_SLIDER_DEFAULT,
+  zoomDrawTimer: null,
   selected: null, // sim index of the clicked path
   pathChart: null,
   balanceBars: null, // linked balance bar chart under the drill-down's line chart
@@ -70,14 +79,72 @@ function simTitleLabel(simIndex) {
   return pctLabel ? `Simulation #${simIndex + 1} · ${pctLabel}` : `Simulation #${simIndex + 1}`;
 }
 
-function pathSummaryLine({ outcomeIndex, avgReturn, irr, totalWithdrawn, finalBalance, ranOutNote = '' }) {
-  return (
-    `${OUTCOME_LABELS[outcomeIndex]}${ranOutNote}` +
-    ` · Avg Return ${formatPercent(avgReturn)}` +
-    ` · IRR ${formatPercent(irr) || '—'}` +
-    ` · Total Withdrawn ${formatK(totalWithdrawn)}` +
-    ` · End Balance ${formatK(finalBalance)}`
-  );
+function pathSummaryItems({ outcomeIndex, avgReturn, irr, totalWithdrawn, finalBalance, ranOutNote = '' }) {
+  return [
+    `${OUTCOME_LABELS[outcomeIndex]}${ranOutNote}`,
+    `Avg Return ${formatPercent(avgReturn)}`,
+    `IRR ${formatPercent(irr) || '—'}`,
+    `Total Withdrawn ${formatK(totalWithdrawn)}`,
+    `End Balance ${formatK(finalBalance)}`,
+  ];
+}
+
+function pathSummaryLine(details) {
+  return pathSummaryItems(details).join(' · ');
+}
+
+const TOOLTIP_POINT_HALF = 5.5;
+const TOOLTIP_GAP = 10;
+const TOOLTIP_EDGE_PAD = 4;
+
+function positionIrrScatterTooltip(tip, geom, pointX, pointY) {
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  const maxW = geom.width;
+  const maxH = geom.height;
+  const pad = TOOLTIP_EDGE_PAD;
+
+  const candidates = [
+    { left: pointX + TOOLTIP_GAP, top: pointY - th - TOOLTIP_GAP },
+    { left: pointX + TOOLTIP_GAP, top: pointY + TOOLTIP_GAP },
+    { left: pointX - tw - TOOLTIP_GAP, top: pointY - th - TOOLTIP_GAP },
+    { left: pointX - tw - TOOLTIP_GAP, top: pointY + TOOLTIP_GAP },
+    { left: pointX + TOOLTIP_GAP, top: pointY - th / 2 },
+    { left: pointX - tw - TOOLTIP_GAP, top: pointY - th / 2 },
+  ];
+
+  const overlapsPoint = (left, top) => {
+    const buffer = TOOLTIP_POINT_HALF + TOOLTIP_GAP;
+    return (
+      left < pointX + buffer &&
+      left + tw > pointX - buffer &&
+      top < pointY + buffer &&
+      top + th > pointY - buffer
+    );
+  };
+
+  const inBounds = (left, top) =>
+    left >= pad && top >= pad && left + tw <= maxW - pad && top + th <= maxH - pad;
+
+  let chosen = candidates.find((c) => !overlapsPoint(c.left, c.top) && inBounds(c.left, c.top));
+  if (!chosen) chosen = candidates.find((c) => !overlapsPoint(c.left, c.top)) ?? candidates[0];
+
+  let left = Math.min(Math.max(chosen.left, pad), maxW - tw - pad);
+  let top = Math.min(Math.max(chosen.top, pad), maxH - th - pad);
+
+  if (overlapsPoint(left, top)) {
+    const cx = left + tw / 2;
+    const cy = top + th / 2;
+    const dx = cx - pointX || 1;
+    const dy = cy - pointY || 1;
+    const dist = Math.hypot(dx, dy);
+    const push = TOOLTIP_POINT_HALF + TOOLTIP_GAP + 2;
+    left = Math.min(Math.max(pointX + (dx / dist) * push - tw / 2, pad), maxW - tw - pad);
+    top = Math.min(Math.max(pointY + (dy / dist) * push - th / 2, pad), maxH - th - pad);
+  }
+
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
 }
 
 // Round a raw interval up to a friendly 1/2/5 step.
@@ -90,36 +157,113 @@ function niceStep(rawStep) {
   return 10 * mag;
 }
 
-function computeExtents(scatter) {
+// Flipped slider: left = zoom in, right = zoom out, center = default −4%/+8%.
+// Zoom-in uses a square-root curve so the left end is less twitchy at high magnification.
+export function irrScatterZoomScale(slider, defaultSlider = ZOOM_SLIDER_DEFAULT) {
+  if (slider === defaultSlider) return 1;
+  if (slider < defaultSlider) {
+    const t = (defaultSlider - slider) / defaultSlider;
+    return 1 + (ZOOM_IN_MAX - 1) * Math.sqrt(t);
+  }
+  const u = (slider - defaultSlider) / (100 - defaultSlider);
+  return 1 / (1 + (1 / ZOOM_OUT_MIN - 1) * u);
+}
+
+// How many finite paths fall inside a candidate axis window.
+export function irrScatterVisibleCount(scatter, extents) {
+  let visible = 0;
+  for (let i = 0; i < scatter.avgReturn.length; i++) {
+    if (inExtents(scatter, extents, i)) visible++;
+  }
+  return visible;
+}
+
+// Data envelope for zoom-out plus the share of paths the default −4%/+8% window captures.
+export function buildIrrScatterDataProfile(scatter, band = null) {
   const { avgReturn, irr, requiredIrr } = scatter;
   let xMin = Infinity;
   let xMax = -Infinity;
   let yMin = Infinity;
   let yMax = -Infinity;
+  let visibleAtDefault = 0;
+  let finite = 0;
   for (let i = 0; i < avgReturn.length; i++) {
     if (Number.isNaN(irr[i])) continue;
-    if (avgReturn[i] < xMin) xMin = avgReturn[i];
-    if (avgReturn[i] > xMax) xMax = avgReturn[i];
-    if (irr[i] < yMin) yMin = irr[i];
-    if (irr[i] > yMax) yMax = irr[i];
+    finite++;
+    const x = avgReturn[i];
+    const y = irr[i];
+    if (x < xMin) xMin = x;
+    if (x > xMax) xMax = x;
+    if (y < yMin) yMin = y;
+    if (y > yMax) yMax = y;
+    if (x >= AXIS_MIN && x <= AXIS_CAP && y >= AXIS_MIN && y <= AXIS_CAP) visibleAtDefault++;
   }
-  if (xMin === Infinity) return null;
+  if (finite === 0) return null;
   if (requiredIrr != null) {
     yMin = Math.min(yMin, requiredIrr);
     yMax = Math.max(yMax, requiredIrr);
   }
-  if (state.band) {
-    yMin = Math.min(yMin, state.band.low);
-    yMax = Math.max(yMax, state.band.high);
+  if (band) {
+    yMin = Math.min(yMin, band.low);
+    yMax = Math.max(yMax, band.high);
   }
   const xPad = Math.max((xMax - xMin) * 0.05, 0.002);
   const yPad = Math.max((yMax - yMin) * 0.05, 0.002);
   return {
-    xMin: AXIS_MIN,
-    xMax: Math.min(xMax + xPad, AXIS_CAP),
-    yMin: AXIS_MIN,
-    yMax: Math.min(yMax + yPad, AXIS_CAP),
+    xMin: xMin - xPad,
+    xMax: xMax + xPad,
+    yMin: yMin - yPad,
+    yMax: yMax + yPad,
+    finite,
+    defaultVisiblePct: (visibleAtDefault / finite) * 100,
   };
+}
+
+export function computeIrrScatterExtents(scatter, { zoomSlider, band, dataProfile }) {
+  if (!dataProfile) return null;
+  const half = Math.max(AXIS_HALF / irrScatterZoomScale(zoomSlider), MIN_AXIS_HALF);
+  let xMin = AXIS_CENTER - half;
+  let xMax = AXIS_CENTER + half;
+  let yMin = AXIS_CENTER - half;
+  let yMax = AXIS_CENTER + half;
+  // Only cap zoom-out at the data envelope — never shrink the default window.
+  if (xMin < AXIS_MIN) xMin = Math.max(xMin, dataProfile.xMin);
+  if (xMax > AXIS_CAP) xMax = Math.min(xMax, dataProfile.xMax);
+  if (yMin < AXIS_MIN) yMin = Math.max(yMin, dataProfile.yMin);
+  if (yMax > AXIS_CAP) yMax = Math.min(yMax, dataProfile.yMax);
+  return { xMin, xMax, yMin, yMax };
+}
+
+function renderZoomLabel() {
+  const label = document.getElementById('irrScatterZoomLabel');
+  if (!label || !state.scatter || !state.extents || !state.dataProfile) return;
+  const visible = irrScatterVisibleCount(state.scatter, state.extents);
+  const pct = Math.round((visible / state.dataProfile.finite) * 100);
+  label.textContent = `~${pct}% of paths`;
+}
+
+function scheduleZoomDraw() {
+  if (state.zoomDrawTimer != null) clearTimeout(state.zoomDrawTimer);
+  state.zoomDrawTimer = setTimeout(() => {
+    state.zoomDrawTimer = null;
+    draw();
+  }, ZOOM_DRAW_DEBOUNCE_MS);
+}
+
+function syncZoomPreview() {
+  if (!state.scatter) return;
+  const extents = computeExtents(state.scatter);
+  if (!extents) return;
+  state.extents = extents;
+  renderZoomLabel();
+}
+
+function computeExtents(scatter) {
+  return computeIrrScatterExtents(scatter, {
+    zoomSlider: state.zoomSlider,
+    band: state.band,
+    dataProfile: state.dataProfile,
+  });
 }
 
 // Whether point i sits inside the (possibly capped) axis extents.
@@ -232,9 +376,9 @@ function drawReferenceLines(ctx, theme, scatter, extents, geom, scales) {
     ctx.stroke();
     ctx.fillStyle = theme.axisTick;
     ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('IRR = Avg', sx(dHi) - 2, sy(dHi) - 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('IRR = Avg', sx(dLo) + 2, sy(dLo) + 2);
   }
 
   // Break-even IRR required to fund the full plan.
@@ -307,6 +451,8 @@ function draw() {
   drawReferenceLines(ctx, theme, state.scatter, extents, geom, scales);
   drawPoints(ctx, state.scatter, extents, scales, outcomeColors());
   drawSelection(ctx, theme, state.scatter, scales);
+  renderZoomLabel();
+  renderLegend();
 }
 
 function renderLegend() {
@@ -342,11 +488,16 @@ function renderLegend() {
     );
   }
   let excluded = 0;
+  let offChart = 0;
   for (let i = 0; i < state.scatter.irr.length; i++) {
     if (Number.isNaN(state.scatter.irr[i])) excluded++;
+    else if (state.extents && !inExtents(state.scatter, state.extents, i)) offChart++;
   }
   if (excluded > 0) {
     items.push(`<span class="text-xs text-theme-faint">(${excluded} paths without a defined IRR excluded)</span>`);
+  }
+  if (offChart > 0) {
+    items.push(`<span class="text-xs text-theme-faint">(${offChart} paths outside current view)</span>`);
   }
   el.innerHTML = items.join('');
 }
@@ -416,18 +567,26 @@ function showTooltip(ev, i) {
   }
   const { avgReturn, irr, outcome, totalWithdrawn, finalBalance } = state.scatter;
   const theme = getChartTheme();
+  const summaryRows = pathSummaryItems({
+    outcomeIndex: outcome[i],
+    avgReturn: avgReturn[i],
+    irr: irr[i],
+    totalWithdrawn: totalWithdrawn[i],
+    finalBalance: finalBalance[i],
+  });
   tip.innerHTML =
     `<div style="font-weight:600;color:${theme.tooltipTitle}">${simTitleLabel(i)}</div>` +
-    `<div>${pathSummaryLine({ outcomeIndex: outcome[i], avgReturn: avgReturn[i], irr: irr[i], totalWithdrawn: totalWithdrawn[i], finalBalance: finalBalance[i] })}</div>` +
+    summaryRows.map((row) => `<div>${row}</div>`).join('') +
     `<div style="color:${theme.floatMutedText}">Click to see this path</div>`;
   tip.style.background = theme.tooltipBg;
   tip.style.color = theme.tooltipBody;
-  const rect = canvas.getBoundingClientRect();
-  const x = ev.clientX - rect.left;
-  const y = ev.clientY - rect.top;
   tip.style.display = 'block';
-  tip.style.left = `${Math.min(x + 12, rect.width - tip.offsetWidth - 4)}px`;
-  tip.style.top = `${Math.max(y - tip.offsetHeight - 8, 4)}px`;
+  if (!state.extents || !state.geom) return;
+
+  const scales = makeScales(state.extents, state.geom);
+  const pointX = scales.sx(avgReturn[i]);
+  const pointY = scales.sy(irr[i]);
+  positionIrrScatterTooltip(tip, state.geom, pointX, pointY);
   canvas.style.cursor = 'pointer';
 }
 
@@ -557,6 +716,14 @@ function bindEvents(canvas) {
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mouseleave', onMouseLeave);
   canvas.addEventListener('click', onClick);
+  const zoom = document.getElementById('irrScatterZoom');
+  if (zoom) {
+    zoom.addEventListener('input', () => {
+      state.zoomSlider = Number(zoom.value);
+      syncZoomPreview();
+      scheduleZoomDraw();
+    });
+  }
   // The canvas sits inside a <details>; it has zero size until opened, so
   // observe the container and (re)draw whenever it gains real dimensions.
   state.resizeObserver = new ResizeObserver(() => draw());
@@ -572,7 +739,15 @@ export function drawIrrScatter(scatter, { params, seed, meta } = {}) {
   state.seed = seed ?? null;
   state.simRank = meta?.rankW ? buildSimRank(meta.rankW) : null;
   state.band = historicalIrrBand(params);
+  state.dataProfile = buildIrrScatterDataProfile(scatter, state.band);
+  state.zoomSlider = ZOOM_SLIDER_DEFAULT;
+  if (state.zoomDrawTimer != null) {
+    clearTimeout(state.zoomDrawTimer);
+    state.zoomDrawTimer = null;
+  }
   state.selected = null;
+  const zoom = document.getElementById('irrScatterZoom');
+  if (zoom) zoom.value = String(ZOOM_SLIDER_DEFAULT);
   if (state.pathChart) {
     state.pathChart.destroy();
     state.pathChart = null;
@@ -580,13 +755,11 @@ export function drawIrrScatter(scatter, { params, seed, meta } = {}) {
   document.getElementById('irrScatterDrilldown')?.classList.add('hidden');
   bindEvents(canvas);
   renderSummaryCards();
-  renderLegend();
   draw();
 }
 
 onThemeChange(() => {
   if (!state.scatter) return;
-  renderLegend();
   draw();
   if (state.selected != null && state.pathChart) renderPathChart(state.selected);
 });
