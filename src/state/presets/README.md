@@ -22,6 +22,10 @@ Each file has two sections:
   - `spending.firstTierYearsFractionOfHorizon` — first tier years = fraction × horizon
   - `noCutBalanceMultipleOfStart` — "no cut while ahead" threshold = multiple × start;
     market-driven cuts are skipped while the balance is above it
+  - `maxBoostDrawdownPct` — signed % vs start-of-year capping how large a high-market
+    boost can be (null/blank = off). After spending except glide, end must stay at
+    or above start × (1 − pct); negative pct requires growth. Easy Mode: −1 / 0 / 1 /
+    2 / blank from Conservative → Aggressive
   - `targetEndingBalancePctOfStart` — Find Best Plan target ending balance = % of start;
     also writes `glideTarget` to the same value so the Glide-path Target field
     tracks Easy Mode before a search runs

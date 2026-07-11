@@ -52,6 +52,7 @@ const state = {
   zoomSlider: ZOOM_SLIDER_DEFAULT,
   zoomDrawTimer: null,
   selected: null, // sim index of the clicked path
+  tooltipSide: null, // sticky 'ne'|'nw'|'se'|'sw' while hovering the scatter
   pathChart: null,
   balanceBars: null, // linked balance bar chart under the drill-down's line chart
   resizeObserver: null,
@@ -94,55 +95,130 @@ function pathSummaryLine(details) {
 }
 
 const TOOLTIP_POINT_HALF = 5.5;
-const TOOLTIP_GAP = 10;
+// Gap from the selected dot to the tooltip edge — keeps the tip clearly
+// offset from the point rather than hugging it.
+const TOOLTIP_GAP = 14;
+// Clearance around the cursor hotspot so the tip never sits under the pointer.
+const TOOLTIP_POINTER_CLEAR = 18;
 const TOOLTIP_EDGE_PAD = 4;
+// Stable corner order relative to the data point. Do not pick the primary
+// corner from the cursor side — that flipped every time the mouse crossed a
+// dot's center and flashed the tip left/right while sweeping the cloud.
+const TOOLTIP_SIDE_ORDER = ['ne', 'nw', 'se', 'sw'];
 
-function positionIrrScatterTooltip(tip, geom, pointX, pointY) {
-  const tw = tip.offsetWidth;
-  const th = tip.offsetHeight;
-  const maxW = geom.width;
-  const maxH = geom.height;
-  const pad = TOOLTIP_EDGE_PAD;
+function rectOverlapsPoint(left, top, tipW, tipH, x, y, clear) {
+  return (
+    left < x + clear
+    && left + tipW > x - clear
+    && top < y + clear
+    && top + tipH > y - clear
+  );
+}
 
-  const candidates = [
-    { left: pointX + TOOLTIP_GAP, top: pointY - th - TOOLTIP_GAP },
-    { left: pointX + TOOLTIP_GAP, top: pointY + TOOLTIP_GAP },
-    { left: pointX - tw - TOOLTIP_GAP, top: pointY - th - TOOLTIP_GAP },
-    { left: pointX - tw - TOOLTIP_GAP, top: pointY + TOOLTIP_GAP },
-    { left: pointX + TOOLTIP_GAP, top: pointY - th / 2 },
-    { left: pointX - tw - TOOLTIP_GAP, top: pointY - th / 2 },
-  ];
-
-  const overlapsPoint = (left, top) => {
-    const buffer = TOOLTIP_POINT_HALF + TOOLTIP_GAP;
-    return (
-      left < pointX + buffer &&
-      left + tw > pointX - buffer &&
-      top < pointY + buffer &&
-      top + th > pointY - buffer
-    );
+function clampTip(left, top, tipW, tipH, canvasW, canvasH, pad) {
+  return {
+    left: Math.min(Math.max(left, pad), Math.max(pad, canvasW - tipW - pad)),
+    top: Math.min(Math.max(top, pad), Math.max(pad, canvasH - tipH - pad)),
   };
+}
+
+function tooltipCorners(pointX, pointY, tipW, tipH, pointClear) {
+  const right = pointX + pointClear;
+  const leftAligned = pointX - tipW - pointClear;
+  const above = pointY - tipH - pointClear;
+  const below = pointY + pointClear;
+  return {
+    ne: { left: right, top: above },
+    nw: { left: leftAligned, top: above },
+    se: { left: right, top: below },
+    sw: { left: leftAligned, top: below },
+  };
+}
+
+// Pick a canvas-local top-left for the IRR scatter tooltip: offset from the
+// selected data point, with sticky corner preference so sweeping across dots
+// does not flip the tip side-to-side. Avoids covering the pointer when possible.
+export function chooseIrrScatterTooltipPosition({
+  tipW,
+  tipH,
+  canvasW,
+  canvasH,
+  pointX,
+  pointY,
+  cursorX = pointX,
+  cursorY = pointY,
+  stickySide = null,
+}) {
+  const pad = TOOLTIP_EDGE_PAD;
+  const pointClear = TOOLTIP_POINT_HALF + TOOLTIP_GAP;
+  const pointerClear = TOOLTIP_POINTER_CLEAR;
+  const corners = tooltipCorners(pointX, pointY, tipW, tipH, pointClear);
+
+  const isClear = (left, top) =>
+    !rectOverlapsPoint(left, top, tipW, tipH, pointX, pointY, pointClear)
+    && !rectOverlapsPoint(left, top, tipW, tipH, cursorX, cursorY, pointerClear);
 
   const inBounds = (left, top) =>
-    left >= pad && top >= pad && left + tw <= maxW - pad && top + th <= maxH - pad;
+    left >= pad
+    && top >= pad
+    && left + tipW <= canvasW - pad
+    && top + tipH <= canvasH - pad;
 
-  let chosen = candidates.find((c) => !overlapsPoint(c.left, c.top) && inBounds(c.left, c.top));
-  if (!chosen) chosen = candidates.find((c) => !overlapsPoint(c.left, c.top)) ?? candidates[0];
+  // Keep the previous corner first when still valid — prevents flicker while
+  // the cursor crosses successive dots or a single point's center.
+  const order = stickySide && corners[stickySide]
+    ? [stickySide, ...TOOLTIP_SIDE_ORDER.filter((side) => side !== stickySide)]
+    : TOOLTIP_SIDE_ORDER;
 
-  let left = Math.min(Math.max(chosen.left, pad), maxW - tw - pad);
-  let top = Math.min(Math.max(chosen.top, pad), maxH - th - pad);
-
-  if (overlapsPoint(left, top)) {
-    const cx = left + tw / 2;
-    const cy = top + th / 2;
-    const dx = cx - pointX || 1;
-    const dy = cy - pointY || 1;
-    const dist = Math.hypot(dx, dy);
-    const push = TOOLTIP_POINT_HALF + TOOLTIP_GAP + 2;
-    left = Math.min(Math.max(pointX + (dx / dist) * push - tw / 2, pad), maxW - tw - pad);
-    top = Math.min(Math.max(pointY + (dy / dist) * push - th / 2, pad), maxH - th - pad);
+  for (const side of order) {
+    const candidate = corners[side];
+    if (!isClear(candidate.left, candidate.top)) continue;
+    if (!inBounds(candidate.left, candidate.top)) continue;
+    return { left: candidate.left, top: candidate.top, side };
   }
 
+  // Prefer a clear corner even if it needs clamping (near edges).
+  for (const side of order) {
+    const candidate = corners[side];
+    if (!isClear(candidate.left, candidate.top)) continue;
+    const clamped = clampTip(candidate.left, candidate.top, tipW, tipH, canvasW, canvasH, pad);
+    if (isClear(clamped.left, clamped.top)) {
+      return { ...clamped, side };
+    }
+  }
+
+  // Last resort: park beside the cursor with a fixed SE bias (stable).
+  let left = cursorX + pointerClear;
+  let top = cursorY + pointerClear;
+  ({ left, top } = clampTip(left, top, tipW, tipH, canvasW, canvasH, pad));
+  if (rectOverlapsPoint(left, top, tipW, tipH, cursorX, cursorY, pointerClear)) {
+    const shifts = [
+      { left: cursorX + pointerClear, top: cursorY + pointerClear },
+      { left: cursorX + pointerClear, top: cursorY - tipH - pointerClear },
+      { left: cursorX - tipW - pointerClear, top: cursorY + pointerClear },
+      { left: cursorX - tipW - pointerClear, top: cursorY - tipH - pointerClear },
+    ];
+    const rescued = shifts
+      .map((s) => clampTip(s.left, s.top, tipW, tipH, canvasW, canvasH, pad))
+      .find((s) => isClear(s.left, s.top));
+    if (rescued) ({ left, top } = rescued);
+  }
+  return { left, top, side: stickySide || 'se' };
+}
+
+function positionIrrScatterTooltip(tip, geom, pointX, pointY, cursorX, cursorY) {
+  const { left, top, side } = chooseIrrScatterTooltipPosition({
+    tipW: tip.offsetWidth,
+    tipH: tip.offsetHeight,
+    canvasW: geom.width,
+    canvasH: geom.height,
+    pointX,
+    pointY,
+    cursorX,
+    cursorY,
+    stickySide: state.tooltipSide,
+  });
+  state.tooltipSide = side;
   tip.style.left = `${left}px`;
   tip.style.top = `${top}px`;
 }
@@ -219,7 +295,7 @@ export function buildIrrScatterDataProfile(scatter, band = null) {
   };
 }
 
-export function computeIrrScatterExtents(scatter, { zoomSlider, band, dataProfile }) {
+export function computeIrrScatterExtents(scatter, { zoomSlider, dataProfile }) {
   if (!dataProfile) return null;
   const half = Math.max(AXIS_HALF / irrScatterZoomScale(zoomSlider), MIN_AXIS_HALF);
   let xMin = AXIS_CENTER - half;
@@ -261,7 +337,6 @@ function syncZoomPreview() {
 function computeExtents(scatter) {
   return computeIrrScatterExtents(scatter, {
     zoomSlider: state.zoomSlider,
-    band: state.band,
     dataProfile: state.dataProfile,
   });
 }
@@ -563,6 +638,7 @@ function showTooltip(ev, i) {
   if (i < 0) {
     tip.style.display = 'none';
     canvas.style.cursor = 'default';
+    state.tooltipSide = null;
     return;
   }
   const { avgReturn, irr, outcome, totalWithdrawn, finalBalance } = state.scatter;
@@ -586,7 +662,10 @@ function showTooltip(ev, i) {
   const scales = makeScales(state.extents, state.geom);
   const pointX = scales.sx(avgReturn[i]);
   const pointY = scales.sy(irr[i]);
-  positionIrrScatterTooltip(tip, state.geom, pointX, pointY);
+  const rect = canvas.getBoundingClientRect();
+  const cursorX = ev.clientX - rect.left;
+  const cursorY = ev.clientY - rect.top;
+  positionIrrScatterTooltip(tip, state.geom, pointX, pointY, cursorX, cursorY);
   canvas.style.cursor = 'pointer';
 }
 
@@ -701,6 +780,7 @@ function onMouseMove(ev) {
 function onMouseLeave() {
   const tip = document.getElementById('irrScatterTooltip');
   if (tip) tip.style.display = 'none';
+  state.tooltipSide = null;
 }
 
 function onClick(ev) {

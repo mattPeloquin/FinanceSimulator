@@ -33,6 +33,7 @@ function mountPresetDom({ attached = false } = {}) {
     <input id="dynMedRet" value="5">
     <input id="dynHighRet" value="20">
     <input id="dynNoCutBal" value="">
+    <input id="dynMaxBoostDrawdownPct" value="1">
     <input id="glideRate" value="-2">
     <input id="glideTarget" value="">
     <input id="maxConsecutiveMinWithdrawals" value="3">

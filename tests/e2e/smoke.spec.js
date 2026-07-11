@@ -17,7 +17,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Expect the initial state
   await expect(page.locator('h1')).toContainText('Simulator');
   await expect(page.getByRole('heading', { name: 'Sequence of Returns' })).toBeVisible();
-  await expect(page.getByText(/Withdrawals are in real \(today.s\) dollars and include taxes/)).toBeVisible();
+  await expect(page.getByText(/Market returns and inflation are based on historical data/)).toBeVisible();
+  await expect(page.getByText(/real \(today.s\) dollars and real returns/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Find Best Plan' })).toBeVisible();
 
   // Two peer master sections: Investment Planning and Withdrawal Strategy

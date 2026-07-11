@@ -1,5 +1,5 @@
 // Live sparkline of the market-return adjustment curve: adjustment (y) as a
-// function of nominal portfolio return (x), for the low / expected / high
+// function of real portfolio return (x), for the low / expected / high
 // anchors currently in the form.
 import { Chart } from './chartSetup.js';
 import { getDynamicAdjustment } from '../../core/withdrawal.js';
@@ -30,8 +30,8 @@ export function buildMarketAdjPreviewSeries(dynConfig) {
   const { min, max } = chartReturnRange(dynConfig);
   const points = [];
   for (let i = 0; i <= SAMPLE_POINTS; i++) {
-    const nominalReturn = min + ((max - min) * i) / SAMPLE_POINTS;
-    points.push({ x: nominalReturn, y: getDynamicAdjustment(nominalReturn, dynConfig) });
+    const realReturn = min + ((max - min) * i) / SAMPLE_POINTS;
+    points.push({ x: realReturn, y: getDynamicAdjustment(realReturn, dynConfig) });
   }
 
   // Ensure exact anchor returns are represented so the curve hits the typed values.
@@ -89,7 +89,7 @@ function buildChart(canvas, points, anchors) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Nominal Market Return (%)', font: { size: 9 }, color: theme.axisTitle },
+          title: { display: true, text: 'Real Market Return (%)', font: { size: 9 }, color: theme.axisTitle },
           ticks: { maxTicksLimit: 6, font: { size: 9 }, callback: (v) => `${v}%`, color: theme.axisTick },
           grid: { display: false },
         },

@@ -110,6 +110,8 @@ test('Changing the starting balance live-rescales the derived values while attac
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
   // No-cut threshold = 1 × start.
   await expect(page.locator('#dynNoCutBal')).toHaveValue('6,000');
+  // Balanced Easy Mode max-boost drawdown is 1%.
+  await expect(page.locator('#dynMaxBoostDrawdownPct')).toHaveValue('1');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 
@@ -146,7 +148,12 @@ test('Slider move with Goal Seek off updates plan fields per level', async ({ pa
   await expect(page.locator('#floorBalance')).toHaveValue('2,000');
   await expect(page.locator('#ceilingBalance')).toHaveValue('3,000');
   await expect(page.locator('#floorPenalty')).toHaveValue('40');
+  await expect(page.locator('#dynMaxBoostDrawdownPct')).toHaveValue('-1');
   await expect(page.locator('#presetActive')).toBeChecked();
+
+  await page.keyboard.press('End');
+  // Aggressive: max-boost drawdown blank (off).
+  await expect(page.locator('#dynMaxBoostDrawdownPct')).toHaveValue('');
 });
 
 test('Run with blank start shows validation error', async ({ page }) => {

@@ -5,8 +5,11 @@ import {
   bisectMaxSatisfyingAsync,
   bisectMaxSatisfyingInt,
   buildAdjustmentGrid,
+  mildestMarketDownAdj,
+  mildestMarketUpAdj,
   filterAdjustmentCandidatesAtOrAbove,
   enforceAscendingMarketAdjustments,
+  clampMarketAdjustments,
   buildBalanceGrid,
   buildFractionGrid,
   buildBonusGrid,
@@ -67,15 +70,56 @@ describe('bisectMaxSatisfyingInt', () => {
 });
 
 describe('buildAdjustmentGrid', () => {
-  it('builds a symmetric percentage grid around the base withdrawal', () => {
+  it('builds a percentage grid around the base withdrawal and skips 0%', () => {
     const grid = buildAdjustmentGrid(100000, { minPct: -10, maxPct: 10, stepPct: 5 });
-    expect(grid).toEqual([-10000, -5000, 0, 5000, 10000]);
+    expect(grid).toEqual([-10000, -5000, 5000, 10000]);
   });
 
   it('rounds candidates to the nearest whole $1,000', () => {
     const grid = buildAdjustmentGrid(100501, { minPct: -10, maxPct: 10, stepPct: 5 });
     for (const value of grid) expect(value % 1000 === 0).toBe(true);
-    expect(grid).toEqual([-10000, -5000, 0, 5000, 10000]);
+    expect(grid).toEqual([-10000, -5000, 5000, 10000]);
+  });
+
+  it('excludes 0 from the default Low and High grids', () => {
+    const lowGrid = buildAdjustmentGrid(100000);
+    expect(lowGrid.every((value) => value < 0)).toBe(true);
+    expect(lowGrid).toContain(-5000);
+    expect(lowGrid).not.toContain(0);
+
+    const highGrid = buildAdjustmentGrid(100000, { minPct: 10, maxPct: 100, stepPct: 10 });
+    expect(highGrid.every((value) => value > 0)).toBe(true);
+    expect(highGrid).toContain(10000);
+    expect(highGrid).not.toContain(0);
+  });
+
+  it('pins collapsed small-base percentages to ±$1,000 instead of $0', () => {
+    const lowGrid = buildAdjustmentGrid(8000, { minPct: -5, maxPct: -5, stepPct: 5 });
+    expect(lowGrid).toEqual([-1000]);
+
+    const highGrid = buildAdjustmentGrid(8000, { minPct: 10, maxPct: 10, stepPct: 10 });
+    expect(highGrid).toEqual([1000]);
+  });
+});
+
+describe('mildestMarketDownAdj / mildestMarketUpAdj', () => {
+  it('returns the closest-to-zero cut and boost on each default-style grid', () => {
+    expect(mildestMarketDownAdj(100000, { minPct: -50, maxPct: -5, stepPct: 5 })).toBe(-5000);
+    expect(mildestMarketUpAdj(100000, { minPct: 10, maxPct: 100, stepPct: 10 })).toBe(10000);
+  });
+});
+
+describe('clampMarketAdjustments', () => {
+  it('forces Low below zero and High above zero around a zero Expected anchor', () => {
+    const dynConfig = {
+      low: { adj: 0 },
+      med: { adj: 0 },
+      high: { adj: 0 },
+    };
+    clampMarketAdjustments({}, dynConfig, 100000);
+    expect(dynConfig.low.adj).toBe(-5000);
+    expect(dynConfig.med.adj).toBe(0);
+    expect(dynConfig.high.adj).toBe(10000);
   });
 });
 
@@ -496,7 +540,9 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(false);
     expect(summary.baseWithdrawal).toBe(minWithdrawal);
-    expect(summary.marketAdjustments).toEqual({ low: 0, med: 0, high: 0 });
+    // Market Low/High are clamped to the mildest non-zero grid points on
+    // write-back (same "never stay at $0" rule as a successful search).
+    expect(summary.marketAdjustments).toEqual({ low: -4000, med: 0, high: 8000 });
     expect(summary.marketNoCutBalance).toBeUndefined();
     expect(summary.balanceAdjustment.floorBalance).toBe(100_000); // 0.1 × start
     expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000); // 2.0 × start
@@ -590,6 +636,25 @@ describe('runGoalSeek', () => {
     expect(summary.marketAdjustments).toHaveProperty('med');
     expect(summary.marketAdjustments).toHaveProperty('high');
     expect(summary).toHaveProperty('marketNoCutBalance');
+  });
+
+  it('never returns $0 Low or High market adjustments with the default grids', async () => {
+    const params = makeParams();
+    const { summary, params: finalParams } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ceilingMultiples: [0, 1],
+    });
+    expect(summary.feasible).toBe(true);
+    expect(summary.marketAdjustments.low).toBeLessThan(0);
+    expect(summary.marketAdjustments.high).toBeGreaterThan(0);
+    expect(finalParams.dynConfig.low.adj).toBeLessThan(0);
+    expect(finalParams.dynConfig.high.adj).toBeGreaterThan(0);
   });
 
   // The Expected adjustment is the on-plan anchor: Goal Seek must leave it at

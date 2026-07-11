@@ -294,6 +294,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'planRiskTolerancePct', 'planRiskTolerancePctSlider',
     'dynLowRet', 'dynMedRet', 'dynHighRet',
     'dynNoCutBal',
+    'dynMaxBoostDrawdownPct',
     'glideRate',
     'glideTarget',
     'maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawalsSpecific',

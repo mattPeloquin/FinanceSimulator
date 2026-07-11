@@ -2,30 +2,33 @@
 // in isolation and reused by the simulation engine.
 
 // Piecewise-linear interpolation of the extra withdrawal adjustment based on the
-// nominal market return (%), using the low / expected / high anchor points.
-export function getDynamicAdjustment(nominalReturnPercent, dynConfig) {
-  if (nominalReturnPercent <= dynConfig.low.ret) return dynConfig.low.adj;
-  if (nominalReturnPercent >= dynConfig.high.ret) return dynConfig.high.adj;
+// real market return (%), using the low / expected / high anchor points.
+export function getDynamicAdjustment(realReturnPercent, dynConfig) {
+  if (realReturnPercent <= dynConfig.low.ret) return dynConfig.low.adj;
+  if (realReturnPercent >= dynConfig.high.ret) return dynConfig.high.adj;
 
-  if (nominalReturnPercent < dynConfig.med.ret) {
+  if (realReturnPercent < dynConfig.med.ret) {
     const range = dynConfig.med.ret - dynConfig.low.ret;
     // Anchors at the same return would mean dividing by zero; use the medium
     // anchor's adjustment directly instead of producing NaN.
     if (range <= 0) return dynConfig.med.adj;
-    const pct = (nominalReturnPercent - dynConfig.low.ret) / range;
+    const pct = (realReturnPercent - dynConfig.low.ret) / range;
     return dynConfig.low.adj + pct * (dynConfig.med.adj - dynConfig.low.adj);
   } else {
     const range = dynConfig.high.ret - dynConfig.med.ret;
     if (range <= 0) return dynConfig.med.adj;
-    const pct = (nominalReturnPercent - dynConfig.med.ret) / range;
+    const pct = (realReturnPercent - dynConfig.med.ret) / range;
     return dynConfig.med.adj + pct * (dynConfig.high.adj - dynConfig.med.adj);
   }
 }
 
 // Resolve the final additional withdrawal adjustment for a given year, applying
 // (1) the market-return curve and (2) the balance-based "no cut" rule.
-export function resolveAdjustment(balance, nominalReturnPercent, dynConfig) {
-  let adjAmount = getDynamicAdjustment(nominalReturnPercent, dynConfig);
+// Max-boost drawdown (trimming a positive boost so year-end stays above a
+// start-of-year floor) is applied later in the simulation once spending
+// without the boost is known — see limitBoostForDrawdown.
+export function resolveAdjustment(balance, realReturnPercent, dynConfig) {
+  let adjAmount = getDynamicAdjustment(realReturnPercent, dynConfig);
 
   // "No cut while ahead": when the balance is above the no-cut threshold,
   // suppress any downward market adjustment — a bad-return year doesn't cut
@@ -37,6 +40,27 @@ export function resolveAdjustment(balance, nominalReturnPercent, dynConfig) {
   }
 
   return adjAmount;
+}
+
+// Cap a positive market boost so that after that year's total spending
+// (everything except glide), ending balance stays at or above:
+//   startOfYear * (1 - drawdownPct)
+// Negative drawdownPct means the year must still grow (e.g. -1% → finish at
+// least 1% above start). Blank/null drawdownPct disables the rule. Only the
+// boost is reduced — never the base plan. spendingWithoutBoostExGlide is the
+// dollars that would leave the portfolio with boost = 0 (excl. glide).
+export function limitBoostForDrawdown(
+  curveBoost,
+  startOfYearBalance,
+  postGrowthBalance,
+  drawdownPct,
+  spendingWithoutBoostExGlide,
+) {
+  if (!(curveBoost > 0)) return curveBoost;
+  if (drawdownPct == null || !Number.isFinite(drawdownPct)) return curveBoost;
+  const minEndBalance = startOfYearBalance * (1 - drawdownPct);
+  const maxWdExGlide = postGrowthBalance - minEndBalance;
+  return Math.min(curveBoost, Math.max(0, maxWdExGlide - spendingWithoutBoostExGlide));
 }
 
 // Smooth balance-based spending scale (multiplier on the TOTAL withdrawal).

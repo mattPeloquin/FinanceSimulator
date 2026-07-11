@@ -78,6 +78,8 @@ const FIELDS = [
   field('dynHighRet', 'dynHighRet', 'float'),
   field('dynHighAdj', 'dynHighAdj', 'currency'),
   field('dynNoCutBal', 'dynNoCutBal', 'optionalCurrency'),
+  // Signed %; blank = off (0% is a real floor: end ≥ start).
+  field('dynMaxBoostDrawdownPct', 'dynMaxBoostDrawdownPct', 'optionalPct'),
 
   field('usLgGrowthMean', 'usLgGrowthMean', 'pct1'),
   field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'pct1'),
@@ -138,6 +140,15 @@ export function toDollars(thousands) {
 export function optionalBalanceThreshold(thousands) {
   const k = parseCurrency(thousands);
   return k > 0 ? k * MONEY_SCALE : null;
+}
+
+/** Signed percent as a fraction for the engine, or null when blank (disabled).
+ *  Zero is a real value (e.g. max-boost drawdown 0% = end ≥ start), not "off". */
+export function optionalSignedPctFraction(pct) {
+  if (pct == null || pct === '') return null;
+  const n = typeof pct === 'number' ? pct : parseFloat(pct);
+  if (!Number.isFinite(n)) return null;
+  return n / 100;
 }
 
 export function formatCurrency(val) {
@@ -868,6 +879,11 @@ function parseField(raw, type) {
       const n = parseFloat(raw);
       return Number.isNaN(n) ? null : roundPct1(n);
     }
+    case 'optionalPct': {
+      if (raw == null || String(raw).trim() === '') return null;
+      const n = parseFloat(raw);
+      return Number.isNaN(n) ? null : n;
+    }
     case 'currency':
       return parseCurrency(raw);
     case 'optionalCurrency':
@@ -881,8 +897,10 @@ function parseField(raw, type) {
 function formatField(value, type) {
   if (value == null || value === '') return '';
   if (type === 'optionalCurrency' && parseCurrency(value) === 0) return '';
+  if (type === 'optionalPct' && (value == null || value === '')) return '';
   if (type === 'currency' || type === 'optionalCurrency') return formatCurrency(value);
   if (type === 'pct1') return formatPct1(value);
+  if (type === 'optionalPct') return String(value);
   return String(value);
 }
 
@@ -1064,6 +1082,9 @@ export function readDynConfigFromScenario(scenario) {
     },
     // "No cut while ahead" threshold in dollars; null (blank/zero) = off.
     noCutBal: optionalBalanceThreshold(scenario.dynNoCutBal),
+    // Max boost drawdown vs start-of-year (fraction); null (blank) = off.
+    // 0 means end ≥ start; negative means the year must still grow.
+    maxBoostDrawdownPct: optionalSignedPctFraction(scenario.dynMaxBoostDrawdownPct),
   };
 }
 

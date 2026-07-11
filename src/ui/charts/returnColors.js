@@ -12,7 +12,7 @@ export function lerpColor(a, b, t) {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-// Map a nominal return to the red/green ramp color at that value.
+// Map a real return to the red/green ramp color at that value.
 export function colorForReturn(v) {
   const clamped = Math.max(RETURN_MIN, Math.min(RETURN_MAX, v));
   const deepRed = [127, 29, 29];

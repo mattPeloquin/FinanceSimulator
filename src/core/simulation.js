@@ -5,6 +5,7 @@ import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from '
 import { median, irrFromPath } from './statistics.js';
 import {
   resolveAdjustment,
+  limitBoostForDrawdown,
   balanceScaleMultiplier,
   buildBaseWithdrawalSchedule,
   buildGlideRequiredBalances,
@@ -13,6 +14,74 @@ import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
 const MAX_HORIZON_YEARS = 100;
+
+// Estimate dollars that leave the portfolio for one year with a given market
+// boost, stopping before glide surplus. Used only to size the max-boost
+// drawdown cap; the real year loop still applies spending once with the
+// limited boost. Recovery counters only matter for future years, so this
+// probe reads whether a forced-plan year is already active and ignores the
+// consecutive-min bookkeeping that would only change later years.
+function estimateSpendingExGlide({
+  postGrowthBalance,
+  boost,
+  baseVal,
+  unadjustedTarget,
+  dynConfigEnabled,
+  portfolio,
+  yearFloor,
+  minRecoveryEnabled,
+  forcedPlanYearsRemaining,
+  eventAmount,
+  strategy,
+  gift,
+  glideRequired,
+  glideFraction,
+  yearIndex,
+}) {
+  let balance = postGrowthBalance;
+  let targetWithdrawal = unadjustedTarget + boost;
+  const plan = unadjustedTarget;
+
+  if (dynConfigEnabled && targetWithdrawal > 0) {
+    targetWithdrawal *= balanceScaleMultiplier(balance, portfolio);
+  }
+  if (baseVal >= 0 && targetWithdrawal < 0) targetWithdrawal = 0;
+
+  let actualWithdrawal;
+  if (targetWithdrawal < 0) {
+    actualWithdrawal = targetWithdrawal;
+    balance -= actualWithdrawal;
+  } else {
+    // Forced "stay on plan" years raise this year's floor to the plan amount.
+    if (minRecoveryEnabled && forcedPlanYearsRemaining > 0) {
+      targetWithdrawal = Math.max(targetWithdrawal, plan);
+    } else if (yearFloor > 0) {
+      targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
+    }
+    if (strategy !== 'specific' && eventAmount < 0) {
+      targetWithdrawal += -eventAmount;
+    }
+    actualWithdrawal = Math.min(balance, targetWithdrawal);
+    balance -= actualWithdrawal;
+  }
+
+  let prospectiveGlideExtra = 0;
+  if (glideRequired && targetWithdrawal >= 0) {
+    const provisionalSurplus = postGrowthBalance - glideRequired[yearIndex];
+    if (provisionalSurplus > 0) {
+      prospectiveGlideExtra = Math.min(balance, glideFraction * provisionalSurplus);
+    }
+  }
+  const metPlan =
+    targetWithdrawal < 0
+    || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
+  if (gift && gift.amount > 0 && metPlan && balance > gift.balanceThreshold) {
+    // Gifts leave the portfolio too; only the balance reduction matters here.
+    balance -= Math.min(balance, gift.amount);
+  }
+
+  return { spendingExGlide: postGrowthBalance - balance };
+}
 
 // Draw this run's horizon when a +/- range is enabled. The first RNG draw inside
 // simulatePath is reserved for this so regeneratePath stays deterministic.
@@ -312,9 +381,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         cashReturn * allocation.cash;
     }
 
-    if (returns) returns.push(portfolioReturn);
+    const startOfYearBalance = balance;
 
     const realReturn = (1 + portfolioReturn) / (1 + inflation) - 1;
+    // Path charts / Market Return tooltips use the same real return the
+    // portfolio grew by (and that drives the market-adjustment curve).
+    if (returns) returns.push(realReturn);
     if (outRealReturns) outRealReturns[outOffset + j] = realReturn;
     totalRealGrowthFactor *= 1 + realReturn;
 
@@ -329,23 +401,88 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       balance += eventAmount;
     }
 
-    // Market/balance guardrail add-on before the balance-scale ramp.
-    const dynamicAdj = dynConfig.enabled
-      ? resolveAdjustment(balance, portfolioReturn * 100, dynConfig)
+    const postGrowthBalance = balance;
+
+    // Market/balance guardrail add-on before the balance-scale ramp. Curve is
+    // keyed off real return (%). Positive boosts may be trimmed below by the
+    // max-boost drawdown floor vs start-of-year.
+    let dynamicAdj = dynConfig.enabled
+      ? resolveAdjustment(balance, realReturn * 100, dynConfig)
       : 0;
 
-    let targetWithdrawal;
     let unadjustedTarget;
     let baseVal;
     if (portfolio.strategy === 'specific') {
       baseVal = fittedWithdrawals[j];
-      targetWithdrawal = baseVal + dynamicAdj;
       unadjustedTarget = baseVal;
     } else {
       baseVal = portfolio.base;
       unadjustedTarget = baseSchedule[j];
-      targetWithdrawal = unadjustedTarget + dynamicAdj;
     }
+    if (baseVal >= 0 && unadjustedTarget < 0) {
+      unadjustedTarget = 0;
+    }
+
+    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
+    const gift = portfolio.giftingSeries?.[j];
+
+    // When a positive curve boost would spend past the drawdown floor, shrink
+    // it using spending-without-boost as the baseline. Scale can amplify the
+    // boost, so scale the allowed headroom by the full-boost extra.
+    if (
+      dynConfig.enabled
+      && dynamicAdj > 0
+      && dynConfig.maxBoostDrawdownPct != null
+      && Number.isFinite(dynConfig.maxBoostDrawdownPct)
+    ) {
+      const probeArgs = {
+        postGrowthBalance,
+        baseVal,
+        unadjustedTarget,
+        dynConfigEnabled: dynConfig.enabled,
+        portfolio,
+        yearFloor,
+        minRecoveryEnabled,
+        forcedPlanYearsRemaining,
+        eventAmount,
+        strategy: portfolio.strategy,
+        gift,
+        glideRequired,
+        glideFraction,
+        yearIndex: j,
+      };
+      const withoutBoost = estimateSpendingExGlide({ ...probeArgs, boost: 0 }).spendingExGlide;
+      const withFullBoost = estimateSpendingExGlide({
+        ...probeArgs,
+        boost: dynamicAdj,
+      }).spendingExGlide;
+      // Additive headroom (boost dollars ≈ spending dollars when scale is 1).
+      const additiveCap = limitBoostForDrawdown(
+        dynamicAdj,
+        startOfYearBalance,
+        postGrowthBalance,
+        dynConfig.maxBoostDrawdownPct,
+        withoutBoost,
+      );
+      // When balance-scale amplifies the boost, shrink further so the extra
+      // dollars of total spending (not just the boost line item) fit.
+      const maxExtraWd = Math.max(
+        0,
+        postGrowthBalance
+          - startOfYearBalance * (1 - dynConfig.maxBoostDrawdownPct)
+          - withoutBoost,
+      );
+      const extraFromFull = withFullBoost - withoutBoost;
+      if (extraFromFull <= 0) {
+        dynamicAdj = 0;
+      } else if (extraFromFull > maxExtraWd) {
+        dynamicAdj = Math.min(additiveCap, dynamicAdj * (maxExtraWd / extraFromFull));
+      } else {
+        dynamicAdj = additiveCap;
+      }
+    }
+
+    let targetWithdrawal = unadjustedTarget + dynamicAdj;
 
     // Balance-based spending scale: smoothly cut the whole withdrawal as the
     // balance slides below the floor, or boost it as wealth grows past the
@@ -363,11 +500,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       scaleDelta += -targetWithdrawal;
       targetWithdrawal = 0;
     }
-    if (baseVal >= 0 && unadjustedTarget < 0) {
-      unadjustedTarget = 0;
-    }
 
-    const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
     const plan = unadjustedTarget;
     // Glide surplus is measured from the pre-withdrawal balance (after growth
     // and inflows) so it stays comparable to glideRequired[j].
@@ -429,7 +562,6 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     // (computed before any gift) so a market-adj cut that glide would more than
     // replace does not block gifting — same eligibility as when glide ran first.
     // Deposit years always meet the plan, so only the balance check applies.
-    const gift = portfolio.giftingSeries?.[j];
     let prospectiveGlideExtra = 0;
     if (glideRequired && targetWithdrawal >= 0) {
       const provisionalSurplus = balanceBeforeYearWithdrawals - glideRequired[j];

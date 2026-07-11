@@ -83,6 +83,10 @@ describe('preset files', () => {
     }
   });
 
+  it('sets max-boost drawdown Easy Mode ladder from Conservative to Aggressive', () => {
+    expect(PRESETS.map((p) => p.derived.maxBoostDrawdownPct)).toEqual([-1, 0, 1, 2, null]);
+  });
+
   it('sums allocations to 100 and keeps market triggers strictly increasing', () => {
     for (const preset of PRESETS) {
       const s = preset.scenario;
@@ -144,6 +148,7 @@ describe('computeDerivedPresetValues', () => {
     });
     expect(out.withdrawalFloors).toEqual([{ amount: 60 }]);
     expect(out.dynNoCutBal).toBe(3000);
+    expect(out.dynMaxBoostDrawdownPct).toBe(1);
     expect(out.goalSeekTargetEndingBalance).toBe(
       Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
     );

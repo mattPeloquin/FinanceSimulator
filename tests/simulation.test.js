@@ -289,15 +289,18 @@ describe('historical resampling', () => {
     expect(Number.isFinite(path.finalBalance)).toBe(true);
     expect(path.path.returns.length).toBe(params.numYears);
 
-    const sampleReturns = sampleYears.years.map((y) =>
-      (y.us_lg_growth * baseAllocation.usLgGrowth +
-        y.us_lg_value * baseAllocation.usLgValue +
-        y.us_sm_mid * baseAllocation.usSmMid +
-        y.ex_us * baseAllocation.exUs +
-        y.bond * baseAllocation.bond +
-        y.cash * baseAllocation.cash) /
-      100
-    );
+    const sampleReturns = sampleYears.years.map((y) => {
+      const nominal =
+        (y.us_lg_growth * baseAllocation.usLgGrowth +
+          y.us_lg_value * baseAllocation.usLgValue +
+          y.us_sm_mid * baseAllocation.usSmMid +
+          y.ex_us * baseAllocation.exUs +
+          y.bond * baseAllocation.bond +
+          y.cash * baseAllocation.cash) /
+        100;
+      const inflation = y.inflation / 100;
+      return (1 + nominal) / (1 + inflation) - 1;
+    });
     for (const r of path.path.returns) {
       expect(sampleReturns.some((sr) => Math.abs(sr - r) < 1e-9)).toBe(true);
     }
@@ -361,15 +364,17 @@ describe('smoothed historical simulation', () => {
 
   it('adds jitter when smoothing is on without biasing the mean', () => {
     const logNormal = profilesFromSampleYears(sampleYears.years);
-    const sampleReturns = sampleYears.years.map((y) =>
-      (y.us_lg_growth * baseAllocation.usLgGrowth +
-        y.us_lg_value * baseAllocation.usLgValue +
-        y.us_sm_mid * baseAllocation.usSmMid +
-        y.ex_us * baseAllocation.exUs +
-        y.bond * baseAllocation.bond +
-        y.cash * baseAllocation.cash) /
-      100
-    );
+    const sampleReturns = sampleYears.years.map((y) => {
+      const nominal =
+        (y.us_lg_growth * baseAllocation.usLgGrowth +
+          y.us_lg_value * baseAllocation.usLgValue +
+          y.us_sm_mid * baseAllocation.usSmMid +
+          y.ex_us * baseAllocation.exUs +
+          y.bond * baseAllocation.bond +
+          y.cash * baseAllocation.cash) /
+        100;
+      return (1 + nominal) / (1 + y.inflation / 100) - 1;
+    });
     const base = {
       numYears: 500,
       blockSize: 1,
@@ -397,12 +402,15 @@ describe('smoothed historical simulation', () => {
 
     const avg =
       path.path.returns.reduce((a, b) => a + b, 0) / path.path.returns.length;
-    expect(avg).toBeCloseTo(logNormal.usLgGrowth.mean * baseAllocation.usLgGrowth +
+    const nominalMean =
+      logNormal.usLgGrowth.mean * baseAllocation.usLgGrowth +
       logNormal.usLgValue.mean * baseAllocation.usLgValue +
       logNormal.usSmMid.mean * baseAllocation.usSmMid +
       logNormal.exUs.mean * baseAllocation.exUs +
       logNormal.bond.mean * baseAllocation.bond +
-      logNormal.cash.mean * baseAllocation.cash, 1);
+      logNormal.cash.mean * baseAllocation.cash;
+    const expectedRealMean = (1 + nominalMean) / (1 + logNormal.inflation.mean) - 1;
+    expect(avg).toBeCloseTo(expectedRealMean, 1);
   });
 
   it('shifts average return when target mean is shifted', () => {
@@ -557,6 +565,83 @@ describe('front-loaded spending', () => {
     const w = simulatePath(p, createRng(deriveSeed(1, 0)), true).path.withdrawals;
     expect(w[2]).toBeCloseTo(80_000, 3);
     expect(w[3]).toBeCloseTo(60_000, 3);
+  });
+});
+
+describe('max boost drawdown', () => {
+  // Deterministic 20% real return year: start 1M → 1.2M post-growth. Plan 100k
+  // plus a large High Adj; drawdown 0% requires end ≥ start after spending
+  // excl. glide, so boost is trimmed to the leftover headroom.
+  function boomYearParams(dynConfigOverrides = {}) {
+    return {
+      numYears: 1,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0.2, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 1_000_000,
+        base: 100_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(1, [{ changePct: 0, extra: 0 }]),
+      },
+      dynConfig: {
+        enabled: true,
+        low: { ret: -20, adj: 0 },
+        med: { ret: 0, adj: 0 },
+        high: { ret: 10, adj: 200_000 },
+        noCutBal: null,
+        maxBoostDrawdownPct: null,
+        ...dynConfigOverrides,
+      },
+      samples: null,
+    };
+  }
+
+  it('stores real (not nominal) path returns', () => {
+    const s = simulatePath(boomYearParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.returns[0]).toBeCloseTo(0.2, 10);
+  });
+
+  it('allows the full high-market boost when drawdown is off', () => {
+    const s = simulatePath(boomYearParams(), createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawalBreakdown[0].dynamicAdj).toBeCloseTo(200_000, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(300_000, 3);
+  });
+
+  it('trims the high-market boost so end stays at start when drawdown is 0%', () => {
+    // Post-growth 1.2M; plan 100k without boost → headroom 100k for boost under
+    // end ≥ start (maxWd = 200k).
+    const s = simulatePath(
+      boomYearParams({ maxBoostDrawdownPct: 0 }),
+      createRng(deriveSeed(1, 0)),
+      true,
+    );
+    expect(s.path.withdrawalBreakdown[0].dynamicAdj).toBeCloseTo(100_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_000_000, 3);
+  });
+
+  it('requires growth when drawdown is −1%', () => {
+    // minEnd = 1.01M; maxWd = 190k; without boost 100k → boost cap 90k
+    const s = simulatePath(
+      boomYearParams({ maxBoostDrawdownPct: -0.01 }),
+      createRng(deriveSeed(1, 0)),
+      true,
+    );
+    expect(s.path.withdrawalBreakdown[0].dynamicAdj).toBeCloseTo(90_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(1_010_000, 3);
   });
 });
 

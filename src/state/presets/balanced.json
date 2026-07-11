@@ -26,17 +26,28 @@
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 70,
-    "gifting": { "amountPctOfStart": 1, "balanceMultipleOfStart": 1.33 },
-    "spending": { "changePct": -2, "firstTierYearsFractionOfHorizon": 0.43 },
+    "gifting": {
+      "amountPctOfStart": 1,
+      "balanceMultipleOfStart": 1.33
+    },
+    "spending": {
+      "changePct": -2,
+      "firstTierYearsFractionOfHorizon": 0.43
+    },
     "noCutBalanceMultipleOfStart": 1,
-    "baseWithdrawalPctOfStart": 5.0,
+    "baseWithdrawalPctOfStart": 5,
     "floorBalanceMultipleOfStart": 0.8,
     "ceilingBalanceMultipleOfStart": 1.2,
     "floorPenalty": 50,
     "ceilingBonus": 50,
-    "dynAdjPctOfBase": { "low": -33, "med": 0, "high": 33 },
+    "dynAdjPctOfBase": {
+      "low": -33,
+      "med": 0,
+      "high": 33
+    },
     "spendingExtraPctOfBase": 33,
     "targetEndingBalancePctOfStart": 40,
-    "glideFraction": 50
+    "glideFraction": 50,
+    "maxBoostDrawdownPct": 1
   }
 }

@@ -59,6 +59,7 @@ export const PRESET_SCENARIO_KEYS = [
 // (in addition to the tier lists, which are patched in place — see below).
 export const PRESET_DERIVED_SCALAR_KEYS = [
   'dynNoCutBal',
+  'dynMaxBoostDrawdownPct',
   'goalSeekTargetEndingBalance',
   // Kept in lockstep with Goal Seek's target: Goal Seek pins the glide target
   // to that value when the lever is included, and Easy Mode should show the
@@ -311,6 +312,12 @@ export function computeDerivedPresetValues(preset, {
   // above where it began.
   if (hasStart && isPositiveFinite(d.noCutBalanceMultipleOfStart)) {
     out.dynNoCutBal = Math.round(startThousands * d.noCutBalanceMultipleOfStart);
+  }
+
+  // Max boost drawdown (% vs start-of-year). null/undefined key → leave current;
+  // explicit null in JSON → blank (off). 0 is a real floor (end ≥ start).
+  if (Object.prototype.hasOwnProperty.call(d, 'maxBoostDrawdownPct')) {
+    out.dynMaxBoostDrawdownPct = d.maxBoostDrawdownPct;
   }
 
   // --- Goal Seek target ending balance: % of start the plan should leave

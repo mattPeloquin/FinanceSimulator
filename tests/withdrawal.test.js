@@ -11,6 +11,7 @@ import {
   buildGlideRequiredBalances,
   getDynamicAdjustment,
   resolveAdjustment,
+  limitBoostForDrawdown,
 } from '../src/core/withdrawal.js';
 import { toDollars } from '../src/state/scenario.js';
 import {
@@ -375,5 +376,35 @@ describe('resolveAdjustment', () => {
     const noThreshold = { ...defaultDynConfig, noCutBal: null };
     expect(resolveAdjustment(900_000, -15, noThreshold)).toBe(-50_000);
     expect(resolveAdjustment(6_000_000, -15, noThreshold)).toBe(-50_000);
+  });
+});
+
+describe('limitBoostForDrawdown', () => {
+  it('leaves the boost unchanged when drawdown is blank (null)', () => {
+    expect(limitBoostForDrawdown(50_000, 2_000_000, 2_400_000, null, 100_000)).toBe(50_000);
+  });
+
+  it('does not alter non-positive boosts', () => {
+    expect(limitBoostForDrawdown(0, 2_000_000, 2_400_000, 0.01, 100_000)).toBe(0);
+    expect(limitBoostForDrawdown(-10_000, 2_000_000, 2_400_000, 0.01, 100_000)).toBe(-10_000);
+  });
+
+  it('allows end at start when drawdown is 0% and spending leaves room', () => {
+    // minEnd = start; maxWd = postGrowth - start = 400k; without boost 100k → room 300k
+    expect(limitBoostForDrawdown(50_000, 2_000_000, 2_400_000, 0, 100_000)).toBe(50_000);
+  });
+
+  it('trims the boost so ending balance respects a 1% drawdown floor', () => {
+    // minEnd = 2M * 0.99 = 1.98M; maxWd = 2.4M - 1.98M = 420k; without = 400k → room 20k
+    expect(limitBoostForDrawdown(50_000, 2_000_000, 2_400_000, 0.01, 400_000)).toBe(20_000);
+  });
+
+  it('requires growth when drawdown is negative (−1%)', () => {
+    // minEnd = 2M * 1.01 = 2.02M; maxWd = 2.4M - 2.02M = 380k; without = 370k → room 10k
+    expect(limitBoostForDrawdown(50_000, 2_000_000, 2_400_000, -0.01, 370_000)).toBe(10_000);
+  });
+
+  it('zeros the boost when spending without boost already uses all headroom', () => {
+    expect(limitBoostForDrawdown(50_000, 2_000_000, 2_400_000, 0, 500_000)).toBe(0);
   });
 });

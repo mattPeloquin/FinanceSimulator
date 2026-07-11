@@ -213,3 +213,47 @@ test('3D surface tooltip shows original plan from stored bar data when hover val
   expect(tooltipCheck.truncatedText).toBe(tooltipCheck.fullText);
   expect(tooltipCheck.truncatedText).toContain('Original Plan:');
 });
+
+test('IRR scatter tooltip stays offset from the pointer', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await disableGoalSeek(page);
+
+  // Defaults leave start balance blank (Easy Mode); charts need a portfolio to run.
+  await page.fill('#startBalance', '2000');
+  await page.click('summary:has-text("Advanced simulation settings")');
+  await page.fill('#numYears', '30');
+  await page.fill('#numSimulations', '200');
+  await page.fill('#randomSeed', '12345');
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#irrScatterCanvas')).toBeVisible();
+
+  const scatterCanvas = page.locator('#irrScatterCanvas');
+  const tip = page.locator('#irrScatterTooltip');
+  const box = await scatterCanvas.boundingBox();
+
+  let found = false;
+  for (let fy = 0.25; fy <= 0.75 && !found; fy += 0.1) {
+    for (let fx = 0.25; fx <= 0.75 && !found; fx += 0.1) {
+      const x = box.width * fx;
+      const y = box.height * fy;
+      await scatterCanvas.hover({ position: { x, y } });
+      if (!(await tip.isVisible())) continue;
+
+      const tipBox = await tip.boundingBox();
+      // Canvas-local pointer vs tip box (page coords → canvas-local).
+      const tipLeft = tipBox.x - box.x;
+      const tipTop = tipBox.y - box.y;
+      const pointerClear = 12;
+      const coversPointer =
+        tipLeft < x + pointerClear
+        && tipLeft + tipBox.width > x - pointerClear
+        && tipTop < y + pointerClear
+        && tipTop + tipBox.height > y - pointerClear;
+      expect(coversPointer).toBe(false);
+      found = true;
+    }
+  }
+  expect(found).toBe(true);
+});

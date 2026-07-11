@@ -14,14 +14,17 @@ import {
 import { buildBaseWithdrawalSchedule } from './withdrawal.js';
 
 const DEFAULT_SEARCH_NUM_SIMULATIONS = 1000;
-const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: 0, stepPct: 5 };
+// Low cuts exclude 0% so Goal Seek always applies at least a mild downside
+// adjustment (same "never stay at off" pattern as balance cut/boost and glide).
+const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: -5, stepPct: 5 };
 // The upside grid reaches further than the downside one so the search can burn
 // surplus down toward the target aggressively (+100% of base, coarser steps to
-// keep the candidate count — and thus the search budget — in check). There is
-// no Expected (med) grid: at the expected return the plan is on plan, so the
-// Expected adjustment is never searched — it stays at whatever the user typed
-// (normally 0) and only anchors the Low/High grids.
-const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 0, maxPct: 100, stepPct: 10 };
+// keep the candidate count — and thus the search budget — in check). Starts at
+// +10% (the step size) so High never stays at $0 either. There is no Expected
+// (med) grid: at the expected return the plan is on plan, so the Expected
+// adjustment is never searched — it stays at whatever the user typed (normally
+// 0) and only anchors the Low/High grids.
+const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 10, maxPct: 100, stepPct: 10 };
 const DEFAULT_FLOOR_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
 // Includes sub-1x multiples so the ceiling boost can engage before the
 // portfolio has grown past its starting balance, not only after it balloons.
@@ -200,12 +203,41 @@ export async function bisectMaxSatisfyingAsync(predicate, lo, hi, { tolerance = 
 
 // Dollar adjustment candidates expressed as a % of the base withdrawal, so the
 // grid automatically rescales with whatever base the search has found so far.
+// Zero is never a candidate: an explicit 0% step is skipped, and small bases
+// that round a non-zero % to $0 are pinned to ±$1,000 so the search cannot
+// treat "no adjustment" as a legal answer.
 export function buildAdjustmentGrid(baseWithdrawal, { minPct, maxPct, stepPct } = DEFAULT_MARKET_DOWN_ADJ_GRID) {
   const candidates = [];
+  const seen = new Set();
   for (let pct = minPct; pct <= maxPct + 1e-9; pct += stepPct) {
-    candidates.push(roundToThousand((baseWithdrawal * pct) / 100));
+    let value = roundToThousand((baseWithdrawal * pct) / 100);
+    if (value === 0) {
+      if (pct === 0) continue;
+      value = pct < 0 ? -DOLLAR_ROUNDING : DOLLAR_ROUNDING;
+    }
+    if (seen.has(value)) continue;
+    seen.add(value);
+    candidates.push(value);
+  }
+  if (candidates.length === 0) {
+    if (maxPct < 0) return [-DOLLAR_ROUNDING];
+    if (minPct > 0) return [DOLLAR_ROUNDING];
   }
   return candidates;
+}
+
+// Mildest (closest-to-zero) Low cut on the downside grid — the least negative
+// dollar amount Goal Seek is allowed to leave Low at.
+export function mildestMarketDownAdj(baseWithdrawal, gridConfig = DEFAULT_MARKET_DOWN_ADJ_GRID) {
+  const negatives = buildAdjustmentGrid(baseWithdrawal, gridConfig).filter((value) => value < 0);
+  return negatives.length > 0 ? Math.max(...negatives) : -DOLLAR_ROUNDING;
+}
+
+// Mildest High boost on the upside grid — the smallest positive dollar amount
+// Goal Seek is allowed to leave High at.
+export function mildestMarketUpAdj(baseWithdrawal, gridConfig = DEFAULT_MARKET_UP_ADJ_GRID) {
+  const positives = buildAdjustmentGrid(baseWithdrawal, gridConfig).filter((value) => value > 0);
+  return positives.length > 0 ? Math.min(...positives) : DOLLAR_ROUNDING;
 }
 
 // Keep only candidates at or above the fixed Expected adjustment so Goal Seek
@@ -232,6 +264,23 @@ export function filterAdjustmentCandidatesAtOrBelow(candidates, maxAdj) {
 export function enforceAscendingMarketAdjustments(dynConfig) {
   dynConfig.low.adj = Math.min(dynConfig.low.adj, dynConfig.med.adj);
   dynConfig.high.adj = Math.max(dynConfig.high.adj, dynConfig.med.adj);
+}
+
+// Force Low/High away from $0 after ascending enforcement (or on early
+// write-back), using the mildest non-zero points on each side's search grid.
+export function clampMarketAdjustments(config, dynConfig, baseWithdrawal) {
+  const maxLow = mildestMarketDownAdj(
+    baseWithdrawal,
+    config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID,
+  );
+  const minHigh = mildestMarketUpAdj(
+    baseWithdrawal,
+    config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID,
+  );
+  // Low must be at least as negative as the mildest grid cut, and still ≤ Expected.
+  dynConfig.low.adj = Math.min(dynConfig.low.adj, maxLow, dynConfig.med.adj);
+  // High must be at least the mildest grid boost, and still ≥ Expected.
+  dynConfig.high.adj = Math.max(dynConfig.high.adj, minHigh, dynConfig.med.adj);
 }
 
 // Balance-style candidates as round multiples of the starting balance. A
@@ -582,6 +631,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     // early exit. The no-cut balance threshold is omitted on purpose: it was
     // cleared to null for the search, and blanking it would wipe the
     // preset-derived dynNoCutBal value the user just loaded.
+    if (config.includeMarketAdjustments) {
+      clampMarketAdjustments(config, working.dynConfig, baseLowerBound);
+    }
     return {
       params: { ...working, numSimulations: params.numSimulations },
       summary: {
@@ -804,9 +856,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       // anchor so the search never invents an inverted Low/Expected/High
       // dollar ladder (users can still type one by hand).
       const medAdj = working.dynConfig.med.adj;
+      const downGridConfig = config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID;
+      const upGridConfig = config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID;
+      const mildLow = mildestMarketDownAdj(solvedBase, downGridConfig);
+      const mildHigh = mildestMarketUpAdj(solvedBase, upGridConfig);
 
       const lowGrid = filterAdjustmentCandidatesAtOrBelow(
-        buildAdjustmentGrid(solvedBase, config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID),
+        buildAdjustmentGrid(solvedBase, downGridConfig),
         medAdj,
       );
       working.dynConfig.low.adj = await pickBestCandidateWithResolve(
@@ -815,11 +871,13 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
           working.dynConfig.low.adj = value;
         },
         'Tuning market adjustments',
-        Math.min(working.dynConfig.low.adj, medAdj),
+        // Prefer the mildest non-zero cut over Phase-1's neutralized $0 so a
+        // "keep current" fallback cannot reintroduce zero.
+        Math.min(working.dynConfig.low.adj || mildLow, mildLow, medAdj),
       );
 
       const highGrid = filterAdjustmentCandidatesAtOrAbove(
-        buildAdjustmentGrid(solvedBase, config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID),
+        buildAdjustmentGrid(solvedBase, upGridConfig),
         medAdj,
       );
       working.dynConfig.high.adj = await pickBestCandidateWithResolve(
@@ -829,10 +887,11 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         },
         'Tuning market adjustments',
         // If a prior round left this band below the anchor, start from the
-        // anchor so "keep current" cannot re-introduce an inversion.
-        Math.max(working.dynConfig.high.adj, medAdj),
+        // stronger of the anchor and the mildest non-zero boost.
+        Math.max(working.dynConfig.high.adj || mildHigh, mildHigh, medAdj),
       );
       enforceAscendingMarketAdjustments(working.dynConfig);
+      clampMarketAdjustments(config, working.dynConfig, solvedBase);
 
       // "No cut while ahead" threshold: candidates are multiples of the
       // starting balance (0 = off/null), sharing the ceiling grid since both
@@ -960,6 +1019,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   }
   if (config.includeMarketAdjustments) {
     enforceAscendingMarketAdjustments(working.dynConfig);
+    clampMarketAdjustments(config, working.dynConfig, finalBase);
   }
 
   const finalMetrics = await evaluate('Finalizing');
@@ -973,6 +1033,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const reason = isSpecific
       ? 'Your Specific List of withdrawals cannot meet the desired success rate even with the best lever settings. Try lowering the amounts in your list, the target ending balance, or the desired success rate, or raising the risk tolerance.'
       : `Your pinned base withdrawal of $${Math.round(finalBase / DOLLAR_ROUNDING).toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`;
+
+    if (config.includeMarketAdjustments) {
+      clampMarketAdjustments(config, working.dynConfig, finalBase);
+    }
 
     return {
       params: { ...working, numSimulations: params.numSimulations },

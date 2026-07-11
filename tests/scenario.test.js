@@ -208,6 +208,24 @@ describe('buildSimParams', () => {
     expect(buildSimParams(set, { years: [] }).dynConfig.noCutBal).toBe(3_000_000);
   });
 
+  it('treats blank max-boost drawdown as off but keeps 0% as a real floor', () => {
+    const blank = defaultScenario();
+    blank.dynMaxBoostDrawdownPct = null;
+    expect(buildSimParams(blank, { years: [] }).dynConfig.maxBoostDrawdownPct).toBeNull();
+
+    const zero = defaultScenario();
+    zero.dynMaxBoostDrawdownPct = 0;
+    expect(buildSimParams(zero, { years: [] }).dynConfig.maxBoostDrawdownPct).toBe(0);
+
+    const neg = defaultScenario();
+    neg.dynMaxBoostDrawdownPct = -1;
+    expect(buildSimParams(neg, { years: [] }).dynConfig.maxBoostDrawdownPct).toBeCloseTo(-0.01, 10);
+
+    const pos = defaultScenario();
+    pos.dynMaxBoostDrawdownPct = 2;
+    expect(buildSimParams(pos, { years: [] }).dynConfig.maxBoostDrawdownPct).toBeCloseTo(0.02, 10);
+  });
+
   it('migrates v5 balance overrides to the single no-cut threshold', () => {
     const v5 = {
       startBalance: 3000,
