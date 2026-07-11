@@ -143,6 +143,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const withdrawals = collectPath ? [] : null;
   const returns = collectPath ? [] : null;
   const unadjustedWithdrawals = collectPath ? [] : null;
+  // Per-year dollar attribution of actual withdrawal vs plan (chart tooltips only).
+  const withdrawalBreakdown = collectPath ? [] : null;
   // Per-year actual withdrawals — used to score each run by median yearly spending.
   const yearlyWithdrawals = new Array(horizonYears);
 
@@ -327,8 +329,9 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       balance += eventAmount;
     }
 
-    const adjAmount = dynConfig.enabled 
-      ? resolveAdjustment(balance, portfolioReturn * 100, dynConfig) 
+    // Market/balance guardrail add-on before the balance-scale ramp.
+    const dynamicAdj = dynConfig.enabled
+      ? resolveAdjustment(balance, portfolioReturn * 100, dynConfig)
       : 0;
 
     let targetWithdrawal;
@@ -336,44 +339,46 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     let baseVal;
     if (portfolio.strategy === 'specific') {
       baseVal = fittedWithdrawals[j];
-      targetWithdrawal = baseVal + adjAmount;
+      targetWithdrawal = baseVal + dynamicAdj;
       unadjustedTarget = baseVal;
     } else {
       baseVal = portfolio.base;
       unadjustedTarget = baseSchedule[j];
-      targetWithdrawal = unadjustedTarget + adjAmount;
+      targetWithdrawal = unadjustedTarget + dynamicAdj;
     }
 
     // Balance-based spending scale: smoothly cut the whole withdrawal as the
     // balance slides below the floor, or boost it as wealth grows past the
     // ceiling. Deposits (negative targets) are never scaled, and the minimum
     // withdrawal below still acts as the backstop after scaling.
+    let scaleDelta = 0;
     if (dynConfig.enabled && targetWithdrawal > 0) {
-      targetWithdrawal *= balanceScaleMultiplier(balance, portfolio);
+      const scaledTarget = targetWithdrawal * balanceScaleMultiplier(balance, portfolio);
+      scaleDelta = scaledTarget - targetWithdrawal;
+      targetWithdrawal = scaledTarget;
     }
 
     if (baseVal >= 0 && targetWithdrawal < 0) {
+      // Negative target clamped to zero — fold into scaleDelta so attribution sums.
+      scaleDelta += -targetWithdrawal;
       targetWithdrawal = 0;
     }
     if (baseVal >= 0 && unadjustedTarget < 0) {
       unadjustedTarget = 0;
     }
 
-    // Glide-path spend-down: recycle a fraction of any balance above this
-    // year's required glide balance into extra spending. Skipped on deposit
-    // years, and added after the balance-scale ramp so the ramp never
-    // compounds the recycled surplus.
-    if (glideRequired && targetWithdrawal >= 0) {
-      const glideSurplus = balance - glideRequired[j];
-      if (glideSurplus > 0) {
-        targetWithdrawal += glideFraction * glideSurplus;
-      }
-    }
-
     const yearFloor = portfolio.withdrawalFloorSeries?.[j] ?? 0;
     const plan = unadjustedTarget;
+    // Glide surplus is measured from the pre-withdrawal balance (after growth
+    // and inflows) so it stays comparable to glideRequired[j].
+    const balanceBeforeYearWithdrawals = balance;
 
     let actualWithdrawal;
+    let floorLift = 0;
+    let majorEventOutflow = 0;
+    let balanceShortfall = 0;
+    let giftPaid = 0;
+    let glideExtra = 0;
     if (targetWithdrawal < 0) {
       // Negative target = deposit (adds to balance); floor and min-recovery do not apply.
       actualWithdrawal = targetWithdrawal;
@@ -381,13 +386,17 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     } else {
       if (minRecoveryEnabled && forcedPlanYearsRemaining > 0) {
         // Recovery window: spend at least the plan even if adjustments cut lower.
-        targetWithdrawal = Math.max(targetWithdrawal, plan);
+        const lifted = Math.max(targetWithdrawal, plan);
+        floorLift = lifted - targetWithdrawal;
+        targetWithdrawal = lifted;
         forcedPlanYearsRemaining--;
         consecutiveMinYears = 0;
       } else {
         const preFloorTarget = targetWithdrawal;
         if (yearFloor > 0) {
-          targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
+          const lifted = Math.max(targetWithdrawal, yearFloor);
+          floorLift = lifted - targetWithdrawal;
+          targetWithdrawal = lifted;
         }
         if (minRecoveryEnabled && yearFloor > 0 && plan > yearFloor) {
           if (preFloorTarget < yearFloor) {
@@ -406,22 +415,62 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       // Known large payments from major events (negative amounts) are mandatory
       // on top of the plan and floor — still capped by balance below.
       if (portfolio.strategy !== 'specific' && eventAmount < 0) {
-        targetWithdrawal += -eventAmount;
+        majorEventOutflow = -eventAmount;
+        targetWithdrawal += majorEventOutflow;
       }
       actualWithdrawal = Math.min(balance, targetWithdrawal);
+      balanceShortfall = targetWithdrawal - actualWithdrawal;
       balance -= actualWithdrawal;
     }
 
-    // Tiered gifting: give only when this year's spending fully met the plan
-    // (no guardrail cut, balance covered the target) and the balance left after
-    // the regular withdrawal still exceeds the tier's threshold. Deposit years
-    // (negative targets) always meet the plan, so only the balance check applies.
+    // Tiered gifting: give only when this year's non-gift spending fully meets
+    // the plan and the balance left after the regular withdrawal still exceeds
+    // the tier's threshold. "Meets the plan" counts the upcoming glide surplus
+    // (computed before any gift) so a market-adj cut that glide would more than
+    // replace does not block gifting — same eligibility as when glide ran first.
+    // Deposit years always meet the plan, so only the balance check applies.
     const gift = portfolio.giftingSeries?.[j];
-    const metPlan = targetWithdrawal < 0 || actualWithdrawal >= unadjustedTarget;
+    let prospectiveGlideExtra = 0;
+    if (glideRequired && targetWithdrawal >= 0) {
+      const provisionalSurplus = balanceBeforeYearWithdrawals - glideRequired[j];
+      if (provisionalSurplus > 0) {
+        prospectiveGlideExtra = Math.min(balance, glideFraction * provisionalSurplus);
+      }
+    }
+    const metPlan =
+      targetWithdrawal < 0
+      || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
     if (gift && gift.amount > 0 && metPlan && balance > gift.balanceThreshold) {
-      const actualGift = Math.min(balance, gift.amount);
-      balance -= actualGift;
-      actualWithdrawal += actualGift;
+      giftPaid = Math.min(balance, gift.amount);
+      balance -= giftPaid;
+      actualWithdrawal += giftPaid;
+    }
+
+    // Glide-path spend-down: after gifting, recycle a fraction of any surplus
+    // still above this year's required glide balance. Surplus is measured from
+    // the pre-withdrawal balance; gifts already paid reduce what glide may take.
+    // Skipped on deposit years so surplus recycling never fights a deposit.
+    if (glideRequired && targetWithdrawal >= 0) {
+      const glideSurplus = balanceBeforeYearWithdrawals - glideRequired[j] - giftPaid;
+      if (glideSurplus > 0) {
+        glideExtra = Math.min(balance, glideFraction * glideSurplus);
+        balance -= glideExtra;
+        actualWithdrawal += glideExtra;
+      }
+    }
+
+    if (withdrawalBreakdown) {
+      withdrawalBreakdown.push({
+        plan,
+        dynamicAdj,
+        scaleDelta,
+        glideExtra,
+        floorLift,
+        majorEventOutflow,
+        balanceShortfall,
+        gift: giftPaid,
+        actual: actualWithdrawal,
+      });
     }
 
     totalWithdrawn += actualWithdrawal;
@@ -476,10 +525,24 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   };
 
   if (collectPath) {
-    summary.path = { balances, withdrawals, returns, unadjustedWithdrawals };
+    summary.path = { balances, withdrawals, returns, unadjustedWithdrawals, withdrawalBreakdown };
   }
 
   return summary;
+}
+
+// Sum the per-year attribution fields; should equal `actual` for withdrawal years.
+export function sumWithdrawalBreakdown(b) {
+  return (
+    b.plan
+    + b.dynamicAdj
+    + b.scaleDelta
+    + b.glideExtra
+    + b.floorLift
+    + b.majorEventOutflow
+    - b.balanceShortfall
+    + b.gift
+  );
 }
 
 // Run the full Monte Carlo. Returns summary stats packed into typed arrays

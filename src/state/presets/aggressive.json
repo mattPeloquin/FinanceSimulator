@@ -19,7 +19,7 @@
     "cashAllocation": 10,
     "dynLowRet": -20,
     "dynMedRet": 5,
-    "dynHighRet": 15,
+    "dynHighRet": 25,
     "glideRate": -1,
     "maxConsecutiveMinWithdrawals": 4,
     "minWithdrawalPlanRecoveryYears": 2
@@ -34,7 +34,7 @@
     "ceilingBalanceMultipleOfStart": 1,
     "floorPenalty": 60,
     "ceilingBonus": 60,
-    "dynAdjPctOfBase": { "low": -50, "med": 0, "high": 50 },
+    "dynAdjPctOfBase": { "low": -50, "med": 0, "high": 40 },
     "spendingExtraPctOfBase": 50,
     "targetEndingBalancePctOfStart": 0,
     "glideFraction": 70

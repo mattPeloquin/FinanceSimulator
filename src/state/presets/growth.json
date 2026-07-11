@@ -19,7 +19,7 @@
     "cashAllocation": 15,
     "dynLowRet": -18,
     "dynMedRet": 5,
-    "dynHighRet": 18,
+    "dynHighRet": 25,
     "glideRate": -2,
     "maxConsecutiveMinWithdrawals": 3,
     "minWithdrawalPlanRecoveryYears": 2

@@ -439,6 +439,7 @@ function renderPathChart(i) {
     bal: balances[dataIndex + 1],
     wd: withdrawals[dataIndex],
     unadj: unadjustedWithdrawals[dataIndex],
+    breakdown: re.path.withdrawalBreakdown?.[dataIndex] ?? null,
   });
 
   const theme = getChartTheme();
@@ -483,6 +484,20 @@ function renderPathChart(i) {
     canvas.addEventListener('mouseleave', () => state.balanceBars?.reset());
   }
   state.balanceBars?.setSeries(series);
+
+  if (typeof window !== 'undefined') {
+    window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+    window.__TEST_HOOKS__.irrScatterBreakdownSample = () => {
+      const bd = re.path.withdrawalBreakdown?.[0] ?? null;
+      if (!bd) return null;
+      return {
+        actual: bd.actual,
+        plan: bd.plan,
+        dynamicAdj: bd.dynamicAdj,
+        scaleDelta: bd.scaleDelta,
+      };
+    };
+  }
 }
 
 function onMouseMove(ev) {

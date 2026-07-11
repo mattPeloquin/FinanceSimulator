@@ -131,6 +131,7 @@ function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdra
     returns: re.path.returns,
     withdrawals: re.path.withdrawals,
     unadjustedWithdrawals: re.path.unadjustedWithdrawals,
+    withdrawalBreakdown: re.path.withdrawalBreakdown,
     totalWithdrawn: result.totalWithdrawn[simIndex],
     medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
     avgReturn: result.avgReturn[simIndex],

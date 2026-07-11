@@ -102,6 +102,11 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#irrScatterPathCanvas')).toBeVisible();
   await expect(page.locator('#irrScatterBalanceCanvas')).toBeVisible();
 
+  const breakdownSample = await page.evaluate(() => window.__TEST_HOOKS__?.irrScatterBreakdownSample?.());
+  expect(breakdownSample).not.toBeNull();
+  expect(breakdownSample.plan).toBeGreaterThan(0);
+  expect(breakdownSample.actual).toBeGreaterThan(0);
+
   // Combined success card and Median End Balance IRR
   await expect(page.locator('#medianIrr')).toContainText('%');
 

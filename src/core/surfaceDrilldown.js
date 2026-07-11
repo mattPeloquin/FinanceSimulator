@@ -61,6 +61,7 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
       returns: re.path.returns,
       withdrawals: re.path.withdrawals,
       unadjustedWithdrawals: re.path.unadjustedWithdrawals,
+      withdrawalBreakdown: re.path.withdrawalBreakdown,
       totalWithdrawn: re.totalWithdrawn,
       medianYearlyWithdrawal: re.medianYearlyWithdrawal,
       avgReturn: re.avgReturn,

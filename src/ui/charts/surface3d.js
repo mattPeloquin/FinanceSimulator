@@ -78,6 +78,7 @@ const OVERVIEW_DESCRIPTION =
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
   columns: [], // columns[x] = array of data points for that simulation
+  breakdownCols: [], // parallel to columns: per-year withdrawal attribution arrays
   depletedCols: [], // parallel to columns: true when the path runs out of money
   belowPlanCols: [], // parallel to columns: true when withdrawals fall below plan (not depleted)
   barWidth: 1,
@@ -449,6 +450,7 @@ function withdrawalPointDetails(col, dataIndex) {
     bal: vals[4],
     wd: vals[5],
     unadj: vals[8],
+    breakdown: surfaceState.breakdownCols[col]?.[dataIndex] ?? null,
   };
 }
 
@@ -459,6 +461,29 @@ function formatWithdrawnLine(wd, unadj) {
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
   return `Withdrawn: ${formatK(wd)}${deltaStr}`;
+}
+
+// One-line attribution of non-zero components vs the original plan.
+export function formatWithdrawalBreakdownLine(breakdown) {
+  if (!breakdown || breakdown.actual < 0) return null;
+  const parts = [`Plan ${formatK(breakdown.plan)}`];
+  const components = [
+    ['Adj', breakdown.dynamicAdj],
+    ['Scale', breakdown.scaleDelta],
+    ['Gift', breakdown.gift],
+    ['Glide', breakdown.glideExtra],
+    ['Floor', breakdown.floorLift],
+    ['Event', breakdown.majorEventOutflow],
+  ];
+  for (const [label, amount] of components) {
+    if (Math.abs(amount) > 1e-6) {
+      parts.push(`${label} ${amount > 0 ? '+' : ''}${formatK(amount)}`);
+    }
+  }
+  if (breakdown.balanceShortfall > 1e-6) {
+    parts.push(`Cap −${formatK(breakdown.balanceShortfall)}`);
+  }
+  return parts.length > 1 ? parts.join(' · ') : null;
 }
 
 function withdrawalDetailTailLines(details) {
@@ -482,7 +507,11 @@ export function withdrawalChartTooltipCallbacks(source) {
     afterTitle: (items) => {
       if (!items[0]) return [];
       const details = detailsAt(items[0].dataIndex);
-      return details ? [formatWithdrawnLine(details.wd, details.unadj)] : [];
+      if (!details) return [];
+      const lines = [formatWithdrawnLine(details.wd, details.unadj)];
+      const breakdownLine = formatWithdrawalBreakdownLine(details.breakdown);
+      if (breakdownLine) lines.push(breakdownLine);
+      return lines;
     },
     // "Actual Withdrawal" is omitted here since afterTitle's "Withdrawn" line
     // already shows that same value (plus its delta from plan).
@@ -1089,11 +1118,12 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
 
   const data3D = [];
   const columns = [];
+  const breakdownCols = [];
   const depletedCols = [];
   const belowPlanCols = [];
   for (let x = 0; x < numCols; x++) {
     const path = surfacePaths[x];
-    const { balances, returns, withdrawals, unadjustedWithdrawals, totalWithdrawn, avgReturn, irr, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
+    const { balances, returns, withdrawals, unadjustedWithdrawals, withdrawalBreakdown, totalWithdrawn, avgReturn, irr, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
     const pathHorizon = horizonYears ?? numYears;
     const depleted = pathDepleted(balances);
     const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), planBenchmark ?? 0, tolerance);
@@ -1114,24 +1144,26 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
       colPoints.push(point);
     }
     columns.push(colPoints);
+    breakdownCols.push(withdrawalBreakdown ?? null);
   }
 
   const barWidth = BOX_WIDTH / numCols;
   const barDepth = BOX_DEPTH / numRows;
 
-  return { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols };
+  return { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols };
 }
 
 function applySurfaceDataset(surfacePaths, numYears) {
   if (!chartInstance) return;
 
-  const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
+  const { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
     buildColumnsFromPaths(surfacePaths, numYears, {
       shortfallTolerance: surfaceState.shortfallTolerance,
       withdrawalMetric: surfaceState.withdrawalMetric,
     });
 
   surfaceState.columns = columns;
+  surfaceState.breakdownCols = breakdownCols;
   surfaceState.depletedCols = depletedCols;
   surfaceState.belowPlanCols = belowPlanCols;
   surfaceState.barWidth = barWidth;
@@ -1272,13 +1304,14 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.numYears = numYears;
   surfaceState.lastContext = { surfacePaths, numYears, context };
 
-  const { data3D, columns, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
+  const { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
     buildColumnsFromPaths(surfacePaths, numYears, {
       shortfallTolerance,
       withdrawalMetric,
     });
 
   surfaceState.columns = columns;
+  surfaceState.breakdownCols = breakdownCols;
   surfaceState.depletedCols = depletedCols;
   surfaceState.belowPlanCols = belowPlanCols;
   surfaceState.barWidth = barWidth;

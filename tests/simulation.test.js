@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { simulatePath, runMonteCarlo, regeneratePath } from '../src/core/simulation.js';
+import { simulatePath, runMonteCarlo, regeneratePath, sumWithdrawalBreakdown } from '../src/core/simulation.js';
+import { formatWithdrawalBreakdownLine } from '../src/ui/charts/surface3d.js';
 import { createRng, deriveSeed } from '../src/core/rng.js';
 import { successRate } from '../src/core/statistics.js';
 import { computeProfiles, computeStandardizedYears } from '../src/core/history.js';
@@ -1138,6 +1139,91 @@ describe('tiered gifting', () => {
   });
 });
 
+describe('gift then glide', () => {
+  const neutralEnabledDynConfig = {
+    enabled: true,
+    low: { ret: -15, bal: null, adj: 0 },
+    med: { ret: 5, bal: null, adj: 0 },
+    high: { ret: 20, bal: null, adj: 0 },
+  };
+
+  function giftGlideParams(overrides = {}) {
+    return {
+      numYears: 1,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 0, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 1 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        start: 3_000_000,
+        base: 100_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(1, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [0],
+        giftingSeries: [{ amount: 50_000, balanceThreshold: 2_000_000 }],
+        glideTarget: 2_000_000,
+        glideFraction: 1,
+        glideRate: 0,
+      },
+      dynConfig: neutralEnabledDynConfig,
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  it('pays gift before recycling glide surplus from the post-gift balance', () => {
+    const s = simulatePath(giftGlideParams(), createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.gift).toBeCloseTo(50_000, 3);
+    expect(b.glideExtra).toBeCloseTo(850_000, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(1_000_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(2_000_000, 3);
+  });
+
+  it('skips glide on deposit years while still allowing gifts', () => {
+    const p = giftGlideParams();
+    p.portfolio.strategy = 'specific';
+    p.portfolio.specificWithdrawals = [-50_000];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.gift).toBeCloseTo(50_000, 3);
+    expect(b.glideExtra).toBeCloseTo(0, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(0, 3);
+  });
+
+  it('still gifts when a market adj cuts the plan but glide surplus would cover it', () => {
+    const p = giftGlideParams();
+    p.logNormal.cash = { mean: -0.2, stdDev: 0 };
+    p.dynConfig = {
+      enabled: true,
+      low: { ret: -10, bal: null, adj: -40_000 },
+      med: { ret: 5, bal: null, adj: 0 },
+      high: { ret: 30, bal: null, adj: 20_000 },
+    };
+    p.portfolio.start = 6_000_000;
+    p.portfolio.glideTarget = 1_000_000;
+    p.portfolio.giftingSeries = [{ amount: 50_000, balanceThreshold: 4_000_000 }];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.dynamicAdj).toBeLessThan(0);
+    expect(b.gift).toBeCloseTo(50_000, 3);
+    expect(b.glideExtra).toBeGreaterThan(0);
+    expect(b.actual).toBeGreaterThan(b.plan);
+  });
+});
+
 describe('major events (base strategy)', () => {
   function flatParams() {
     return {
@@ -1219,5 +1305,151 @@ describe('major events (base strategy)', () => {
     expect(outflowResult.irr).toBeCloseTo(baseResult.irr, 10);
     expect(outflowResult.avgReturn).toBeCloseTo(baseResult.avgReturn, 10);
     expect(outflowResult.path.withdrawals[1]).not.toBeCloseTo(baseResult.path.withdrawals[1], 3);
+  });
+});
+
+describe('withdrawal breakdown attribution', () => {
+  function zeroReturnParams(overrides = {}) {
+    return {
+      numYears: 1,
+      distMethod: 'lognormal',
+      blockSize: 1,
+      allocation: { usLgGrowth: 1, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 0 },
+      logNormal: {
+        usLgGrowth: { mean: 0, stdDev: 0 },
+        usLgValue: { mean: 0, stdDev: 0 },
+        usSmMid: { mean: 0, stdDev: 0 },
+        exUs: { mean: 0, stdDev: 0 },
+        bond: { mean: 0, stdDev: 0 },
+        cash: { mean: 0, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+        chol: null,
+      },
+      portfolio: {
+        strategy: 'base',
+        start: 1_000_000,
+        base: 100_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(1, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [0],
+      },
+      dynConfig: {
+        enabled: false,
+        low: { ret: -100, bal: 0, adj: 0 },
+        med: { ret: 0, bal: 0, adj: 0 },
+        high: { ret: 100, bal: 0, adj: 0 },
+      },
+      samples: null,
+      ...overrides,
+    };
+  }
+
+  function assertBreakdownIdentity(path) {
+    expect(path.withdrawalBreakdown).toBeDefined();
+    for (const b of path.withdrawalBreakdown) {
+      if (b.actual < 0) continue;
+      expect(sumWithdrawalBreakdown(b)).toBeCloseTo(b.actual, 3);
+    }
+  }
+
+  it('omits breakdown when collectPath is false', () => {
+    const s = simulatePath(lognormalParams(), createRng(deriveSeed(123, 0)), false);
+    expect(s.path).toBeUndefined();
+  });
+
+  it('includes breakdown on regeneratePath', () => {
+    const params = lognormalParams({ numYears: 10, numSimulations: 50 });
+    const result = runMonteCarlo(params);
+    const re = regeneratePath(params, result.baseSeed, 3);
+    expect(re.path.withdrawalBreakdown).toHaveLength(re.horizonYears);
+    assertBreakdownIdentity(re.path);
+  });
+
+  it('attributes dynamic adjustment', () => {
+    const p = zeroReturnParams();
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: -100, bal: 0, adj: -20_000 };
+    p.dynConfig.med = { ret: 0, bal: 0, adj: -20_000 };
+    p.dynConfig.high = { ret: 100, bal: 0, adj: -20_000 };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.dynamicAdj).toBeCloseTo(-20_000, 3);
+    expect(b.actual).toBeCloseTo(80_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('attributes balance-scale ramp', () => {
+    const p = zeroReturnParams();
+    p.portfolio.floorBalance = 2_000_000;
+    p.portfolio.floorPenalty = 0.5;
+    p.dynConfig.enabled = true;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.scaleDelta).toBeCloseTo(-25_000, 3);
+    expect(b.actual).toBeCloseTo(75_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('attributes minimum floor lift', () => {
+    const p = zeroReturnParams();
+    p.portfolio.withdrawalFloorSeries = [80_000];
+    p.dynConfig.enabled = true;
+    p.dynConfig.low = { ret: -100, bal: 0, adj: -50_000 };
+    p.dynConfig.med = { ret: 0, bal: 0, adj: -50_000 };
+    p.dynConfig.high = { ret: 100, bal: 0, adj: -50_000 };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.floorLift).toBeCloseTo(30_000, 3);
+    expect(b.actual).toBeCloseTo(80_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('attributes major-event outflow', () => {
+    const p = zeroReturnParams({ numYears: 2 });
+    p.portfolio.withdrawalFloorSeries = [0, 0];
+    p.portfolio.majorEventsSeries = [0, -50_000];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawalBreakdown[1].majorEventOutflow).toBeCloseTo(50_000, 3);
+    expect(s.path.withdrawalBreakdown[1].actual).toBeCloseTo(150_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('attributes gifting', () => {
+    const p = zeroReturnParams();
+    p.portfolio.giftingSeries = [{ amount: 20_000, balanceThreshold: 800_000 }];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.gift).toBeCloseTo(20_000, 3);
+    expect(b.actual).toBeCloseTo(120_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('attributes balance cap shortfall', () => {
+    const p = zeroReturnParams();
+    p.portfolio.start = 50_000;
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.balanceShortfall).toBeCloseTo(50_000, 3);
+    expect(b.actual).toBeCloseTo(50_000, 3);
+    assertBreakdownIdentity(s.path);
+  });
+
+  it('formats a non-zero breakdown line for tooltips', () => {
+    const line = formatWithdrawalBreakdownLine({
+      plan: 100_000,
+      dynamicAdj: -20_000,
+      scaleDelta: 0,
+      glideExtra: 0,
+      floorLift: 0,
+      majorEventOutflow: 0,
+      balanceShortfall: 0,
+      gift: 0,
+      actual: 80_000,
+    });
+    expect(line).toContain('Plan 100');
+    expect(line).toContain('Adj -20');
   });
 });
