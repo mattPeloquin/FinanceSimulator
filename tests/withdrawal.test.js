@@ -19,9 +19,10 @@ import {
 } from '../src/ui/charts/withdrawalAdjPreview.js';
 
 const defaultDynConfig = {
-  low: { ret: -15, bal: 1_000_000, adj: -50_000 },
-  med: { ret: 5, bal: 3_000_000, adj: 0 },
-  high: { ret: 20, bal: 5_000_000, adj: 50_000 },
+  low: { ret: -15, adj: -50_000 },
+  med: { ret: 5, adj: 0 },
+  high: { ret: 20, adj: 50_000 },
+  noCutBal: 3_000_000,
 };
 
 describe('buildGlideRequiredBalances', () => {
@@ -353,34 +354,26 @@ describe('getDynamicAdjustment', () => {
 });
 
 describe('resolveAdjustment', () => {
-  it('uses low adjustment when balance is below the low override', () => {
-    expect(resolveAdjustment(900_000, 20, defaultDynConfig)).toBe(-50_000);
-  });
-
-  it('floors bad market years when balance is above Expected', () => {
+  it('suppresses bad-market cuts when balance is above the no-cut threshold', () => {
     expect(resolveAdjustment(3_500_000, -15, defaultDynConfig)).toBe(0);
   });
 
-  it('does not cap good market years when balance is above Expected', () => {
+  it('does not cap good market years when balance is above the no-cut threshold', () => {
     expect(resolveAdjustment(3_500_000, 20, defaultDynConfig)).toBe(50_000);
   });
 
-  it('floors bad market years when balance is above High', () => {
-    expect(resolveAdjustment(6_000_000, -15, defaultDynConfig)).toBe(50_000);
+  it('applies market cuts when balance is at or below the no-cut threshold', () => {
+    expect(resolveAdjustment(2_000_000, -15, defaultDynConfig)).toBe(-50_000);
+    expect(resolveAdjustment(3_000_000, -15, defaultDynConfig)).toBe(-50_000);
   });
 
-  it('uses market interpolation when balance is in the middle band', () => {
+  it('uses market interpolation when the no-cut rule is not triggered', () => {
     expect(resolveAdjustment(2_000_000, -5, defaultDynConfig)).toBeCloseTo(-25_000, 3);
   });
 
-  it('ignores disabled balance overrides (null threshold)', () => {
-    const noOverrides = {
-      ...defaultDynConfig,
-      low: { ...defaultDynConfig.low, bal: null },
-      med: { ...defaultDynConfig.med, bal: null },
-      high: { ...defaultDynConfig.high, bal: null },
-    };
-    expect(resolveAdjustment(900_000, -15, noOverrides)).toBe(-50_000);
-    expect(resolveAdjustment(6_000_000, -15, noOverrides)).toBe(-50_000);
+  it('ignores a disabled no-cut threshold (null)', () => {
+    const noThreshold = { ...defaultDynConfig, noCutBal: null };
+    expect(resolveAdjustment(900_000, -15, noThreshold)).toBe(-50_000);
+    expect(resolveAdjustment(6_000_000, -15, noThreshold)).toBe(-50_000);
   });
 });

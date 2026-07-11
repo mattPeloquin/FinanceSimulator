@@ -272,16 +272,15 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
     writeFirstSpendingTierExtra(summary.spendingOverTimeBonus);
   }
 
+  // The Expected (med) adjustment is never searched — it is the user's fixed
+  // on-plan anchor — so only the tuned Low/High bands are written back.
   if (summary.marketAdjustments) {
     setCurrencyField('dynLowAdj', summary.marketAdjustments.low);
-    setCurrencyField('dynMedAdj', summary.marketAdjustments.med);
     setCurrencyField('dynHighAdj', summary.marketAdjustments.high);
   }
 
-  if (summary.marketBalanceOverrides) {
-    setCurrencyField('dynLowBal', summary.marketBalanceOverrides.low);
-    setCurrencyField('dynMedBal', summary.marketBalanceOverrides.med);
-    setCurrencyField('dynHighBal', summary.marketBalanceOverrides.high);
+  if (summary.marketNoCutBalance !== undefined) {
+    setCurrencyField('dynNoCutBal', summary.marketNoCutBalance);
   }
 
   if (summary.balanceAdjustment) {

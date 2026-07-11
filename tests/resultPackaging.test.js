@@ -47,9 +47,13 @@ describe('buildRunResult returnScatter', () => {
   it('carries one point per simulation, aligned with the raw arrays', () => {
     expect(scatter.avgReturn.length).toBe(p.numSimulations);
     expect(scatter.irr.length).toBe(p.numSimulations);
+    expect(scatter.totalWithdrawn.length).toBe(p.numSimulations);
+    expect(scatter.finalBalance.length).toBe(p.numSimulations);
     expect(scatter.outcome.length).toBe(p.numSimulations);
     expect(Array.from(scatter.avgReturn)).toEqual(Array.from(raw.avgReturn));
     expect(Array.from(scatter.irr)).toEqual(Array.from(raw.irr));
+    expect(Array.from(scatter.totalWithdrawn)).toEqual(Array.from(raw.totalWithdrawn));
+    expect(Array.from(scatter.finalBalance)).toEqual(Array.from(raw.finalBalance));
   });
 
   it('tags every depleted path as outcome 2 and only valid codes elsewhere', () => {

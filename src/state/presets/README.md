@@ -20,7 +20,8 @@ Each file has two sections:
   - `gifting.amountPctOfStart` / `.balanceMultipleOfStart` — first gifting tier
   - `spending.changePct` — annual real change % on the first two spending tiers
   - `spending.firstTierYearsFractionOfHorizon` — first tier years = fraction × horizon
-  - `balanceTriggerMultiples.low/med/high` — dynamic-adjustment balance triggers = multiple × start
+  - `noCutBalanceMultipleOfStart` — "no cut while ahead" threshold = multiple × start;
+    market-driven cuts are skipped while the balance is above it
   - `targetEndingBalancePctOfStart` — Goal Seek target ending balance = % of start;
     also writes `glideTarget` to the same value so the Glide-path Target field
     tracks Easy Mode before a search runs

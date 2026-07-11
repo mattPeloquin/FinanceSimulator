@@ -242,7 +242,7 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
   setText('returnStdDevIrr', formatPercent(irs.stdDev) || '—');
 
   drawDistributionChart(result.histogram, result.returnSummary);
-  drawIrrScatter(result.returnScatter, { params, seed: result.seed });
+  drawIrrScatter(result.returnScatter, { params, seed: result.seed, meta: result.surfaceMeta });
 
   const ay = result.allYearsSummary;
   setText('allYearsMean', formatPercent(ay.mean));

@@ -108,7 +108,8 @@ test('Changing the starting balance live-rescales the derived values while attac
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('7,980');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
-  await expect(page.locator('#dynLowBal')).toHaveValue('2,000');
+  // No-cut threshold = 1 × start.
+  await expect(page.locator('#dynNoCutBal')).toHaveValue('6,000');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 

@@ -4,7 +4,6 @@ import {
   DEFAULT_PRESET_LEVEL,
   PRESET_SCENARIO_KEYS,
   PRESET_DERIVED_SCALAR_KEYS,
-  PRESET_PLAN_SCALAR_KEYS,
   presetForLevel,
   computeDerivedPresetValues,
   presetScenarioPatch,
@@ -131,9 +130,7 @@ describe('computeDerivedPresetValues', () => {
       ],
     });
     expect(out.withdrawalFloors).toEqual([{ amount: 51 }]);
-    expect(out.dynLowBal).toBe(1000);
-    expect(out.dynMedBal).toBe(3000);
-    expect(out.dynHighBal).toBe(5000);
+    expect(out.dynNoCutBal).toBe(3000);
     expect(out.goalSeekTargetEndingBalance).toBe(
       Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
     );
@@ -208,7 +205,7 @@ describe('computeDerivedPresetValues', () => {
       });
       expect(out.withdrawalFloors).toBeUndefined();
       expect(out.giftingTiers).toBeUndefined();
-      expect(out.dynLowBal).toBeUndefined();
+      expect(out.dynNoCutBal).toBeUndefined();
       expect(out.goalSeekTargetEndingBalance).toBeUndefined();
       expect(out.glideTarget).toBeUndefined();
       expect(out.baseWithdrawal).toBeUndefined();

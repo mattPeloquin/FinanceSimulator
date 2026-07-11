@@ -196,7 +196,16 @@
                         </span>
                     </summary>
                     <div class="px-3 pb-3 border-t border-theme-border">
-                        <p class="text-xs text-theme-faint mt-2 mb-3">Adjust withdrawal based on nominal market return (see chart). When balance is below the <strong>Low</strong> threshold, that adjustment always applies. When balance is above <strong>Expected</strong> or <strong>High</strong>, those adjustments only raise spending on bad market years — they never reduce it after a good year.</p>
+                        <p class="text-xs text-theme-faint mt-2 mb-3">Adjust withdrawal based on nominal market return (see chart). At the <strong>Expected</strong> return the plan is on track, so its adjustment is normally 0. When the balance is above the <strong>No cut</strong> threshold, downward adjustments are skipped — a bad market year never cuts spending while the portfolio is still ahead.</p>
+
+                        <div class="mb-3 flex items-center gap-2">
+                            <label for="dynNoCutBal" class="text-[10px] uppercase text-theme-faint font-semibold whitespace-nowrap">No cut if balance above</label>
+                            <div class="input-adorned has-suffix w-32">
+                                <input type="text" id="dynNoCutBal" class="currency-input w-full rounded input-theme p-1">
+                                <span class="input-adorn-suffix">000s</span>
+                            </div>
+                            <span class="text-[10px] text-theme-faint">blank = off</span>
+                        </div>
 
                         <div class="grid grid-cols-3 gap-3 text-sm">
                             <!-- Low -->
@@ -208,14 +217,6 @@
                                         <input type="number" id="dynLowRet" class="w-full rounded input-theme p-1 text-center">
                                         <span class="input-adorn-suffix">%</span>
                                     </div>
-                                </div>
-                                <div>
-                                    <label class="text-[10px] uppercase text-theme-faint font-semibold">Bal <span class="text-theme-danger">&lt;</span> Override</label>
-                                    <div class="input-adorned has-suffix">
-                                        <input type="text" id="dynLowBal" class="currency-input w-full rounded input-theme p-1">
-                                        <span class="input-adorn-suffix">000s</span>
-                                    </div>
-                                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">blank = off</p>
                                 </div>
                                 <div>
                                     <label class="text-[10px] uppercase text-theme-faint font-semibold">Adjustment</label>
@@ -236,14 +237,6 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="text-[10px] uppercase text-theme-faint font-semibold">Bal <span class="text-theme-success">&gt;</span> Override</label>
-                                    <div class="input-adorned has-suffix">
-                                        <input type="text" id="dynMedBal" class="currency-input w-full rounded input-theme p-1">
-                                        <span class="input-adorn-suffix">000s</span>
-                                    </div>
-                                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">blank = off</p>
-                                </div>
-                                <div>
                                     <label class="text-[10px] uppercase text-theme-faint font-semibold">Adjustment</label>
                                     <div class="input-adorned has-suffix">
                                         <input type="text" id="dynMedAdj" class="currency-input w-full rounded input-theme p-1">
@@ -260,14 +253,6 @@
                                         <input type="number" id="dynHighRet" class="w-full rounded input-theme p-1 text-center">
                                         <span class="input-adorn-suffix">%</span>
                                     </div>
-                                </div>
-                                <div>
-                                    <label class="text-[10px] uppercase text-theme-faint font-semibold">Bal <span class="text-theme-info">&gt;</span> Override</label>
-                                    <div class="input-adorned has-suffix">
-                                        <input type="text" id="dynHighBal" class="currency-input w-full rounded input-theme p-1">
-                                        <span class="input-adorn-suffix">000s</span>
-                                    </div>
-                                    <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">blank = off</p>
                                 </div>
                                 <div>
                                     <label class="text-[10px] uppercase text-theme-faint font-semibold">Adjustment</label>

@@ -14,6 +14,7 @@ import { formatPercent, formatK } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
 import { median, percentileValue } from '../../core/statistics.js';
 import { historicalIrrBand } from '../../core/historicalIrr.js';
+import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 
 // Outcome status colors, one triplet per mode, in outcome-code order
@@ -39,6 +40,7 @@ const state = {
   scatter: null,
   params: null,
   seed: null,
+  simRank: null, // withdrawal-rank of each simulation (inverse of surfaceMeta.rankW)
   band: null, // P5–P65 of the plan's IRR backtested over contiguous historical windows
   selected: null, // sim index of the clicked path
   pathChart: null,
@@ -48,6 +50,34 @@ const state = {
 
 function outcomeColors() {
   return OUTCOME_COLORS[isDarkMode() ? 'dark' : 'light'];
+}
+
+// Map each simulation index to its withdrawal rank (same ordering as percentile cards).
+function buildSimRank(rankW) {
+  const n = rankW.length;
+  const simRank = new Int32Array(n);
+  for (let r = 0; r < n; r++) simRank[rankW[r]] = r;
+  return simRank;
+}
+
+function simPercentileLabel(simIndex) {
+  if (!state.simRank) return '';
+  return percentileLabelForRank(state.simRank[simIndex], state.simRank.length);
+}
+
+function simTitleLabel(simIndex) {
+  const pctLabel = simPercentileLabel(simIndex);
+  return pctLabel ? `Simulation #${simIndex + 1} · ${pctLabel}` : `Simulation #${simIndex + 1}`;
+}
+
+function pathSummaryLine({ outcomeIndex, avgReturn, irr, totalWithdrawn, finalBalance, ranOutNote = '' }) {
+  return (
+    `${OUTCOME_LABELS[outcomeIndex]}${ranOutNote}` +
+    ` · Avg Return ${formatPercent(avgReturn)}` +
+    ` · IRR ${formatPercent(irr) || '—'}` +
+    ` · Total Withdrawn ${formatK(totalWithdrawn)}` +
+    ` · End Balance ${formatK(finalBalance)}`
+  );
 }
 
 // Round a raw interval up to a friendly 1/2/5 step.
@@ -384,12 +414,11 @@ function showTooltip(ev, i) {
     canvas.style.cursor = 'default';
     return;
   }
-  const { avgReturn, irr, outcome } = state.scatter;
+  const { avgReturn, irr, outcome, totalWithdrawn, finalBalance } = state.scatter;
   const theme = getChartTheme();
   tip.innerHTML =
-    `<div style="font-weight:600;color:${theme.tooltipTitle}">Simulation #${i + 1} · ${OUTCOME_LABELS[outcome[i]]}</div>` +
-    `<div>Avg Return: ${formatPercent(avgReturn[i])}</div>` +
-    `<div>IRR: ${formatPercent(irr[i])}</div>` +
+    `<div style="font-weight:600;color:${theme.tooltipTitle}">${simTitleLabel(i)}</div>` +
+    `<div>${pathSummaryLine({ outcomeIndex: outcome[i], avgReturn: avgReturn[i], irr: irr[i], totalWithdrawn: totalWithdrawn[i], finalBalance: finalBalance[i] })}</div>` +
     `<div style="color:${theme.floatMutedText}">Click to see this path</div>`;
   tip.style.background = theme.tooltipBg;
   tip.style.color = theme.tooltipBody;
@@ -405,6 +434,7 @@ function showTooltip(ev, i) {
 function renderPathChart(i) {
   const container = document.getElementById('irrScatterDrilldown');
   const titleEl = document.getElementById('irrScatterDrilldownTitle');
+  const metaEl = document.getElementById('irrScatterDrilldownMeta');
   const canvas = document.getElementById('irrScatterPathCanvas');
   const balanceCanvas = document.getElementById('irrScatterBalanceCanvas');
   if (!container || !canvas || state.params == null || state.seed == null) return;
@@ -412,11 +442,16 @@ function renderPathChart(i) {
   const re = regeneratePath(state.params, state.seed, i);
   const { outcome } = state.scatter;
   const ranOutNote = re.depletionYear !== Infinity ? ` · ran out year ${re.depletionYear}` : '';
-  if (titleEl) {
-    titleEl.textContent =
-      `Simulation #${i + 1} · ${OUTCOME_LABELS[outcome[i]]}${ranOutNote}` +
-      ` · Avg Return ${formatPercent(re.avgReturn)} · IRR ${formatPercent(re.irr) || '—'}` +
-      ` · Total Withdrawn ${formatK(re.totalWithdrawn)}`;
+  if (titleEl) titleEl.textContent = simTitleLabel(i);
+  if (metaEl) {
+    metaEl.textContent = pathSummaryLine({
+      outcomeIndex: outcome[i],
+      avgReturn: re.avgReturn,
+      irr: re.irr,
+      totalWithdrawn: re.totalWithdrawn,
+      finalBalance: re.finalBalance,
+      ranOutNote,
+    });
   }
   container.classList.remove('hidden');
 
@@ -529,12 +564,13 @@ function bindEvents(canvas) {
   state.eventsBound = true;
 }
 
-export function drawIrrScatter(scatter, { params, seed } = {}) {
+export function drawIrrScatter(scatter, { params, seed, meta } = {}) {
   const canvas = document.getElementById('irrScatterCanvas');
   if (!canvas || !scatter) return;
   state.scatter = scatter;
   state.params = params ?? null;
   state.seed = seed ?? null;
+  state.simRank = meta?.rankW ? buildSimRank(meta.rankW) : null;
   state.band = historicalIrrBand(params);
   state.selected = null;
   if (state.pathChart) {

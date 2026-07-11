@@ -58,9 +58,7 @@ export const PRESET_SCENARIO_KEYS = [
 // Scalar scenario keys whose values are computed from the derived formulas
 // (in addition to the tier lists, which are patched in place — see below).
 export const PRESET_DERIVED_SCALAR_KEYS = [
-  'dynLowBal',
-  'dynMedBal',
-  'dynHighBal',
+  'dynNoCutBal',
   'goalSeekTargetEndingBalance',
   // Kept in lockstep with Goal Seek's target: Goal Seek pins the glide target
   // to that value when the lever is included, and Easy Mode should show the
@@ -273,14 +271,11 @@ export function computeDerivedPresetValues(preset, {
     }
   }
 
-  // --- Balance triggers for dynamic adjustments, as multiples of start.
-  // 0.3333/1/1.6667 × a 3,000 start reproduces the classic 1,000/3,000/5,000
-  // anchors. Must stay strictly increasing (validated app-side).
-  if (hasStart && d.balanceTriggerMultiples) {
-    const m = d.balanceTriggerMultiples;
-    if (isPositiveFinite(m.low)) out.dynLowBal = Math.round(startThousands * m.low);
-    if (isPositiveFinite(m.med)) out.dynMedBal = Math.round(startThousands * m.med);
-    if (isPositiveFinite(m.high)) out.dynHighBal = Math.round(startThousands * m.high);
+  // --- "No cut while ahead" threshold, as a multiple of start. 1 × start
+  // means a bad market year never cuts spending while the portfolio is still
+  // above where it began.
+  if (hasStart && isPositiveFinite(d.noCutBalanceMultipleOfStart)) {
+    out.dynNoCutBal = Math.round(startThousands * d.noCutBalanceMultipleOfStart);
   }
 
   // --- Goal Seek target ending balance: % of start the plan should leave

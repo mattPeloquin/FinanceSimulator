@@ -248,6 +248,8 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     returnScatter: {
       avgReturn: result.avgReturn,
       irr: result.irr,
+      totalWithdrawn: result.totalWithdrawn,
+      finalBalance: result.finalBalance,
       outcome: scatterOutcome,
       requiredIrr: Number.isNaN(requiredIrr) ? null : requiredIrr,
     },

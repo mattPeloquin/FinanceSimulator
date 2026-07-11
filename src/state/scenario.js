@@ -12,7 +12,7 @@ import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -72,14 +72,12 @@ const FIELDS = [
 
   field('enableDynamicAdjustments', 'enableDynamicAdjustments', 'boolean'),
   field('dynLowRet', 'dynLowRet', 'float'),
-  field('dynLowBal', 'dynLowBal', 'optionalCurrency'),
   field('dynLowAdj', 'dynLowAdj', 'currency'),
   field('dynMedRet', 'dynMedRet', 'float'),
-  field('dynMedBal', 'dynMedBal', 'optionalCurrency'),
   field('dynMedAdj', 'dynMedAdj', 'currency'),
   field('dynHighRet', 'dynHighRet', 'float'),
-  field('dynHighBal', 'dynHighBal', 'optionalCurrency'),
   field('dynHighAdj', 'dynHighAdj', 'currency'),
+  field('dynNoCutBal', 'dynNoCutBal', 'optionalCurrency'),
 
   field('usLgGrowthMean', 'usLgGrowthMean', 'pct1'),
   field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'pct1'),
@@ -206,6 +204,22 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     // overwrites their values unless the user re-enables it.
     if (migrated.presetActive == null) migrated.presetActive = false;
     if (migrated.presetLevel == null) migrated.presetLevel = SCENARIO_DEFAULTS.presetLevel;
+  }
+
+  if (schemaVersion < 6) {
+    // The three per-band "Bal <> Override" thresholds collapsed into a single
+    // "no cut if balance above X" rule. The old Expected override carried
+    // exactly those semantics (raise a cut back to the ~0 Expected adjustment
+    // while the balance is above it), so it becomes the new threshold. The
+    // forced-cut (Low) and forced-boost (High) overrides have no equivalent
+    // and are dropped — the Balance adjustment floor/ceiling covers their
+    // intent.
+    if (migrated.dynNoCutBal == null && migrated.dynMedBal != null) {
+      migrated.dynNoCutBal = migrated.dynMedBal;
+    }
+    delete migrated.dynLowBal;
+    delete migrated.dynMedBal;
+    delete migrated.dynHighBal;
   }
 
   return migrated;
@@ -1038,19 +1052,18 @@ export function readDynConfigFromScenario(scenario) {
     enabled: scenario.enableDynamicAdjustments ?? true,
     low: {
       ret: num(scenario.dynLowRet),
-      bal: optionalBalanceThreshold(scenario.dynLowBal),
       adj: toDollars(scenario.dynLowAdj),
     },
     med: {
       ret: num(scenario.dynMedRet),
-      bal: optionalBalanceThreshold(scenario.dynMedBal),
       adj: toDollars(scenario.dynMedAdj),
     },
     high: {
       ret: num(scenario.dynHighRet),
-      bal: optionalBalanceThreshold(scenario.dynHighBal),
       adj: toDollars(scenario.dynHighAdj),
     },
+    // "No cut while ahead" threshold in dollars; null (blank/zero) = off.
+    noCutBal: optionalBalanceThreshold(scenario.dynNoCutBal),
   };
 }
 
@@ -1217,12 +1230,6 @@ export function validateScenario(scenario, { minYear, maxYear }) {
 
   // Minimum-withdrawal tiers: absolute $ for Base, percentage for Specific List.
   const baseTiers = normalizeWithdrawalFloors(scenario.withdrawalFloors);
-  if (scenario.withdrawalStrategy !== 'specific' && baseTiers.length > 0) {
-    const baseWithdrawal = parseCurrency(scenario.baseWithdrawal);
-    if (baseWithdrawal > 0 && baseTiers.some((tier) => tier.amount >= baseWithdrawal)) {
-      errors.push('Minimum withdrawal should be below your base withdrawal (the plan).');
-    }
-  }
   if (scenario.withdrawalStrategy !== 'specific' && Number.isFinite(scenario.numYears) && baseTiers.length > 1) {
     for (let i = 0; i < baseTiers.length - 1; i++) {
       const years = baseTiers[i].years;

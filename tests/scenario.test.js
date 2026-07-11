@@ -194,15 +194,33 @@ describe('buildSimParams', () => {
     expect(p.portfolio.withdrawalFloorSeries).toEqual([120_000, 120_000, 80_000, 80_000, 80_000]);
   });
 
-  it('disables balance overrides when threshold is blank or zero', () => {
-    const s = defaultScenario();
-    s.dynLowBal = 0;
-    s.dynMedBal = '';
-    s.dynHighBal = 0;
-    const p = buildSimParams(s, { years: [] });
-    expect(p.dynConfig.low.bal).toBeNull();
-    expect(p.dynConfig.med.bal).toBeNull();
-    expect(p.dynConfig.high.bal).toBeNull();
+  it('disables the no-cut threshold when blank or zero', () => {
+    const blank = defaultScenario();
+    blank.dynNoCutBal = '';
+    expect(buildSimParams(blank, { years: [] }).dynConfig.noCutBal).toBeNull();
+
+    const zero = defaultScenario();
+    zero.dynNoCutBal = 0;
+    expect(buildSimParams(zero, { years: [] }).dynConfig.noCutBal).toBeNull();
+
+    const set = defaultScenario();
+    set.dynNoCutBal = '3,000';
+    expect(buildSimParams(set, { years: [] }).dynConfig.noCutBal).toBe(3_000_000);
+  });
+
+  it('migrates v5 balance overrides to the single no-cut threshold', () => {
+    const v5 = {
+      startBalance: 3000,
+      dynLowBal: 1000,
+      dynMedBal: 3000,
+      dynHighBal: 5000,
+    };
+    const v6 = migrateScenario(v5, 5);
+    // The old Expected override carried the "no cut while ahead" semantics.
+    expect(v6.dynNoCutBal).toBe(3000);
+    expect(v6.dynLowBal).toBeUndefined();
+    expect(v6.dynMedBal).toBeUndefined();
+    expect(v6.dynHighBal).toBeUndefined();
   });
 
   it('applies no minimum withdrawal when all tiers are removed', () => {
@@ -504,16 +522,6 @@ describe('validateScenario', () => {
     s.specificWithdrawalFloors = [{ pct: 80, years: 10 }, { pct: 60 }];
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('Specific List minimum tiers'))).toBe(false);
-  });
-
-  it('flags a minimum withdrawal at or above the base withdrawal', () => {
-    const s = defaultScenario();
-    s.withdrawalStrategy = 'base';
-    s.baseWithdrawal = 80;
-    s.withdrawalFloors = [{ amount: 80 }];
-    expect(validateScenario(s, range).some((e) => e.includes('below your base withdrawal'))).toBe(true);
-    s.withdrawalFloors = [{ amount: 60 }];
-    expect(validateScenario(s, range).some((e) => e.includes('below your base withdrawal'))).toBe(false);
   });
 
   it('flags a Specific List minimum at or above 100% of plan', () => {

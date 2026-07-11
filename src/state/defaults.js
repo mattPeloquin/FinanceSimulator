@@ -146,7 +146,8 @@ export const BASE_DEFAULTS = {
   enableDynamicAdjustments: true,
 
   // Adjustment amounts ($000s) at each market anchor. The return triggers
-  // (dyn*Ret) and balance triggers (dyn*Bal) come from the risk preset.
+  // (dyn*Ret) and the no-cut balance threshold (dynNoCutBal) come from the
+  // risk preset.
   dynLowAdj: 0,
   dynMedAdj: 0,
   dynHighAdj: 0,

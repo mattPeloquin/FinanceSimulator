@@ -91,16 +91,16 @@ describe('filterAdjustmentCandidatesAtOrAbove', () => {
 });
 
 describe('enforceAscendingMarketAdjustments', () => {
-  it('raises Expected and High so low ≤ expected ≤ high', () => {
+  it('moves Low down and High up around the fixed Expected anchor', () => {
     const dynConfig = {
       low: { adj: 0 },
       med: { adj: -20000 },
-      high: { adj: -5000 },
+      high: { adj: -25000 },
     };
     enforceAscendingMarketAdjustments(dynConfig);
-    expect(dynConfig.low.adj).toBe(0);
-    expect(dynConfig.med.adj).toBe(0);
-    expect(dynConfig.high.adj).toBe(0);
+    expect(dynConfig.low.adj).toBe(-20000);
+    expect(dynConfig.med.adj).toBe(-20000);
+    expect(dynConfig.high.adj).toBe(-20000);
   });
 
   it('leaves an already-ascending ladder unchanged', () => {
@@ -227,9 +227,10 @@ function makeParams(overrides = {}) {
     },
     dynConfig: {
       enabled: true,
-      low: { ret: -15, bal: null, adj: -20_000 },
-      med: { ret: 5, bal: null, adj: 0 },
-      high: { ret: 20, bal: null, adj: 20_000 },
+      low: { ret: -15, adj: -20_000 },
+      med: { ret: 5, adj: 0 },
+      high: { ret: 20, adj: 20_000 },
+      noCutBal: null,
     },
     samples: null,
     ...overrides,
@@ -496,7 +497,7 @@ describe('runGoalSeek', () => {
     expect(summary.feasible).toBe(false);
     expect(summary.baseWithdrawal).toBe(minWithdrawal);
     expect(summary.marketAdjustments).toEqual({ low: 0, med: 0, high: 0 });
-    expect(summary.marketBalanceOverrides).toBeUndefined();
+    expect(summary.marketNoCutBalance).toBeUndefined();
     expect(summary.balanceAdjustment.floorBalance).toBe(100_000); // 0.1 × start
     expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000); // 2.0 × start
     expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
@@ -548,9 +549,7 @@ describe('runGoalSeek', () => {
     for (const value of Object.values(summary.marketAdjustments)) {
       expect(value % 1000 === 0).toBe(true);
     }
-    for (const value of Object.values(summary.marketBalanceOverrides)) {
-      expect(value === null || value % 1000 === 0).toBe(true);
-    }
+    expect(summary.marketNoCutBalance === null || summary.marketNoCutBalance % 1000 === 0).toBe(true);
     expect(summary.balanceAdjustment.floorBalance % 1000 === 0).toBe(true);
     expect(summary.balanceAdjustment.floorBalance).toBeGreaterThan(0);
     expect(summary.balanceAdjustment.ceilingBalance % 1000 === 0).toBe(true);
@@ -574,7 +573,7 @@ describe('runGoalSeek', () => {
     expect(summary.spendingOverTimeBonus).toBeGreaterThanOrEqual(0);
   });
 
-  it('tunes market adjustments and their balance override thresholds together', async () => {
+  it('tunes market adjustments and the no-cut balance threshold together', async () => {
     const params = makeParams();
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
@@ -590,13 +589,34 @@ describe('runGoalSeek', () => {
     expect(summary.marketAdjustments).toHaveProperty('low');
     expect(summary.marketAdjustments).toHaveProperty('med');
     expect(summary.marketAdjustments).toHaveProperty('high');
-    expect(summary.marketBalanceOverrides).toHaveProperty('low');
-    expect(summary.marketBalanceOverrides).toHaveProperty('med');
-    expect(summary.marketBalanceOverrides).toHaveProperty('high');
+    expect(summary).toHaveProperty('marketNoCutBalance');
   });
 
-  // Goal Seek may mathematically prefer an Expected cut deeper than Low, but
-  // that reads backwards in the form — keep the dollar ladder ascending.
+  // The Expected adjustment is the on-plan anchor: Goal Seek must leave it at
+  // whatever the user typed and tune Low/High around it.
+  it('never moves the Expected adjustment and keeps Low/High on its two sides', async () => {
+    const params = makeParams();
+    params.dynConfig.med.adj = 10_000;
+    const { params: finalParams, summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate: 0.8,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: false,
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
+    });
+    expect(summary.feasible).toBe(true);
+    expect(summary.marketAdjustments.med).toBe(10_000);
+    expect(finalParams.dynConfig.med.adj).toBe(10_000);
+    expect(summary.marketAdjustments.low).toBeLessThanOrEqual(10_000);
+    expect(summary.marketAdjustments.high).toBeGreaterThanOrEqual(10_000);
+  });
+
+  // Goal Seek may mathematically prefer a High adjustment below Expected (or
+  // a Low above it), but that reads backwards in the form — keep the dollar
+  // ladder ascending around the fixed Expected anchor.
   it('keeps market dollar adjustments ascending low ≤ expected ≤ high', async () => {
     const params = makeParams();
     const { summary } = await seek(params, {
@@ -607,9 +627,8 @@ describe('runGoalSeek', () => {
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
       maxRounds: 2,
-      // Overlapping grids that can independently pick Expected < Low.
-      marketDownAdjGrid: { minPct: -40, maxPct: 0, stepPct: 20 },
-      marketMedAdjGrid: { minPct: -40, maxPct: 40, stepPct: 20 },
+      // Grids overlapping the Expected anchor from both sides.
+      marketDownAdjGrid: { minPct: -40, maxPct: 40, stepPct: 20 },
       marketUpAdjGrid: { minPct: -20, maxPct: 60, stepPct: 20 },
       floorMultiples: [0, 1],
       ceilingMultiples: [0, 1],
@@ -938,12 +957,15 @@ describe('runGoalSeek', () => {
     };
 
     const paramsA = makeParams();
+    // Only fields the search neutralizes may differ: the Expected (med)
+    // adjustment is the user's fixed anchor, so it stays identical in both.
     const paramsB = makeParams({
       dynConfig: {
         enabled: true,
-        low: { ret: -15, bal: 4_000_000, adj: -90_000 },
-        med: { ret: 5, bal: 4_000_000, adj: 50_000 },
-        high: { ret: 20, bal: 4_000_000, adj: 90_000 },
+        low: { ret: -15, adj: -90_000 },
+        med: { ret: 5, adj: 0 },
+        high: { ret: 20, adj: 90_000 },
+        noCutBal: 4_000_000,
       },
       portfolio: { ...makeParams().portfolio, floorBalance: 3_000_000, floorPenalty: 0.9, ceilingBalance: 3_500_000, ceilingBonus: 0.9 },
     });

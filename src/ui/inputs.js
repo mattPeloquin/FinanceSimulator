@@ -34,7 +34,7 @@ export function setupAccordionResize() {
   });
 }
 
-const OPTIONAL_BALANCE_OVERRIDE_IDS = new Set(['dynLowBal', 'dynMedBal', 'dynHighBal']);
+const OPTIONAL_BALANCE_OVERRIDE_IDS = new Set(['dynNoCutBal']);
 
 function formatCurrencyInputValue(input) {
   // Blank disables the glide lever while a typed 0 means "land on zero", so a
@@ -168,12 +168,13 @@ export function toggleWithdrawalStrategy(strategy) {
 // Maps each "include in search" checkbox id to the input field(s) it takes
 // over while Goal Seek mode is on. Each checkbox covers every spending lever
 // that's actually inside its own <details> section: Market adjustment
-// includes both the market-triggered $ adjustments AND their balance
-// override thresholds; Balance adjustment includes the floor/ceiling balance
-// thresholds AND their cut/boost rates.
+// includes the Low/High $ adjustments AND the no-cut balance threshold —
+// but NOT the Expected adjustment, which stays user-editable and fixed
+// (on plan at the expected return means adjustment 0); Balance adjustment
+// includes the floor/ceiling balance thresholds AND their cut/boost rates.
 const GOAL_SEEK_LEVER_FIELDS = {
   goalSeekIncludeBaseWithdrawal: ['baseWithdrawal'],
-  goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynMedAdj', 'dynHighAdj', 'dynLowBal', 'dynMedBal', 'dynHighBal'],
+  goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynHighAdj', 'dynNoCutBal'],
   goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
   // The search pins the glide target to Goal Seek's Target Ending Balance and
   // tunes the spend rate; the assumed return stays user-editable.

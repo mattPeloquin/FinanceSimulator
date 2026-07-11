@@ -243,7 +243,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'goalSeekIncludeGlidePath',
     'planRiskTolerancePct', 'planRiskTolerancePctSlider',
     'dynLowRet', 'dynMedRet', 'dynHighRet',
-    'dynLowBal', 'dynMedBal', 'dynHighBal',
+    'dynNoCutBal',
     'glideRate',
     'glideTarget',
     'maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawalsSpecific',

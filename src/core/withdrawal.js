@@ -23,19 +23,17 @@ export function getDynamicAdjustment(nominalReturnPercent, dynConfig) {
 }
 
 // Resolve the final additional withdrawal adjustment for a given year, applying
-// (1) the market-return curve and (2) balance-based floors.
+// (1) the market-return curve and (2) the balance-based "no cut" rule.
 export function resolveAdjustment(balance, nominalReturnPercent, dynConfig) {
   let adjAmount = getDynamicAdjustment(nominalReturnPercent, dynConfig);
 
-  // Low balance always replaces the market amount. Expected/High balances only
-  // raise the adjustment on bad market years — they never cap a good year.
-  // Blank/zero override thresholds are disabled (bal is null).
-  if (dynConfig.low.bal != null && balance < dynConfig.low.bal) {
-    adjAmount = dynConfig.low.adj;
-  } else if (dynConfig.high.bal != null && balance > dynConfig.high.bal) {
-    adjAmount = Math.max(adjAmount, dynConfig.high.adj);
-  } else if (dynConfig.med.bal != null && balance > dynConfig.med.bal) {
-    adjAmount = Math.max(adjAmount, dynConfig.med.adj);
+  // "No cut while ahead": when the balance is above the no-cut threshold,
+  // suppress any downward market adjustment — a bad-return year doesn't cut
+  // spending if the portfolio is still comfortably above where it started.
+  // Blank/zero threshold (null) disables the rule. Upward adjustments are
+  // never touched; boosting on high balances is the ceiling bonus's job.
+  if (dynConfig.noCutBal != null && balance > dynConfig.noCutBal && adjAmount < 0) {
+    adjAmount = 0;
   }
 
   return adjAmount;

@@ -28,7 +28,7 @@
     "minWithdrawalLifetimePctOfStart": 50,
     "gifting": { "amountPctOfStart": 2, "balanceMultipleOfStart": 1.15 },
     "spending": { "changePct": -3, "firstTierYearsFractionOfHorizon": 0.5 },
-    "balanceTriggerMultiples": { "low": 0.3333, "med": 1, "high": 1.6667 },
+    "noCutBalanceMultipleOfStart": 1,
     "baseWithdrawalPctOfStart": 6.0,
     "floorBalanceMultipleOfStart": 0.5,
     "ceilingBalanceMultipleOfStart": 1,
