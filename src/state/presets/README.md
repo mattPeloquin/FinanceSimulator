@@ -10,7 +10,7 @@ Each file has two sections:
 - `scenario` — applied verbatim when the slider moves. Only keys listed in
   `PRESET_SCENARIO_KEYS` (`index.js`) are allowed; a unit test enforces this.
   Allocations must sum to 100 and market triggers must satisfy low < med < high.
-  Goal Seek's on/off toggle lives in `BASE_DEFAULTS`, not here — toggling it
+  Find Best Plan's on/off toggle lives in `BASE_DEFAULTS`, not here — toggling it
   does not detach Easy Mode.
 - `derived` — formula parameters for values computed from the user's starting
   balance and horizon (see `computeDerivedPresetValues` in `index.js`):
@@ -22,7 +22,7 @@ Each file has two sections:
   - `spending.firstTierYearsFractionOfHorizon` — first tier years = fraction × horizon
   - `noCutBalanceMultipleOfStart` — "no cut while ahead" threshold = multiple × start;
     market-driven cuts are skipped while the balance is above it
-  - `targetEndingBalancePctOfStart` — Goal Seek target ending balance = % of start;
+  - `targetEndingBalancePctOfStart` — Find Best Plan target ending balance = % of start;
     also writes `glideTarget` to the same value so the Glide-path Target field
     tracks Easy Mode before a search runs
   - `glideRate` (in `scenario`) — glide-path spend timing (-4 = later … 0 = sooner);
@@ -32,13 +32,18 @@ Each file has two sections:
     to the plan for that many years. Steps up from Conservative (2 / 2) to
     Aggressive (4 / 2) — higher risk levels tolerate longer belt-tightening;
     either 0 turns the feature off
-  - **Spending plan (Easy Mode + Goal Seek off):** `baseWithdrawalPctOfStart`
+  - **Spending plan (Easy Mode + Find Best Plan off):** `baseWithdrawalPctOfStart`
     (4.0–6.0% in 0.5 steps), `floorBalanceMultipleOfStart` /
     `ceilingBalanceMultipleOfStart`, `floorPenalty`, `ceilingBonus`,
     `dynAdjPctOfBase.low/med/high` (% of base withdrawal), `spendingExtraPctOfBase`
     (tier-0 go-go extra as % of base), `glideFraction`
+  - **Specific List minimum (Easy Mode, any Find Best Plan state):** tier-0
+    `specificWithdrawalFloors` pct = `(minWithdrawalLifetimePctOfStart / numYears)
+    / baseWithdrawalPctOfStart × 100`, clamped 0–99. The typed year-by-year list
+    is never filled or scaled by the slider.
 
-When **Use easy mode** is on and **Goal Seek** is off, the slider fills the full
-spending plan from those derived keys. With Goal Seek on, the slider configures
-the search (success target, levers, allocations, triggers) and Goal Seek finds
-the plan on **Find Best Plan**.
+When **Use easy mode** is on and **Find Best Plan** is off, the slider fills the full
+spending plan from those derived keys (Base strategy) or the shared guardrail/
+adjustment fields only (Specific List). With Find Best Plan on, the slider configures
+the search (success target, levers, allocations, triggers) and the search finds
+the plan when you click **Find Best Plan** — Easy Mode never toggles that mode on or off.

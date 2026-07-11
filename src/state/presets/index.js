@@ -88,6 +88,7 @@ export const PRESET_CONTROLLED_KEYS = [
   ...PRESET_DERIVED_SCALAR_KEYS,
   ...PRESET_PLAN_SCALAR_KEYS,
   'withdrawalFloors',
+  'specificWithdrawalFloors',
   'giftingTiers',
   'spendingOverTimeTiers',
 ];
@@ -125,12 +126,17 @@ function isPositiveFinite(n) {
  *                    balance-derived writes are skipped (current values kept),
  *   numYears       — current horizon; if not > 0, the minimum-withdrawal and
  *                    spending-timeline writes are skipped,
- *   withdrawalFloors / giftingTiers / spendingOverTimeTiers — the CURRENT tier
- *                    lists to patch (arrays; may be empty/missing).
+ *   withdrawalFloors / specificWithdrawalFloors / giftingTiers /
+ *                    spendingOverTimeTiers — the CURRENT tier lists to patch
+ *                    (arrays; may be empty/missing).
+ *   withdrawalStrategy — 'base' (default) or 'specific'. Under Specific List,
+ *                        minimum floors are % of each year's plan amount, not
+ *                        absolute $; spending-over-time tiers are not patched.
  *   includePlanFields — when true and start > 0, also compute the full spending
  *                       plan (base withdrawal, guardrails, adjustments, glide
  *                       fraction, tier-0 extra). Used when Easy Mode is on and
- *                       Goal Seek is off.
+ *                       Goal Seek is off. Under Specific List, shared plan
+ *                       fields only (no base withdrawal or spending extras).
  * }
  * @returns partial scenario: patched tier lists + derived scalar fields.
  */
@@ -138,39 +144,61 @@ export function computeDerivedPresetValues(preset, {
   startThousands,
   numYears,
   withdrawalFloors = [],
+  specificWithdrawalFloors = [],
   giftingTiers = [],
   spendingOverTimeTiers = [],
+  withdrawalStrategy = 'base',
   includePlanFields = false,
 } = {}) {
   const d = preset.derived || {};
   const out = {};
   const hasStart = isPositiveFinite(startThousands);
   const hasYears = isPositiveFinite(numYears);
+  const isSpecific = withdrawalStrategy === 'specific';
 
   // --- Minimum withdrawal: first tier = a lifetime floor spread over the
   // horizon. lifetimePctOfStart is the total minimum spending (as % of start)
   // guaranteed across all years; the annual amount is that total ÷ years.
-  // e.g. Balanced 40% of a 3,000 start over 35 years → 34/yr.
+  // e.g. Balanced 70% of a 3,000 start over 35 years → 60/yr.
   // Conservative uses a higher lifetime % (steadier cash flow); Aggressive a
   // lower one (more willing to cut spending in bad markets). The absolute
   // levels stay modest so Conservative's high success + high ending-balance
   // targets remain Goal-Seek feasible.
+  //
+  // Under Specific List the same lifetime guarantee is expressed as a % of
+  // each year's typed plan amount: (lifetimePct / years) / baseWithdrawalPct
+  // × 100, clamped below 100. e.g. Balanced @ 25 years → ~56%.
   if (
     hasStart
     && hasYears
     && isPositiveFinite(d.minWithdrawalLifetimePctOfStart)
   ) {
-    const amount = Math.max(
-      0,
-      Math.round(startThousands * (d.minWithdrawalLifetimePctOfStart / 100) / numYears),
-    );
-    const floors = withdrawalFloors.map((t) => ({ ...t }));
-    if (floors.length === 0) {
-      floors.push({ amount });
+    if (isSpecific) {
+      const basePct = d.baseWithdrawalPctOfStart;
+      if (isPositiveFinite(basePct)) {
+        const rawPct = (d.minWithdrawalLifetimePctOfStart / numYears / basePct) * 100;
+        const pct = Math.min(99, Math.max(0, Math.round(rawPct)));
+        const floors = specificWithdrawalFloors.map((t) => ({ ...t }));
+        if (floors.length === 0) {
+          floors.push({ pct });
+        } else {
+          floors[0] = { ...floors[0], pct };
+        }
+        out.specificWithdrawalFloors = floors;
+      }
     } else {
-      floors[0] = { ...floors[0], amount };
+      const amount = Math.max(
+        0,
+        Math.round(startThousands * (d.minWithdrawalLifetimePctOfStart / 100) / numYears),
+      );
+      const floors = withdrawalFloors.map((t) => ({ ...t }));
+      if (floors.length === 0) {
+        floors.push({ amount });
+      } else {
+        floors[0] = { ...floors[0], amount };
+      }
+      out.withdrawalFloors = floors;
     }
-    out.withdrawalFloors = floors;
   }
 
   // --- Gifting: first tier gives Y% of start each year, but only while the
@@ -191,7 +219,8 @@ export function computeDerivedPresetValues(preset, {
   // first two tiers; the first tier spans a fraction of the horizon (the
   // "active years"); the second tier's extra withdrawal is pinned to 0.
   // Tier-0 extra is set below when includePlanFields; otherwise Goal Seek owns it.
-  if (d.spending) {
+  // Skipped under Specific List — the engine ignores spending-over-time tiers.
+  if (d.spending && !isSpecific) {
     const tiers = spendingOverTimeTiers.map((t) => ({ ...t }));
     const changePct = d.spending.changePct;
     if (tiers.length >= 2) {
@@ -217,7 +246,9 @@ export function computeDerivedPresetValues(preset, {
 
   // --- Full spending plan (Easy Mode + Goal Seek off): base withdrawal,
   // balance guardrails, market adjustment amounts, glide recycle rate, and
-  // tier-0 go-go extra — all from per-preset derived parameters.
+  // tier-0 go-go extra — all from per-preset derived parameters. Under
+  // Specific List only the shared guardrail/adjustment fields apply; market
+  // adj $ amounts use a virtual base from baseWithdrawalPctOfStart.
   if (includePlanFields && hasStart) {
     let baseWithdrawal = 0;
     if (isPositiveFinite(d.baseWithdrawalPctOfStart)) {
@@ -225,7 +256,9 @@ export function computeDerivedPresetValues(preset, {
         0,
         Math.round(startThousands * (d.baseWithdrawalPctOfStart / 100)),
       );
-      out.baseWithdrawal = baseWithdrawal;
+      if (!isSpecific) {
+        out.baseWithdrawal = baseWithdrawal;
+      }
     }
 
     if (isPositiveFinite(d.floorBalanceMultipleOfStart)) {
@@ -252,7 +285,8 @@ export function computeDerivedPresetValues(preset, {
     }
 
     if (
-      baseWithdrawal > 0
+      !isSpecific
+      && baseWithdrawal > 0
       && isPositiveFinite(d.spendingExtraPctOfBase)
       && out.spendingOverTimeTiers
       && out.spendingOverTimeTiers.length > 0
@@ -261,7 +295,8 @@ export function computeDerivedPresetValues(preset, {
       tiers[0].extra = Math.round(baseWithdrawal * (d.spendingExtraPctOfBase / 100));
       out.spendingOverTimeTiers = tiers;
     } else if (
-      baseWithdrawal > 0
+      !isSpecific
+      && baseWithdrawal > 0
       && isPositiveFinite(d.spendingExtraPctOfBase)
       && spendingOverTimeTiers.length > 0
     ) {

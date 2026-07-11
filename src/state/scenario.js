@@ -1153,7 +1153,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       scenario.goalSeekNumSimulations < 1 ||
       scenario.goalSeekNumSimulations > MAX_NUM_SIMULATIONS)
   ) {
-    errors.push(`Goal Seek's number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
+    errors.push(`Find Best Plan's number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
   }
 
   // The dynamic adjustment curve interpolates between the three market-return
@@ -1309,15 +1309,15 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   if (scenario.goalSeekMode) {
     const target = parseCurrency(scenario.goalSeekTargetEndingBalance);
     if (!Number.isFinite(target) || target < 0) {
-      errors.push('Goal Seek target ending balance must be zero or a positive amount.');
+      errors.push('Find Best Plan target ending balance must be zero or a positive amount.');
     }
     const desired = scenario.goalSeekDesiredSuccessPct;
     if (!Number.isFinite(desired) || desired < 65 || desired > 99) {
-      errors.push('Goal Seek desired success % must be between 65 and 99.');
+      errors.push('Find Best Plan desired success % must be between 65 and 99.');
     }
     const riskTolerance = scenario.goalSeekRiskTolerancePct;
     if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 35) {
-      errors.push('Goal Seek risk tolerance must be between 0 and 35.');
+      errors.push('Find Best Plan risk tolerance must be between 0 and 35.');
     }
     if (scenario.withdrawalStrategy === 'specific') {
       // With a Specific List, each year's amount is fixed as typed — Goal Seek
@@ -1327,7 +1327,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
         || scenario.goalSeekIncludeBalanceOverrides
         || scenario.goalSeekIncludeGlidePath;
       if (!hasSpecificLever) {
-        errors.push('With a Specific List, Goal Seek keeps each year\'s amount fixed and can only tune the Market adjustment, Balance adjustment, or Glide-path levers — include at least one of those in the search.');
+        errors.push('With a Specific List, Find Best Plan keeps each year\'s amount fixed and can only tune the Market adjustment, Balance adjustment, or Glide-path levers — include at least one of those in the search.');
       }
     } else if (!scenario.goalSeekIncludeBaseWithdrawal) {
       const base = parseCurrency(scenario.baseWithdrawal);

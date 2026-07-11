@@ -23,9 +23,11 @@ import {
   parseCurrency,
   writeScenarioFieldsToDom,
   readWithdrawalFloorsFromDom,
+  readSpecificWithdrawalFloorsFromDom,
   readGiftingTiersFromDom,
   readSpendingOverTimeTiersFromDom,
   writeWithdrawalFloorsToDom,
+  writeSpecificWithdrawalFloorsToDom,
   writeGiftingTiersToDom,
 } from '../state/scenario.js';
 import {
@@ -63,6 +65,11 @@ function currentLevel() {
   return Number.isFinite(n) ? n : DEFAULT_PRESET_LEVEL;
 }
 
+function currentWithdrawalStrategy() {
+  const checked = document.querySelector('input[name="withdrawal-strategy"]:checked');
+  return checked?.value || 'base';
+}
+
 // The context computeDerivedPresetValues needs: the user's own inputs plus
 // the current tier lists (patched in place — user-added tiers survive).
 function derivedContext() {
@@ -70,8 +77,10 @@ function derivedContext() {
     startThousands: parseCurrency(el('startBalance')?.value),
     numYears: parseInt(el('numYears')?.value, 10),
     withdrawalFloors: readWithdrawalFloorsFromDom(),
+    specificWithdrawalFloors: readSpecificWithdrawalFloorsFromDom(),
     giftingTiers: readGiftingTiersFromDom(),
     spendingOverTimeTiers: readSpendingOverTimeTiersFromDom(),
+    withdrawalStrategy: currentWithdrawalStrategy(),
     includePlanFields: isAttached() && !goalSeekEnabled(),
   };
 }
@@ -122,11 +131,15 @@ function seedManagedPresetTiers(level) {
   const derived = computeDerivedPresetValues(preset, {
     ...derivedContext(),
     withdrawalFloors: readWithdrawalFloorsFromDom(),
+    specificWithdrawalFloors: readSpecificWithdrawalFloorsFromDom(),
     giftingTiers: readGiftingTiersFromDom(),
   });
 
   if (derived.withdrawalFloors?.length) {
     writeWithdrawalFloorsToDom(derived.withdrawalFloors);
+  }
+  if (derived.specificWithdrawalFloors?.length) {
+    writeSpecificWithdrawalFloorsToDom(derived.specificWithdrawalFloors);
   }
   if (derived.giftingTiers?.length) {
     writeGiftingTiersToDom(derived.giftingTiers);
@@ -208,6 +221,9 @@ function isSliderManagedTierEdit(target) {
   const floorRow = target.closest('[data-withdrawal-floor-row]');
   if (floorRow) return floorRow.dataset.withdrawalFloorRow === '0';
 
+  const specificFloorRow = target.closest('[data-specific-withdrawal-floor-row]');
+  if (specificFloorRow) return specificFloorRow.dataset.specificWithdrawalFloorRow === '0';
+
   const giftRow = target.closest('[data-gifting-tier-row]');
   if (giftRow) return giftRow.dataset.giftingTierRow === '0';
 
@@ -253,6 +269,13 @@ export function setupRiskPresetControl({ onChange } = {}) {
   // Goal Seek off while attached → fill the preset spending plan (no detach).
   el('goalSeekMode')?.addEventListener('change', () => {
     applyPlanFieldsIfAttached();
+  });
+
+  // Strategy switch while attached → re-apply floors/plan fields for the new path.
+  document.querySelectorAll('input[name="withdrawal-strategy"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (isAttached()) applyPresetLevel(currentLevel());
+    });
   });
 
   // ---- Detach detection (user edits to preset-controlled fields) ----------
@@ -314,7 +337,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     input.addEventListener('input', maybeDetach);
   });
 
-  for (const listId of ['withdrawalFloorsList', 'giftingTiersList', 'spendingOverTimeTiersList']) {
+  for (const listId of ['withdrawalFloorsList', 'specificWithdrawalFloorsList', 'giftingTiersList', 'spendingOverTimeTiersList']) {
     const list = el(listId);
     if (!list) continue;
     const handler = (e) => {

@@ -130,7 +130,7 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 0, extra: 99 },
       ],
     });
-    expect(out.withdrawalFloors).toEqual([{ amount: 51 }]);
+    expect(out.withdrawalFloors).toEqual([{ amount: 60 }]);
   });
 
   it('reproduces the classic defaults at a 3,000 start and 35-year horizon (Balanced)', () => {
@@ -142,7 +142,7 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 0, extra: 99 },
       ],
     });
-    expect(out.withdrawalFloors).toEqual([{ amount: 51 }]);
+    expect(out.withdrawalFloors).toEqual([{ amount: 60 }]);
     expect(out.dynNoCutBal).toBe(3000);
     expect(out.goalSeekTargetEndingBalance).toBe(
       Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
@@ -243,7 +243,7 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 1, extra: 55 },
       ],
     });
-    expect(out.withdrawalFloors).toEqual([{ amount: 51, years: 5 }, { amount: 44 }]);
+    expect(out.withdrawalFloors).toEqual([{ amount: 60, years: 5 }, { amount: 44 }]);
     expect(out.giftingTiers).toEqual([
       { amount: 30, balance: 3990, years: 3 },
       { amount: 5, balance: 500 },
@@ -275,6 +275,60 @@ describe('computeDerivedPresetValues', () => {
       spendingOverTimeTiers: [{ changePct: 1, extra: 20 }],
     });
     expect(out.spendingOverTimeTiers).toEqual([{ changePct: -2, extra: 20 }]);
+  });
+
+  it('writes percentage minimum floors for Specific List, not dollar floors', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 25,
+      withdrawalStrategy: 'specific',
+      specificWithdrawalFloors: [],
+    });
+    expect(out.withdrawalFloors).toBeUndefined();
+    expect(out.specificWithdrawalFloors).toEqual([{ pct: 56 }]);
+  });
+
+  it('patches only tier 0 of Specific List minimum floors', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 25,
+      withdrawalStrategy: 'specific',
+      specificWithdrawalFloors: [{ pct: 90, years: 5 }, { pct: 70 }],
+    });
+    expect(out.specificWithdrawalFloors).toEqual([{ pct: 56, years: 5 }, { pct: 70 }]);
+  });
+
+  it('fills shared plan fields for Specific List without base withdrawal or spending extras', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 2000,
+      numYears: 25,
+      withdrawalStrategy: 'specific',
+      spendingOverTimeTiers: [
+        { changePct: 0, extra: 99, years: 1 },
+        { changePct: 0, extra: 0 },
+      ],
+      includePlanFields: true,
+    });
+    expect(out.baseWithdrawal).toBeUndefined();
+    expect(out.floorBalance).toBe(1600);
+    expect(out.ceilingBalance).toBe(2400);
+    expect(out.dynLowAdj).toBe(-33);
+    expect(out.dynHighAdj).toBe(33);
+    expect(out.glideFraction).toBe(50);
+    expect(out.spendingOverTimeTiers).toBeUndefined();
+  });
+
+  it('does not patch spending-over-time tiers under Specific List', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 35,
+      withdrawalStrategy: 'specific',
+      spendingOverTimeTiers: [
+        { changePct: 1, extra: 50, years: 4 },
+        { changePct: 1, extra: 0 },
+      ],
+    });
+    expect(out.spendingOverTimeTiers).toBeUndefined();
   });
 });
 

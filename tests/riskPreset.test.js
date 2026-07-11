@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setupWithdrawalFloorList } from '../src/ui/inputs.js';
+import { setupWithdrawalFloorList, setupSpecificWithdrawalFloorList } from '../src/ui/inputs.js';
 import { setupRiskPresetControl, applyPresetLevel } from '../src/ui/riskPreset.js';
 import { PRESETS, DEFAULT_PRESET_LEVEL } from '../src/state/presets/index.js';
-import { readWithdrawalFloorsFromDom } from '../src/state/scenario.js';
+import {
+  readWithdrawalFloorsFromDom,
+  readSpecificWithdrawalFloorsFromDom,
+} from '../src/state/scenario.js';
 
 function mountPresetDom({ attached = false } = {}) {
   document.body.innerHTML = `
@@ -46,6 +49,11 @@ function mountPresetDom({ attached = false } = {}) {
     <input id="dynHighAdj" value="0">
     <input id="glideFraction" value="50">
     <input name="distribution-method" type="radio" value="resampling" checked>
+    <input name="withdrawal-strategy" type="radio" value="base" checked>
+    <input name="withdrawal-strategy" type="radio" value="specific" id="withdrawal-strategy-specific">
+    <textarea id="specificWithdrawals"></textarea>
+    <div id="specificWithdrawalFloorsList"></div>
+    <button type="button" id="addSpecificWithdrawalFloorTier">Add tier</button>
     <div id="lognormal-profiles"></div>
     <span id="totalAllocation">100</span>
     <div id="withdrawalFloorsList"></div>
@@ -60,10 +68,19 @@ function expectedMinAmount(level = DEFAULT_PRESET_LEVEL) {
   return Math.round(3000 * (life / 100) / 25);
 }
 
+function expectedSpecificMinPct(level = DEFAULT_PRESET_LEVEL) {
+  const d = PRESETS[level].derived;
+  return Math.min(
+    99,
+    Math.max(0, Math.round((d.minWithdrawalLifetimePctOfStart / 25 / d.baseWithdrawalPctOfStart) * 100)),
+  );
+}
+
 describe('applyPresetLevel minimum tier', () => {
   beforeEach(() => {
     mountPresetDom({ attached: true });
     setupWithdrawalFloorList({ onChange: () => {} });
+    setupSpecificWithdrawalFloorList({ onChange: () => {} });
     setupRiskPresetControl({ onChange: () => {} });
   });
 
@@ -96,5 +113,41 @@ describe('applyPresetLevel minimum tier', () => {
 
     applyPresetLevel(0);
     expect(readWithdrawalFloorsFromDom()).toEqual([{ amount: expectedMinAmount(0) }]);
+  });
+});
+
+describe('applyPresetLevel Specific List minimum tier', () => {
+  beforeEach(() => {
+    mountPresetDom({ attached: true });
+    setupWithdrawalFloorList({ onChange: () => {} });
+    setupSpecificWithdrawalFloorList({ onChange: () => {} });
+    setupRiskPresetControl({ onChange: () => {} });
+    document.getElementById('withdrawal-strategy-specific').checked = true;
+  });
+
+  it('creates a percentage minimum tier when the slider moves with an empty list', () => {
+    applyPresetLevel(DEFAULT_PRESET_LEVEL);
+
+    const tiers = readSpecificWithdrawalFloorsFromDom();
+    expect(tiers).toHaveLength(1);
+    expect(tiers[0].pct).toBe(expectedSpecificMinPct());
+    expect(readWithdrawalFloorsFromDom()).toHaveLength(0);
+  });
+
+  it('does not detach when the user edits the typed withdrawal list', () => {
+    applyPresetLevel(DEFAULT_PRESET_LEVEL);
+    document.getElementById('specificWithdrawals').value = '100\n110';
+    document.getElementById('specificWithdrawals').dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(document.getElementById('presetActive').checked).toBe(true);
+  });
+
+  it('detaches when tier-0 of the Specific List minimum is edited', () => {
+    applyPresetLevel(DEFAULT_PRESET_LEVEL);
+    const pctInput = document.querySelector('[data-specific-floor-pct]');
+    pctInput.value = '55';
+    pctInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(document.getElementById('presetActive').checked).toBe(false);
   });
 });

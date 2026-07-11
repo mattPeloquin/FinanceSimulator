@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-// Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a
-// plain simulation run, so switch it off first (clicking the toggle also
-// detaches the risk preset, which is fine here).
+  // Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a
+  // plain simulation run, so switch it off first (clicking the toggle also
+  // detaches the risk preset, which is fine here).
 async function disableGoalSeek(page) {
   await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
   await page.click('label:has(#goalSeekMode)');
@@ -16,11 +16,14 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   // Expect the initial state
   await expect(page.locator('h1')).toContainText('Simulator');
+  await expect(page.getByRole('heading', { name: 'Sequence of Returns' })).toBeVisible();
+  await expect(page.getByText(/Withdrawals are in real \(today.s\) dollars and include taxes/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Find Best Plan' })).toBeVisible();
 
   // Two peer master sections: Investment Planning and Withdrawal Strategy
   await expect(page.locator('#section-investment > summary')).toContainText('Investment Planning');
   await expect(page.locator('#section-withdrawal > summary')).toContainText('Withdrawal Strategy');
-  // Goal Seek sits above Investment Planning in the primary inputs column
+  // Find Best Plan sits above Investment Planning in the primary inputs column
   await expect(page.locator('#goalSeekMode')).toBeVisible();
   const goalSeekBeforeInvestment = await page.locator('#goalSeekMode').evaluate((el) => {
     const investment = document.getElementById('section-investment');

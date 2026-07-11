@@ -60,8 +60,8 @@ test('Entering a balance rescales derived values while Goal Seek is on', async (
 
   await page.fill('#startBalance', '3,000');
 
-  // Balanced @ 3,000 start / 25 years: 60% lifetime → 72/yr minimum; 40% target.
-  await expect(firstFloorAmount(page)).toHaveValue('72');
+  // Balanced @ 3,000 start / 25 years: 70% lifetime → 84/yr minimum; 40% target.
+  await expect(firstFloorAmount(page)).toHaveValue('84');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
@@ -77,8 +77,8 @@ test('Moving the slider loads the level without running anything', async ({ page
   await expect(page.locator('#presetLevelName')).toContainText('Aggressive');
   await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('80');
   await expect(page.locator('#dynLowRet')).toHaveValue('-20');
-  // 50% of start over 25 years → 60/yr minimum; full spend-down target.
-  await expect(firstFloorAmount(page)).toHaveValue('60');
+  // 60% of start over 25 years → 72/yr minimum; full spend-down target.
+  await expect(firstFloorAmount(page)).toHaveValue('72');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('0');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('3,450');
@@ -92,9 +92,9 @@ test('Changing the years live-rescales the minimum withdrawal while attached', a
   await waitForInit(page);
 
   await page.fill('#startBalance', '3,000');
-  await expect(firstFloorAmount(page)).toHaveValue('72');
+  await expect(firstFloorAmount(page)).toHaveValue('84');
   await page.fill('#numYears', '50');
-  await expect(firstFloorAmount(page)).toHaveValue('36');
+  await expect(firstFloorAmount(page)).toHaveValue('42');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 
@@ -104,7 +104,7 @@ test('Changing the starting balance live-rescales the derived values while attac
 
   await page.fill('#startBalance', '6,000');
 
-  await expect(firstFloorAmount(page)).toHaveValue('144');
+  await expect(firstFloorAmount(page)).toHaveValue('168');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('7,980');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
@@ -204,8 +204,8 @@ test('User-added tiers survive slider moves; only the first tier is managed', as
 
   await page.focus('#presetLevel');
   await page.keyboard.press('Home');
-  // Conservative: 70% of 3000 over 25 years → 84/yr.
-  await expect(firstFloorAmount(page)).toHaveValue('84');
+  // Conservative: 80% of 3000 over 25 years → 96/yr.
+  await expect(firstFloorAmount(page)).toHaveValue('96');
   await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(2);
 
   await firstFloorAmount(page).fill('99');
@@ -238,19 +238,17 @@ test('Pre-slider saves load detached with their values intact', async ({ page })
   await expect(firstFloorAmount(page)).toHaveValue('88');
 });
 
-test('Conservative Easy Mode Find Best Plan retunes guardrails (not an instant infeasible exit)', async ({ page }) => {
+test('Balanced Easy Mode Find Best Plan retunes guardrails (not an instant infeasible exit)', async ({ page }) => {
   test.slow();
   await page.goto('/');
   await waitForInit(page);
 
   await page.fill('#startBalance', '3,000');
 
-  await page.focus('#presetLevel');
-  await page.keyboard.press('Home');
-  await expect(page.locator('#presetLevelName')).toContainText('Conservative');
+  await expect(page.locator('#presetLevelName')).toContainText('Balanced');
   await expect(firstFloorAmount(page)).toHaveValue('84');
-  await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('95');
-  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,500');
+  await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('90');
+  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
 
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#goalSeekNumSimulations', '400');
@@ -261,7 +259,7 @@ test('Conservative Easy Mode Find Best Plan retunes guardrails (not an instant i
 
   await expect(page.locator('#floorBalance')).toHaveValue('300');
   await expect(page.locator('#ceilingBalance')).toHaveValue('6,000');
-  await expect(page.locator('#floorPenalty')).not.toHaveValue('40');
+  await expect(page.locator('#floorPenalty')).not.toHaveValue('50');
 });
 
 test('Simple flow: adjust inputs and run a plain simulation from Easy Mode', async ({ page }) => {
@@ -289,16 +287,16 @@ test('Easy Mode recreates the minimum tier when the slider moves after all tiers
   await page.fill('#startBalance', '3,000');
   await page.click('#section-withdrawal > summary');
   await page.locator('#details-min-withdrawal').evaluate((el) => { el.open = true; });
-  await expect(firstFloorAmount(page)).toHaveValue('72');
+  await expect(firstFloorAmount(page)).toHaveValue('84');
 
   await page.click('.remove-withdrawal-floor-tier');
   await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(0);
 
   await page.focus('#presetLevel');
   await page.keyboard.press('Home');
-  // Conservative: 70% of 3000 over 25 years → 84/yr.
+  // Conservative: 80% of 3000 over 25 years → 96/yr.
   await expect(page.locator('[data-withdrawal-floor-row]')).toHaveCount(1);
-  await expect(firstFloorAmount(page)).toHaveValue('84');
+  await expect(firstFloorAmount(page)).toHaveValue('96');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 
@@ -322,4 +320,60 @@ test('Minimum recovery controls follow the Balanced preset and persist in autosa
   await page.locator('#details-min-withdrawal').evaluate((el) => { el.open = true; });
   await expect(page.locator('#maxConsecutiveMinWithdrawals')).toHaveValue('5');
   await expect(page.locator('#minWithdrawalPlanRecoveryYears')).toHaveValue('1');
+});
+
+function firstSpecificFloorPct(page) {
+  return page.locator('[data-specific-withdrawal-floor-row="0"] [data-specific-floor-pct]');
+}
+
+test('Specific List: Easy Mode fills percentage minimum without changing the typed list', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#section-withdrawal > summary');
+  await page.check('#withdrawal-strategy-specific');
+  await page.locator('#details-specific-min-withdrawal').evaluate((el) => { el.open = true; });
+
+  // Balanced @ 3,000 / 25 years → (70/25)/5 × 100 = 56%.
+  await expect(firstSpecificFloorPct(page)).toHaveValue('56');
+  await expect(page.locator('#presetActive')).toBeChecked();
+
+  await page.fill('#specificWithdrawals', '100\n110');
+  await page.focus('#presetLevel');
+  await page.keyboard.press('Home');
+  // Conservative: (80/25)/4 × 100 = 80%.
+  await expect(firstSpecificFloorPct(page)).toHaveValue('80');
+  await expect(page.locator('#specificWithdrawals')).toHaveValue('100\n110');
+});
+
+test('Specific List: toggling Goal Seek off fills guardrails but does not force Goal Seek on', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '2,000');
+  await page.click('#section-withdrawal > summary');
+  await page.check('#withdrawal-strategy-specific');
+  await page.click('label:has(#goalSeekMode)');
+
+  await expect(page.locator('#goalSeekMode')).not.toBeChecked();
+  await expect(page.locator('#presetActive')).toBeChecked();
+  await expect(page.locator('#floorBalance')).toHaveValue('1,600');
+  await expect(page.locator('#ceilingBalance')).toHaveValue('2,400');
+  await expect(page.locator('#dynLowAdj')).toHaveValue('-33');
+  await expect(page.locator('#glideFraction')).toHaveValue('50');
+});
+
+test('Specific List: editing tier-0 minimum % detaches Easy Mode', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#section-withdrawal > summary');
+  await page.check('#withdrawal-strategy-specific');
+  await page.locator('#details-specific-min-withdrawal').evaluate((el) => { el.open = true; });
+  await expect(firstSpecificFloorPct(page)).toHaveValue('56');
+
+  await firstSpecificFloorPct(page).fill('55');
+  await expect(page.locator('#presetActive')).not.toBeChecked();
 });

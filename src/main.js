@@ -333,11 +333,11 @@ function runGoalSeekSearch() {
       document.getElementById('resultsSection').classList.remove('hidden');
       const goalSeekWarning = msg.goalSeekSummary.feasible
         ? null
-        : msg.goalSeekSummary.reason || 'Goal Seek could not find a plan meeting your target.';
+        : msg.goalSeekSummary.reason || 'Find Best Plan could not find a plan meeting your target.';
       renderResults(msg.result, msg.finalParams ?? params, { goalSeekWarning });
     } else if (msg.type === 'error') {
       setLoading(false);
-      showAlert(`Goal Seek error: ${msg.message}`);
+      showAlert(`Find Best Plan error: ${msg.message}`);
       terminateWorkers();
     }
   };

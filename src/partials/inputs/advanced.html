@@ -39,7 +39,7 @@
                     <option value="meanYearly">Mean withdrawal per year</option>
                     <option value="medianYearly">Median withdrawal per year</option>
                 </select>
-                <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Goal Seek. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results.</p>
+                <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Find Best Plan. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results.</p>
             </div>
             <div>
                 <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
@@ -47,7 +47,7 @@
                     <input type="range" id="planRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
                     <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
-                <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate and 3D chart coloring. Goal Seek uses its own Risk Tolerance when enabled.</p>
+                <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate and 3D chart coloring. Find Best Plan uses its own Risk Tolerance when enabled.</p>
             </div>
         </div>
 
@@ -71,9 +71,9 @@
         </div>
 
         <div>
-            <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Goal Seek: Simulations per Search Step</label>
+            <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Find Best Plan: Simulations per Search Step</label>
             <input type="number" id="goalSeekNumSimulations" min="1" class="mt-1 block w-full max-w-xs rounded-md input-theme sm:text-sm p-2">
-            <p class="text-xs text-theme-faint mt-1">How many simulations Goal Seek runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
+            <p class="text-xs text-theme-faint mt-1">How many simulations Find Best Plan runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
         </div>
     </div>
 </details>

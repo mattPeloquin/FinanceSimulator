@@ -25,7 +25,7 @@
     "minWithdrawalPlanRecoveryYears": 2
   },
   "derived": {
-    "minWithdrawalLifetimePctOfStart": 50,
+    "minWithdrawalLifetimePctOfStart": 60,
     "gifting": { "amountPctOfStart": 2, "balanceMultipleOfStart": 1.15 },
     "spending": { "changePct": -3, "firstTierYearsFractionOfHorizon": 0.5 },
     "noCutBalanceMultipleOfStart": 1,
