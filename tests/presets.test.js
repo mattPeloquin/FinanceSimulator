@@ -109,11 +109,11 @@ describe('preset files', () => {
   });
 
   it('steps glide spend timing later for conservative and sooner for aggressive', () => {
-    expect(PRESETS[0].scenario.glideRate).toBe(-3);
-    expect(PRESETS[1].scenario.glideRate).toBe(-2);
-    expect(PRESETS[2].scenario.glideRate).toBe(-2);
-    expect(PRESETS[3].scenario.glideRate).toBe(-2);
-    expect(PRESETS[4].scenario.glideRate).toBe(-1);
+    expect(PRESETS[0].scenario.glideRate).toBe(-2);
+    expect(PRESETS[1].scenario.glideRate).toBe(-1);
+    expect(PRESETS[2].scenario.glideRate).toBe(-1);
+    expect(PRESETS[3].scenario.glideRate).toBe(-1);
+    expect(PRESETS[4].scenario.glideRate).toBe(0);
   });
 
   it('clamps out-of-range levels to the nearest valid preset', () => {
@@ -157,7 +157,7 @@ describe('computeDerivedPresetValues', () => {
       { changePct: -2, extra: 50, years: 15 },
       { changePct: -2, extra: 0 },
     ]);
-    expect(out.giftingTiers).toEqual([{ amount: 30, balance: 3990 }]);
+    expect(out.giftingTiers).toEqual([{ amount: 30, balance: 2700 }]);
   });
 
   it('fills the full spending plan when includePlanFields is true (Balanced @ 2,000)', () => {
@@ -250,7 +250,7 @@ describe('computeDerivedPresetValues', () => {
     });
     expect(out.withdrawalFloors).toEqual([{ amount: 60, years: 5 }, { amount: 44 }]);
     expect(out.giftingTiers).toEqual([
-      { amount: 30, balance: 3990, years: 3 },
+      { amount: 30, balance: 2700, years: 3 },
       { amount: 5, balance: 500 },
     ]);
     expect(out.spendingOverTimeTiers).toEqual([
@@ -362,7 +362,7 @@ describe('defaults composition', () => {
     expect(SCENARIO_DEFAULTS.withdrawalFloors).toBeUndefined();
     expect(SCENARIO_DEFAULTS.goalSeekTargetEndingBalance).toBeUndefined();
     expect(SCENARIO_DEFAULTS.glideTarget).toBeUndefined();
-    expect(SCENARIO_DEFAULTS.glideRate).toBe(-2);
+    expect(SCENARIO_DEFAULTS.glideRate).toBe(-1);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 0, years: 11 },
       { changePct: -2, extra: 0 },
@@ -399,5 +399,11 @@ describe('preset migration', () => {
     const migrated = migrateScenario({ presetActive: true, presetLevel: 3 }, 5);
     expect(migrated.presetActive).toBe(true);
     expect(migrated.presetLevel).toBe(3);
+  });
+
+  it('detaches current-schema saves that omit Easy Mode so defaults cannot re-attach', () => {
+    const migrated = migrateScenario({ startBalance: 4200, withdrawalFloors: [{ amount: 88 }] }, 6);
+    expect(migrated.presetActive).toBe(false);
+    expect(migrated.presetLevel).toBe(DEFAULT_PRESET_LEVEL);
   });
 });

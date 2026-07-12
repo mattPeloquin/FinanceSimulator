@@ -81,7 +81,7 @@ test('Moving the slider loads the level without running anything', async ({ page
   await expect(firstFloorAmount(page)).toHaveValue('72');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('0');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
-  await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('3,450');
+  await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('1,500');
 
   await expect(page.locator('#resultsSection')).toBeHidden();
   await expect(page.locator('#presetActive')).toBeChecked();
@@ -106,7 +106,7 @@ test('Changing the starting balance live-rescales the derived values while attac
 
   await expect(firstFloorAmount(page)).toHaveValue('168');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
-  await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('7,980');
+  await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('5,400');
   await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
   // No-cut threshold = 1 × start.
   await expect(page.locator('#dynNoCutBal')).toHaveValue('6,000');
@@ -243,6 +243,55 @@ test('Pre-slider saves load detached with their values intact', async ({ page })
 
   await page.fill('#startBalance', '8,400');
   await expect(firstFloorAmount(page)).toHaveValue('88');
+});
+
+test('Current-schema saves that omit Easy Mode load detached', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sor:autosave', JSON.stringify({
+      schemaVersion: 6,
+      scenario: {
+        startBalance: 5100,
+        distMethod: 'resampling',
+        goalSeekMode: false,
+        withdrawalFloors: [{ amount: 77 }],
+      },
+      name: '',
+      description: '',
+    }));
+  });
+  await page.goto('/');
+  await waitForInit(page);
+
+  await expect(page.locator('#presetActive')).not.toBeChecked();
+  await expect(page.locator('#startBalance')).toHaveValue('5,100');
+  await expect(firstFloorAmount(page)).toHaveValue('77');
+
+  await page.fill('#startBalance', '9,000');
+  await expect(firstFloorAmount(page)).toHaveValue('77');
+});
+
+test('Easy Mode on/off and level persist across reload', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.focus('#presetLevel');
+  await page.keyboard.press('End');
+  await expect(page.locator('#presetLevelName')).toContainText('Aggressive');
+  await waitForAutosave(page, 'scenario.presetActive === true && scenario.presetLevel === 4');
+
+  await page.reload();
+  await waitForInit(page);
+  await expect(page.locator('#presetActive')).toBeChecked();
+  await expect(page.locator('#presetLevel')).toHaveValue('4');
+  await expect(page.locator('#presetLevelName')).toContainText('Aggressive');
+
+  await page.uncheck('#presetActive');
+  await waitForAutosave(page, 'scenario.presetActive === false && scenario.presetLevel === 4');
+  await page.reload();
+  await waitForInit(page);
+  await expect(page.locator('#presetActive')).not.toBeChecked();
+  await expect(page.locator('#presetLevel')).toHaveValue('4');
+  await expect(page.locator('#presetLevel')).toBeDisabled();
 });
 
 test('Balanced Easy Mode Find Best Plan retunes guardrails (not an instant infeasible exit)', async ({ page }) => {

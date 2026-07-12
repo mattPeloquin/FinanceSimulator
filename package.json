@@ -2,8 +2,10 @@
   "name": "sequence-of-returns-simulator",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "description": "Monte Carlo sequence-of-returns retirement simulator. Builds to a single self-contained HTML file.",
+
   "scripts": {
     "dev": "vite",
     "build": "npm run lint && vite build",

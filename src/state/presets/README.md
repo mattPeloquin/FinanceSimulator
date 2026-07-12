@@ -29,8 +29,8 @@ Each file has two sections:
   - `targetEndingBalancePctOfStart` — Find Best Plan target ending balance = % of start;
     also writes `glideTarget` to the same value so the Glide-path Target field
     tracks Easy Mode before a search runs
-  - `glideRate` (in `scenario`) — glide-path spend timing (-4 = later … 0 = sooner);
-    Conservative is one tick later, Aggressive one tick sooner, the middle three at -2
+  - `glideRate` (in `scenario`) — glide-path spend timing (-2 = later … 0 = sooner);
+    Conservative is one tick later, Aggressive one tick sooner, the middle three at -1
   - `maxConsecutiveMinWithdrawals` / `minWithdrawalPlanRecoveryYears` (in
     `scenario`) — after this many years in a row at the minimum, spending returns
     to the plan for that many years. Steps up from Conservative (2 / 2) to

@@ -257,3 +257,38 @@ test('IRR scatter tooltip stays offset from the pointer', async ({ page }) => {
   }
   expect(found).toBe(true);
 });
+
+test('Sample-run withdrawal chart tooltip sits beside the hovered year', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await disableGoalSeek(page);
+
+  await page.fill('#startBalance', '2000');
+  await page.click('summary:has-text("Advanced simulation settings")');
+  await page.fill('#numYears', '30');
+  await page.fill('#numSimulations', '200');
+  await page.fill('#randomSeed', '12345');
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
+
+  await page.waitForFunction(() => window.__TEST_HOOKS__?.pinSurfaceColumn);
+  await page.evaluate(() => window.__TEST_HOOKS__.pinSurfaceColumn(50));
+
+  const placement = await page.waitForFunction(() => {
+    const result = window.__TEST_HOOKS__.activateFloatWithdrawalTooltip?.(10);
+    if (!result?.opacity) return false;
+    const horizontalOffset = Math.abs(result.tooltipCenterX - result.caretX);
+    const tooltipBesidePoint = horizontalOffset > 12;
+    return {
+      ...result,
+      horizontalOffset,
+      tooltipBesidePoint,
+    };
+  });
+
+  const result = await placement.jsonValue();
+  expect(result.horizontalOffset).toBeGreaterThan(12);
+  expect(result.tooltipBesidePoint).toBe(true);
+  expect(result.yAlign).toBe('center');
+  expect(['left', 'right']).toContain(result.xAlign);
+});

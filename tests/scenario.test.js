@@ -98,6 +98,12 @@ describe('migrateScenario', () => {
     };
     expect(migrateScenario(s, 5)).toEqual(s);
   });
+  it('detaches any schema version that omits Easy Mode', () => {
+    expect(migrateScenario({ startBalance: 1000 }, 6)).toMatchObject({
+      presetActive: false,
+      presetLevel: SCENARIO_DEFAULTS.presetLevel,
+    });
+  });
 });
 
 describe('defaultScenario', () => {
@@ -684,6 +690,19 @@ describe('validateScenario', () => {
     s.goalSeekIncludeMarketAdjustments = true;
     const errors = validateScenario(s, range);
     expect(errors.some((e) => e.includes('Specific List'))).toBe(false);
+  });
+
+  it('bounds glide spend timing to the preset range (-2% … 0%)', () => {
+    const s = plainScenario();
+    s.glideTarget = 500;
+    s.glideRate = -2;
+    expect(validateScenario(s, range).some((e) => e.includes('Spend Timing'))).toBe(false);
+    s.glideRate = 0;
+    expect(validateScenario(s, range).some((e) => e.includes('Spend Timing'))).toBe(false);
+    s.glideRate = -3;
+    expect(validateScenario(s, range).some((e) => e.includes('Spend Timing'))).toBe(true);
+    s.glideRate = 1;
+    expect(validateScenario(s, range).some((e) => e.includes('Spend Timing'))).toBe(true);
   });
 });
 

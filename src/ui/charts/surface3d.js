@@ -8,7 +8,7 @@ import {
   percentileLabelForRank,
 } from '../../core/surfaceDrilldown.js';
 import { meetsWithdrawalTarget, median, isMedianYearlyMetric, isMeanYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
-import { getChartTheme } from './chartTheme.js';
+import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
 import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
@@ -431,6 +431,7 @@ function ensureFloatPanel() {
   const wrap = document.createElement('div');
   wrap.style.cssText = `height:${FLOAT_PANEL_CHART_HEIGHT}px;`;
   floatCanvas = document.createElement('canvas');
+  floatCanvas.id = 'floatWithdrawalCanvas';
   wrap.appendChild(floatCanvas);
 
   floatPanel.appendChild(floatTitle);
@@ -573,18 +574,17 @@ function extractWithdrawalSeries(col) {
 // sliced to the path length and styled like the schedule preview sparklines.
 function planOverlaySlice(portfolio, length) {
   if (!portfolio || length <= 0) {
-    return { floorSeries: null, giftAmounts: null, floorStepped: true };
+    return { floorSeries: null, giftAmounts: null };
   }
   return {
     floorSeries: portfolio.withdrawalFloorSeries?.slice(0, length) ?? null,
     giftAmounts: portfolio.giftingSeries?.map((entry) => entry.amount).slice(0, length) ?? null,
-    floorStepped: portfolio.strategy !== 'specific',
   };
 }
 
 function buildWithdrawalOverlayDatasets(series, { large = false, portfolio } = {}) {
   const theme = getChartTheme();
-  const { floorSeries, giftAmounts, floorStepped } = planOverlaySlice(
+  const { floorSeries, giftAmounts } = planOverlaySlice(
     portfolio ?? surfaceState.simParams?.portfolio,
     series.labels.length,
   );
@@ -601,7 +601,7 @@ function buildWithdrawalOverlayDatasets(series, { large = false, portfolio } = {
       backgroundColor: 'transparent',
       borderWidth: large ? 1.5 : 1,
       borderDash: [4, 3],
-      ...(floorStepped ? { stepped: 'before' } : { tension: 0.1 }),
+      tension: 0.1,
       pointRadius: 0,
       pointHoverRadius: large ? 4 : 3,
       fill: false,
@@ -715,14 +715,7 @@ function floatChartOptions() {
     },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        displayColors: false,
-        bodyFont: { size: 9 },
-        padding: 4,
-        yAlign: 'bottom',
-        caretPadding: 6,
-        callbacks: withdrawalChartTooltipCallbacks('pinnedCol'),
-      },
+      tooltip: sampleRunTooltipOptions(withdrawalChartTooltipCallbacks('pinnedCol')),
     },
   };
 }
@@ -872,12 +865,7 @@ function openLargeWithdrawalChart(col) {
         },
         plugins: {
           legend: largeWithdrawalLegendOptions(chartTheme),
-          tooltip: {
-            displayColors: false,
-            yAlign: 'bottom',
-            caretPadding: 8,
-            callbacks: withdrawalChartTooltipCallbacks('largeChartCol'),
-          },
+          tooltip: sampleRunTooltipOptions(withdrawalChartTooltipCallbacks('largeChartCol'), { large: true }),
         },
         onHover: (_evt, activeElements) => {
           const index = activeElements.length > 0 ? activeElements[0].index : -1;
@@ -1400,6 +1388,31 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   window.__TEST_HOOKS__.surfaceOverviewAxisTickLabel = (col) =>
     overviewAxisTickLabel(col, surfaceState.columns.length);
   window.__TEST_HOOKS__.formatSurfaceTooltip = (params) => tooltipFormatter(params);
+  window.__TEST_HOOKS__.pinSurfaceColumn = (col) => {
+    surfaceState.pinnedCol = col;
+    applyFocus();
+  };
+  window.__TEST_HOOKS__.floatWithdrawalChart = () => floatChart;
+  window.__TEST_HOOKS__.activateFloatWithdrawalTooltip = (index = 5) => {
+    if (!floatChart) return null;
+    const datasetIndex = floatChart.data.datasets.findIndex((d) => d.label === 'Actual Withdrawal');
+    if (datasetIndex < 0) return null;
+    const meta = floatChart.getDatasetMeta(datasetIndex);
+    const point = meta.data[index];
+    if (!point) return null;
+    floatChart.setActiveElements([{ datasetIndex, index }]);
+    floatChart.tooltip.setActiveElements([{ datasetIndex, index }], { x: point.x, y: point.y });
+    floatChart.draw();
+    const { tooltip } = floatChart;
+    return {
+      caretX: tooltip.caretX,
+      tooltipCenterX: tooltip.x + tooltip.width / 2,
+      pointerX: point.x,
+      xAlign: tooltip.xAlign,
+      yAlign: tooltip.yAlign,
+      opacity: tooltip.opacity,
+    };
+  };
 
   if (!window.__sorSurfaceResizeBound) {
     window.addEventListener('resize', () => {

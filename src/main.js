@@ -672,7 +672,14 @@ async function handleImportFile(e) {
 
 // Apply a full scenario to the DOM and refresh dependent views.
 function applyScenario(scenario) {
-  const merged = { ...defaultScenario(), ...scenario };
+  const incoming = scenario || {};
+  const merged = { ...defaultScenario(), ...incoming };
+  // Incomplete loads that omit Easy Mode must stay detached — otherwise
+  // defaultScenario()'s presetActive:true would re-attach and risk overwriting
+  // hand-tuned values. Blank new sessions pass {} and keep the default on.
+  if (Object.keys(incoming).length > 0 && !Object.hasOwn(incoming, 'presetActive')) {
+    merged.presetActive = false;
+  }
   // Loading a scenario replaces the profile fields wholesale, so they no longer
   // count as hand-edited.
   profilesEdited = false;
@@ -712,6 +719,7 @@ function getDefaultCoreUsage() {
 
 // Merge over defaults so fields added after an autosave was written (e.g.
 // smoothWindowPct) still get their default instead of rendering blank.
+// loadAutosave migrates missing Easy Mode to detached before this merge.
 const autosaved = loadAutosave() || {};
 const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ...(autosaved.scenario || {}) };
     currentSessionName = autosaved.name || '';

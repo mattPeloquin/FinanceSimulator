@@ -55,6 +55,28 @@ export function chartJsTooltip(theme) {
   };
 }
 
+/** Pick left vs right tooltip placement from the active point's x position. */
+export function sampleRunTooltipXAlign(caretX, chartArea) {
+  if (caretX == null || !chartArea) return 'right';
+  const midX = (chartArea.left + chartArea.right) / 2;
+  return caretX >= midX ? 'left' : 'right';
+}
+
+// Sample-run withdrawal charts (3D float, large dialog, IRR drill-down) share
+// the compact float-panel tooltip look. yAlign 'center' with a forced side
+// xAlign keeps the tooltip beside the hovered point instead of above it.
+export function sampleRunTooltipOptions(callbacks, { large = false } = {}) {
+  return {
+    displayColors: false,
+    bodyFont: { size: 9 },
+    padding: 4,
+    yAlign: 'center',
+    xAlign: (ctx) => sampleRunTooltipXAlign(ctx.tooltip.caretX, ctx.chart.chartArea),
+    caretPadding: large ? 8 : 6,
+    callbacks,
+  };
+}
+
 export function chartJsCartesianScales(theme, yExtra = {}, xExtra = {}) {
   const base = {
     ticks: { color: theme.axisTick },

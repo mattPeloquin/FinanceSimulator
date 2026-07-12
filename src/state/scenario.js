@@ -209,13 +209,15 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
   }
   delete migrated.goalSeekPinBaseWithdrawal;
 
-  if (schemaVersion < 5) {
-    // Scenarios saved before the Risk Level slider existed are, by
-    // definition, hand-built — load them detached so the slider never
-    // overwrites their values unless the user re-enables it.
-    if (migrated.presetActive == null) migrated.presetActive = false;
-    if (migrated.presetLevel == null) migrated.presetLevel = SCENARIO_DEFAULTS.presetLevel;
-  }
+  // Easy Mode (presetActive / presetLevel) is part of saved scenario state.
+  // Missing flag → detached. New empty workbenches get presetActive:true from
+  // defaultScenario() itself, not via migration. Any persisted scenario that
+  // omits the field (pre-slider saves, partial imports, or current-schema
+  // records that never stored it) must load detached so merging with defaults
+  // cannot turn Easy Mode on and overwrite hand-tuned values on the next
+  // balance/horizon edit.
+  if (migrated.presetActive == null) migrated.presetActive = false;
+  if (migrated.presetLevel == null) migrated.presetLevel = SCENARIO_DEFAULTS.presetLevel;
 
   if (schemaVersion < 6) {
     // The three per-band "Bal <> Override" thresholds collapsed into a single
@@ -1216,8 +1218,8 @@ export function validateScenario(scenario, { minYear, maxYear }) {
         errors.push('Glide Spend Rate must be between 0 and 100%.');
       }
       const rate = scenario.glideRate ?? SCENARIO_DEFAULTS.glideRate;
-      if (!Number.isFinite(rate) || rate < -4 || rate > 0) {
-        errors.push('Glide Spend Timing must be between -4% (later) and 0% (sooner).');
+      if (!Number.isFinite(rate) || rate < -2 || rate > 0) {
+        errors.push('Glide Spend Timing must be between -2% (later) and 0% (sooner).');
       }
     }
   }

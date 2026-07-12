@@ -8,7 +8,7 @@
 // tens of thousands of paths, which is far past what Chart.js scatters handle.
 import { Chart } from './chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
-import { getChartTheme, chartJsTooltip, chartJsCartesianScales } from './chartTheme.js';
+import { getChartTheme, chartJsCartesianScales, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
 import { formatPercent, formatK } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
@@ -739,11 +739,7 @@ function renderPathChart(i) {
           display: true,
           labels: { color: theme.legend, boxWidth: 14, boxHeight: 2, font: { size: 10 } },
         },
-        tooltip: {
-          ...chartJsTooltip(theme),
-          displayColors: false,
-          callbacks: withdrawalChartTooltipCallbacks(detailsAt),
-        },
+        tooltip: sampleRunTooltipOptions(withdrawalChartTooltipCallbacks(detailsAt)),
       },
       onHover: (_evt, activeElements) => {
         const index = activeElements.length > 0 ? activeElements[0].index : -1;
@@ -760,6 +756,7 @@ function renderPathChart(i) {
 
   if (typeof window !== 'undefined') {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+    window.__TEST_HOOKS__.irrScatterPathChart = () => state.pathChart;
     window.__TEST_HOOKS__.irrScatterBreakdownSample = () => {
       const bd = re.path.withdrawalBreakdown?.[0] ?? null;
       if (!bd) return null;

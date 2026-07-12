@@ -20,7 +20,7 @@
     "dynLowRet": -10,
     "dynMedRet": 5,
     "dynHighRet": 30,
-    "glideRate": -3,
+    "glideRate": -2,
     "maxConsecutiveMinWithdrawals": 2,
     "minWithdrawalPlanRecoveryYears": 2
   },
@@ -28,7 +28,7 @@
     "minWithdrawalLifetimePctOfStart": 80,
     "gifting": {
       "amountPctOfStart": 0.5,
-      "balanceMultipleOfStart": 1.5
+      "balanceMultipleOfStart": 1.1
     },
     "spending": {
       "changePct": -1,
@@ -47,7 +47,7 @@
     },
     "spendingExtraPctOfBase": 20,
     "targetEndingBalancePctOfStart": 50,
-    "glideFraction": 30,
+    "glideFraction": 10,
     "maxBoostDrawdownPct": -1
   }
 }

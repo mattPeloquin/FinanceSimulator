@@ -1,20 +1,18 @@
 # 📈 Personal Finance Simulator
 
-**[▶ Run the simulator now](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — open it in your browser, no install required.
+**[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs locally in your browser, no account required
 
-Welcome to the Sequence-of-Returns Finance Simulator! This is a powerful, interactive tool that helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market.
-
+Welcome to the Finance Simulator! This is a powerful, interactive tool that helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market.
 
 ## Why is this so easy to deploy?
 
-This entire simulator is engineered to bundle into a **single, self-contained HTML file**.
+This entire simulator is a **single, self-contained HTML file**.
 
-- **No Servers Needed:** You don't need a database or backend server to run this.
-- **Run Anywhere:** Once built, you can literally double-click the final `index.html` file and it will run perfectly in your browser.
-- **Host for Free:** You can drag and drop your built file onto free hosting platforms (like GitHub Pages, Netlify, or Vercel) and have your own live website in seconds.
+- **No cloud, you control all data:** This app doesn't use databases, servers, or any cloud services.
+- **Run anywhere:** Double-click the `index.html` file and run in your browser.
+- **Designed for vibe coding:**  Follow instructions below if you want to change or extend.
 
 ---
-
 
 ## Setting Up Your Dev Environment
 
@@ -24,8 +22,6 @@ You don't need to be a software engineer to modify this app! You just need a few
 
 1. **Node.js**: Download and install the LTS version from [nodejs.org](https://nodejs.org/). This runs the background tools needed to build the project.
 2. **Cursor**: Download and install [Cursor](https://cursor.sh/), an AI-powered code editor that will essentially write the code for you.
-
-
 
 ### Step 2: Get the project running
 
@@ -42,8 +38,7 @@ You don't need to be a software engineer to modify this app! You just need a few
    npm run dev
   ```
    *Press Enter. This starts up your local preview. You'll see a web link (usually* `http://localhost:5173`*). Click it or copy it into your browser (or Ctrl-Click the link in the terminal) to see the app running live!*
-
-   *The first `npm install` also downloads the Chromium browser used for automated UI tests (about 150 MB). If you skip that step or tests complain about a missing browser, run `npm run setup:e2e` once.*
+   *The first* `npm install` *also downloads the Chromium browser used for automated UI tests (about 150 MB). If you skip that step or tests complain about a missing browser, run* `npm run setup:e2e` *once.*
 
 ### Running automated tests (optional)
 
@@ -54,27 +49,25 @@ To skip the browser download during install (e.g. in CI jobs that don't run E2E 
 
 ---
 
-
-
 ## Extending the Code
 
 You do not need to know how to code to add new features to this app. Instead, you can use **Vibe Coding**—where you use natural language to tell an AI what you want, and the AI handles the complex syntax and logic.
 
 ### Changing the app's colors
 
-To tweak the look of the app (backgrounds, text, accent buttons, chart colors, and more), edit **`themeTokens`** at the top of `src/ui/theme.js`. Those values flow automatically into the page, charts, and dark mode — no need to hunt through dozens of files.
+To tweak the look of the app (backgrounds, text, accent buttons, chart colors, and more), edit `themeTokens` at the top of `src/ui/theme.js`. Those values flow automatically into the page, charts, and dark mode — no need to hunt through dozens of files.
 
 Your browser also remembers which settings panels you left open or closed on this device. That preference is separate from your saved simulation numbers, so resetting or importing a scenario won't change which sections are expanded.
 
 ### Changing the default starting values
 
-To change what the simulator loads with on a fresh visit (year range, Find Best Plan default, and more), edit **`BASE_DEFAULTS`** in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. **Starting Portfolio** is blank on first load — enter a positive balance before running. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
+To change what the simulator loads with on a fresh visit (year range, Find Best Plan default, and more), edit `BASE_DEFAULTS` in `src/state/defaults.js`. Each field has inline comments explaining valid options and limits. **Starting Portfolio** is blank on first load — enter a positive balance before running. If you already have an autosaved session in your browser, clear it or use a private window to see your new defaults on first load.
 
-Values controlled by the **Easy Mode** slider (return method, Find Best Plan search settings, asset mix, market triggers and the no-cut balance threshold, glide spend timing, minimum withdrawal and consecutive-min recovery, gifting, spending timeline, and — when Find Best Plan is off — the full spending plan) live in **`src/state/presets/balanced.json`** and the other preset files. See the next section.
+Values controlled by the **Easy Mode** slider (return method, Find Best Plan search settings, asset mix, market triggers and the no-cut balance threshold, glide spend timing, minimum withdrawal and consecutive-min recovery, gifting, spending timeline, and — when Find Best Plan is off — the full spending plan) live in `src/state/presets/balanced.json` and the other preset files. See the next section.
 
 ### Tuning the Risk Level presets
 
-**Easy Mode** under Starting Portfolio gives first-time users a simple path: enter a horizon and portfolio size, pick a level from Conservative to Aggressive, and run. Each level is a JSON file in **`src/state/presets/`** (see the README there). With **Find Best Plan** enabled (the default), click the **Find Best Plan** button to search for the best spending plan for that level's success target. Turn Find Best Plan off to use the preset's built-in spending plan instead and click **Run Simulation** — Easy Mode stays on either way.
+**Easy Mode** under Starting Portfolio gives first-time users a simple path: enter a horizon and portfolio size, pick a level from Conservative to Aggressive, and run. Each level is a JSON file in `src/state/presets/` (see the README there). With **Find Best Plan** enabled (the default), click the **Find Best Plan** button to search for the best spending plan for that level's success target. Turn Find Best Plan off to use the preset's built-in spending plan instead and click **Run Simulation** — Easy Mode stays on either way.
 
 While **Use easy mode** is checked, changing the starting balance or horizon live-rescales derived values. Manually editing a preset-controlled setting switches Easy Mode off and keeps your values — re-check the box to reload the level. Tiers you add beyond the first are yours; the slider only manages the first tier of each list. With a **Specific List**, Easy Mode still sets allocations, search targets, gifting, guardrails, market adjustments, and percentage minimum floors — it does not fill or change your pasted year-by-year amounts.
 
@@ -97,8 +90,6 @@ Cursor has a built-in AI assistant. You essentially act as the "Product Manager,
 4. **Trust the Tests**
   - This project has automated tests to make sure things don't break. If you add a new feature, you can tell Cursor: "I just added an inflation input. Run the tests and fix any issues caused by my changes."
 
-
-
 ### Building Your Final Version
 
 Once you've vibe-coded your app to perfection and want to share it with the world, open the terminal and type:
@@ -110,8 +101,6 @@ npm run build
 This will bundle your entire app into a single `index.html` file located in the `dist` folder. You can now send that file to anyone or drag-and-drop it onto a web host! Happy building!
 
 ---
-
-
 
 ## How the Simulator Works (Logical Design & Flow)
 
@@ -130,8 +119,6 @@ flowchart TD
 
 
 
-
-
 ### Step 1: Your inputs become a "Scenario"
 
 Everything you type into the form — starting balance, yearly withdrawal, asset mix, year range, dynamic adjustment rules — is collected into one flat object called a **scenario** (`src/state/scenario.js`). This single object is the source of truth for the whole app:
@@ -143,8 +130,6 @@ Everything you type into the form — starting balance, yearly withdrawal, asset
 The **historical data** (`src/data/historicalData.js`) is a built-in table of yearly returns from 1900 onward for six asset classes (US large growth, US large value, US small/mid, international, bonds, cash) plus inflation. When you change the year range, the app instantly recomputes the average return and volatility "profiles" for that window, redraws the mini history charts, and refreshes the pool of years available for resampling (`src/core/history.js`). If you've typed your own numbers into the profile fields, the app keeps them and shows an "Overwrite from history" link instead of replacing your edits.
 
 > **A note on the data:** the built-in numbers are good-faith approximations assembled for illustration — the early decades especially are rounded reconstructions, since precise style-level index data doesn't exist that far back. They're great for exploring risk, but don't treat any single year as an exact historical fact.
-
-
 
 ### Step 2: Turning the scenario into engine-ready parameters
 
@@ -168,7 +153,6 @@ The core engine (`src/core/simulation.js`) simulates one "possible future" at a 
   - **Log-normal model:** draws statistically generated returns based on the mean/volatility profiles, using the historical **correlation between asset classes** (so stocks and bonds still move together the way they did in real life) and year-to-year smoothing controlled by the same block/smoothing slider (expected persistence, not a fixed block length).
 2. **Grows the portfolio** by that year's inflation-adjusted (real) return, weighted by your asset allocation.
 3. **Figures out this year's withdrawal**, starting from your base plan (or a pasted year-by-year list), then applying staged **Spending Over Time** tiers (each tier sets an annual real change % that compounds continuously and an optional extra withdrawal for a set number of years), optional **Major Events** (one-time or recurring inflows like a house sale or inheritance, or known large payments — positive adds to the portfolio, negative is extra spending on top of that year's plan; marked as dots on the schedule chart), dynamic adjustments based on **real** market performance (with an optional "no cut" balance threshold — a bad market year never cuts spending while the balance is still above it — and an optional **max boost drawdown** that limits high-market spending boosts so the balance after that year's spending, except glide, doesn't fall more than that percent below the year's starting balance; a live mini chart next to those inputs shows the market-return curve you've configured), and a smooth balance-based spending scale (spending gradually ramps down as the balance falls below your floor, and ramps up without limit as it grows past your ceiling — another mini chart shows that curve). If you're using the Base + Spending Over Time strategy, optional staged minimum-withdrawal tiers limit how far guardrails can cut any single year — the schedule chart shows your plan and the minimum as separate lines. With a **Specific List**, percentage minimum tiers work the same way (each year's floor is a % of what you typed). Your typed amounts are the plan; the minimum is only a backstop in bad markets. Optionally set **Max consecutive minimums** and **Then stay on plan for** to return spending to the full plan for a stretch after too many years at the minimum. Negative list values are deposits and are never overridden by a minimum. **Gifting** (available under both strategies) lets you stage extra gift withdrawals over time — each tier sets a gift amount and a portfolio balance threshold. Set Gift to 0 on early tiers to defer gifting to later years. A gift is added only in years when your balance after the regular withdrawal or deposit still exceeds that threshold *and* that year's spending fully met your plan (including any glide-path surplus, so a temporary market cut that glide replaces does not block the gift). The schedule chart shows a thin dotted gift ceiling above your planned withdrawal. **Glide-path spend-down** (in the Dynamic Adjustments & Guardrails section, available under both strategies and gated by that section's Enable toggle) actively spends surplus down toward a target ending balance instead of letting good markets pile it up. Set a **Target** (blank = off; 0 means "spend to zero"), a **Spend Rate**, and a **Spend Timing** slider. Each year the simulator computes the balance still needed to fund your remaining plan and land on the target at the horizon; after any eligible gift is paid, when the portfolio still sits above that glide path, the spend-rate share of the remaining surplus is withdrawn on top of the plan. Because the glide path declines toward the target as the horizon shrinks, the extra spending concentrates in the later years of comfortable paths — and never cuts below your plan in lean ones. Slide Spend Timing toward **later** to hold surplus back for late retirement: it raises the glide path so the early years stay invested, which lifts both lifetime spending and success odds and helps plans that would otherwise dip to their minimum withdrawals mid-retirement; **sooner** recycles surplus as it appears.
-
 4. **Subtracts the withdrawal** and records whether the portfolio ran out of money (the "depletion year").
 
 This is repeated for every year in your horizon, and the whole thing is repeated for every simulation (10,000 by default).
@@ -196,7 +180,6 @@ When you open an individual simulation (click a dot on the sequence-risk scatter
 
 The worker then sends this compact, chart-ready package back to the page for display in cards and charts  (`src/ui/results.js` and `src/ui/charts/`).
 
-
 ### Find Best Plan: let the simulator find your plan for you
 
 Instead of guessing at a withdrawal amount and checking whether it works, **Find Best Plan** flips the process around: tell it what you want (a target amount left over at the end, how confident you want to be, and how much belt-tightening you're willing to accept), and it searches for the highest sustainable spending plan that gets you there.
@@ -206,12 +189,12 @@ To use it:
 1. Turn on the **Find Best Plan** switch (below Sequence of Returns, above Investment Planning).
 2. Enter a **Target Ending Balance** (how much you'd like left over, on top of never running out), a **Desired Success %** (how sure you want to be that the plan works), and a **Risk Tolerance** (how much of your planned lifetime spending you're willing to give up in bad markets — 0% means stay on plan; higher values allow a bigger headline plan with more guardrail belt-tightening when markets are rough).
 3. Under **Base Annual Withdrawal**, leave **Include in search** checked (default) to let Find Best Plan find the best base amount, or uncheck it to keep your typed base fixed and search only the other levers — you'll need at least one other "Include in search" lever checked. If the goal isn't reachable at your fixed base, the simulator still shows the closest plan it found, with a warning at the top of the results.
-   - Using the **Specific List** strategy instead? Find Best Plan always keeps every year's typed amount exactly as you entered it and searches only the **Market adjustment** and **Balance adjustment** levers below — check at least one of those.
+  - Using the **Specific List** strategy instead? Find Best Plan always keeps every year's typed amount exactly as you entered it and searches only the **Market adjustment** and **Balance adjustment** levers below — check at least one of those.
 4. Optionally, check **Include in search** on any other settings you'd like Find Best Plan to tune:
-   - **Spending Over Time** — the first tier's extra withdrawal (annual change % and years stay as you typed). When this is checked, Find Best Plan switches its goal: instead of maximizing your lifetime total, it maximizes how much you can spend **per year during the first tier's years**, so it favors more aggressive front-loading.
-   - **Market adjustment** — the Low and High market-triggered spending adjustments *and* the "no cut if balance above" threshold. The **Expected** adjustment is never searched: at the expected return the plan is on plan, so it stays at whatever you typed (normally 0). Low and High never stay at $0 — Find Best Plan always applies at least a small cut in weak markets and a small boost in strong ones.
-   - **Balance adjustment** — the Floor/Ceiling Balance thresholds *and* their Max Cut / Boost Rate. Find Best Plan pins the floor to the lowest balance band and the ceiling to the highest (widest guardrail range), then searches max cut and boost rate — thresholds are never left off, and cut/boost never stay at 0%. Guardrails can trade belt-tightening for a higher sustainable withdrawal when your risk tolerance allows it, and boosts spend more when markets are good.
-   - **Glide-path spend-down** — the surplus **Spend Rate**. Find Best Plan sets the glide **Target** from its own Target Ending Balance and searches for the spend rate that recycles surplus into the most lifetime spending while still hitting your success goal (your **Spend Timing** setting is respected). This is the most direct lever for avoiding plans that end far above your target.
+  - **Spending Over Time** — the first tier's extra withdrawal (annual change % and years stay as you typed). When this is checked, Find Best Plan switches its goal: instead of maximizing your lifetime total, it maximizes how much you can spend **per year during the first tier's years**, so it favors more aggressive front-loading.
+  - **Market adjustment** — the Low and High market-triggered spending adjustments *and* the "no cut if balance above" threshold. The **Expected** adjustment is never searched: at the expected return the plan is on plan, so it stays at whatever you typed (normally 0). Low and High never stay at $0 — Find Best Plan always applies at least a small cut in weak markets and a small boost in strong ones.
+  - **Balance adjustment** — the Floor/Ceiling Balance thresholds *and* their Max Cut / Boost Rate. Find Best Plan pins the floor to the lowest balance band and the ceiling to the highest (widest guardrail range), then searches max cut and boost rate — thresholds are never left off, and cut/boost never stay at 0%. Guardrails can trade belt-tightening for a higher sustainable withdrawal when your risk tolerance allows it, and boosts spend more when markets are good.
+  - **Glide-path spend-down** — the surplus **Spend Rate**. Find Best Plan sets the glide **Target** from its own Target Ending Balance and searches for the spend rate that recycles surplus into the most lifetime spending while still hitting your success goal (your **Spend Timing** setting is respected). This is the most direct lever for avoiding plans that end far above your target.
 5. Click **Find Best Plan** (the Run button relabels itself while the mode is on). The simulator will try many combinations behind the scenes and, when it finishes, fill in the winning numbers directly into your inputs and show the full results for that plan.
 
 **All withdrawal amounts are in today's dollars and include taxes:** the base annual withdrawal and every other spending field represent constant purchasing power — the simulator works in real returns and today's dollars everywhere (including reported market returns), so you don't need to build inflation into your numbers. Those withdrawal values also assume capital gains and income taxes come out of the withdrawal, so the net amount you can spend is lower. Other income such as a pension or Social Security is not modeled.
@@ -232,7 +215,7 @@ Turn the switch back off any time to return to typing in your own numbers and ru
 | You want to change…                 | Look in…                                                                                            |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
 | The math of growth/withdrawals      | `src/core/simulation.js`, `src/core/withdrawal.js`                                                  |
-| Find Best Plan's search logic            | `src/core/goalSeek.js`                                                                               |
+| Find Best Plan's search logic       | `src/core/goalSeek.js`                                                                              |
 | The historical dataset              | `src/data/historicalData.js`                                                                        |
 | An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
 | The Risk Level slider presets       | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)              |
@@ -241,3 +224,6 @@ Turn the switch back off any time to return to typing in your own numbers and ru
 | Saving/loading sessions             | `src/state/persistence.js`                                                                          |
 
 
+## License
+
+This project is free to use, share, and modify under the [MIT License](LICENSE).
