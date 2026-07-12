@@ -44,9 +44,11 @@ export function stitchMonteCarloResults(params, chunkResults) {
   const horizonYears = new Int32Array(totalSims);
   const allYearsReturns = new Float64Array(totalSims * maxYears);
   allYearsReturns.fill(NaN);
+  const allYearsWithdrawals = new Float64Array(totalSims * maxYears);
+  allYearsWithdrawals.fill(NaN);
 
   for (const chunk of chunkResults) {
-    const { startIndex, numSimulations, avgReturn: a, irr: ir, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr } = chunk;
+    const { startIndex, numSimulations, avgReturn: a, irr: ir, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr, allYearsWithdrawals: yw } = chunk;
     avgReturn.set(a, startIndex);
     irr.set(ir, startIndex);
     finalBalance.set(fb, startIndex);
@@ -58,6 +60,10 @@ export function stitchMonteCarloResults(params, chunkResults) {
     for (let i = 0; i < numSimulations; i++) {
       allYearsReturns.set(
         yr.subarray(i * maxYears, (i + 1) * maxYears),
+        (startIndex + i) * maxYears,
+      );
+      allYearsWithdrawals.set(
+        yw.subarray(i * maxYears, (i + 1) * maxYears),
         (startIndex + i) * maxYears,
       );
     }
@@ -75,6 +81,7 @@ export function stitchMonteCarloResults(params, chunkResults) {
     depletionYear,
     horizonYears,
     allYearsReturns,
+    allYearsWithdrawals,
   };
 }
 
@@ -85,7 +92,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
       if (msg.type === 'chunkDone') {
         port.removeEventListener('message', onMessage);
         port.removeEventListener('messageerror', onError);
-        const { avgReturn, irr, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns } = msg.buffers;
+        const { avgReturn, irr, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns, allYearsWithdrawals } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
           numSimulations: msg.numSimulations,
@@ -98,6 +105,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
           depletionYear: new Float64Array(depletionYear),
           horizonYears: new Int32Array(horizonYears),
           allYearsReturns: new Float64Array(allYearsReturns),
+          allYearsWithdrawals: new Float64Array(allYearsWithdrawals),
         });
       } else if (msg.type === 'error') {
         port.removeEventListener('message', onMessage);

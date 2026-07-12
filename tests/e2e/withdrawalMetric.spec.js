@@ -25,6 +25,12 @@ test('Auto metric switches from totals to mean/yr when a horizon range is set', 
   await page.goto('/');
   await disableGoalSeek(page);
 
+  // Defaults leave start balance blank (Easy Mode) and carry a ±5-year
+  // horizon range; the first phase needs a portfolio and a fixed horizon.
+  await page.fill('#startBalance', '2000');
+  await page.fill('#horizonPlusYears', '0');
+  await page.fill('#horizonMinusYears', '0');
+
   // Fixed horizon + auto -> lifetime totals everywhere; the outcome cards
   // show the two per-year metrics side by side underneath, median first.
   await runSimulation(page);
@@ -71,6 +77,12 @@ test('Explicit median/yr and mean/yr metric selections drive the labels', async 
   test.slow(); // two full simulation runs
   await page.goto('/');
   await disableGoalSeek(page);
+
+  // Defaults leave start balance blank (Easy Mode); the run needs a portfolio.
+  // Zero the minus-range so the test controls horizon variability via the
+  // plus field alone.
+  await page.fill('#startBalance', '2000');
+  await page.fill('#horizonMinusYears', '0');
 
   // The metric selector sits inside the collapsed advanced-settings block.
   await page.click('summary:has-text("Advanced simulation settings")');

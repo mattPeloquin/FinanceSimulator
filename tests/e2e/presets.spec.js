@@ -131,7 +131,7 @@ test('Toggling Goal Seek off fills the plan but keeps Easy Mode attached', async
   await expect(page.locator('#floorPenalty')).toHaveValue('50');
   await expect(page.locator('#dynLowAdj')).toHaveValue('-33');
   await expect(page.locator('#dynHighAdj')).toHaveValue('33');
-  await expect(page.locator('#glideFraction')).toHaveValue('50');
+  await expect(page.locator('#glideFraction')).toHaveValue('30');
 });
 
 test('Slider move with Goal Seek off updates plan fields per level', async ({ page }) => {
@@ -417,7 +417,7 @@ test('Specific List: toggling Goal Seek off fills guardrails but does not force 
   await expect(page.locator('#floorBalance')).toHaveValue('1,600');
   await expect(page.locator('#ceilingBalance')).toHaveValue('2,400');
   await expect(page.locator('#dynLowAdj')).toHaveValue('-33');
-  await expect(page.locator('#glideFraction')).toHaveValue('50');
+  await expect(page.locator('#glideFraction')).toHaveValue('30');
 });
 
 test('Specific List: editing tier-0 minimum % detaches Easy Mode', async ({ page }) => {

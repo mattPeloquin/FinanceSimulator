@@ -14,8 +14,13 @@ test('Charts receive the expected data arrays (robust validation)', async ({ pag
   await disableGoalSeek(page);
 
   // Override inputs for a predictable run.
+  // Defaults leave start balance blank (Easy Mode); charts need a portfolio to run.
+  // Zero out the horizon range so every path is exactly numYears long.
   // We specify a fixed seed and 1 simulation block to keep lengths deterministic.
   // numSimulations is inside an advanced details block, open it first
+  await page.fill('#startBalance', '2000');
+  await page.fill('#horizonMinusYears', '0');
+  await page.fill('#horizonPlusYears', '0');
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
   await page.fill('#numSimulations', '100');
@@ -75,6 +80,11 @@ test('3D surface drill-down updates title and axis, then returns to overview', a
   await page.goto('/');
   await disableGoalSeek(page);
 
+  // Defaults leave start balance blank (Easy Mode); charts need a portfolio to run.
+  // Zero out the horizon range so the surface has exactly 200 × 31 points.
+  await page.fill('#startBalance', '2000');
+  await page.fill('#horizonMinusYears', '0');
+  await page.fill('#horizonPlusYears', '0');
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
   await page.fill('#numSimulations', '1000');
@@ -147,6 +157,8 @@ test('3D surface double-click triggers drill-down', async ({ page }) => {
   await page.goto('/');
   await disableGoalSeek(page);
 
+  // Defaults leave start balance blank (Easy Mode); charts need a portfolio to run.
+  await page.fill('#startBalance', '2000');
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
   await page.fill('#numSimulations', '1000');
@@ -176,6 +188,8 @@ test('3D surface tooltip shows original plan from stored bar data when hover val
   await page.goto('/');
   await disableGoalSeek(page);
 
+  // Defaults leave start balance blank (Easy Mode); charts need a portfolio to run.
+  await page.fill('#startBalance', '2000');
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
   await page.fill('#numSimulations', '1000');
@@ -291,4 +305,53 @@ test('Sample-run withdrawal chart tooltip sits beside the hovered year', async (
   expect(result.tooltipBesidePoint).toBe(true);
   expect(result.yAlign).toBe('center');
   expect(['left', 'right']).toContain(result.xAlign);
+});
+
+test('Withdrawal heatmap renders, toggles encoding, and drills into a column', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await disableGoalSeek(page);
+
+  await page.fill('#startBalance', '2000');
+  await page.click('summary:has-text("Advanced simulation settings")');
+  await page.fill('#numYears', '30');
+  await page.fill('#numSimulations', '100');
+  await page.fill('#randomSeed', '12345');
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
+
+  await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
+
+  // 100 sims: ranks 5..65 inclusive → 61 run-coherent columns, one per run.
+  // Rows span maxYears, which exceeds 30 when the default scenario carries a
+  // variable-horizon buffer.
+  const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(shape.numCols).toBe(61);
+  expect(shape.numYears).toBeGreaterThanOrEqual(30);
+  expect(shape.encoding).toBe('absolute');
+
+  // Legend describes the active (absolute $) ramp with its clamp note.
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('clamped at P2–P98');
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-absolute.png' });
+
+  // Toggle to the deviation-from-plan encoding.
+  await page.click('#withdrawalHeatmapModeDelta');
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('deviation');
+  await expect(page.locator('#withdrawalHeatmapModeDelta')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('on plan');
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-deviation.png' });
+
+  // Hovering a cell shows year, percentile, and the delta vs plan.
+  const canvas = page.locator('#withdrawalHeatmapCanvas');
+  const box = await canvas.boundingBox();
+  await canvas.hover({ position: { x: box.width / 2, y: box.height / 2 } });
+  const tip = page.locator('#withdrawalHeatmapTooltip');
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText('Year');
+  await expect(tip).toContainText('vs plan');
+
+  // Clicking a column opens the shared withdrawal-vs-plan drill-down.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapClickColumn(30));
+  await expect(page.locator('#withdrawalHeatmapDrilldown')).toBeVisible();
+  await expect(page.locator('#withdrawalHeatmapDrilldownTitle')).toHaveText(/Simulation #\d+ · P\d+/);
 });

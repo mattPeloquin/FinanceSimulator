@@ -953,6 +953,40 @@ describe('variable horizon', () => {
   });
 });
 
+describe('allYearsWithdrawals accumulator', () => {
+  it('captures every run\'s per-year withdrawals, matching regeneratePath', () => {
+    const params = lognormalParams({ numSimulations: 60, seed: 77 });
+    const result = runMonteCarlo(params);
+    const maxYears = params.numYears;
+    expect(result.allYearsWithdrawals.length).toBe(60 * maxYears);
+    for (const i of [0, 17, 59]) {
+      const re = regeneratePath(params, result.baseSeed, i);
+      const row = Array.from(result.allYearsWithdrawals.slice(i * maxYears, (i + 1) * maxYears));
+      expect(row).toEqual(re.path.withdrawals);
+      const rowSum = row.reduce((a, b) => a + b, 0);
+      expect(rowSum).toBeCloseTo(result.totalWithdrawn[i], 4);
+    }
+  });
+
+  it('pads years past each run\'s horizon with NaN under variable horizons', () => {
+    const params = lognormalParams({
+      numYears: 20,
+      maxYears: 24,
+      horizonRange: { endpoint: 20, plus: 4, minus: 2 },
+      numSimulations: 50,
+    });
+    const result = runMonteCarlo(params);
+    for (let i = 0; i < 50; i++) {
+      const h = result.horizonYears[i];
+      for (let j = 0; j < 24; j++) {
+        const v = result.allYearsWithdrawals[i * 24 + j];
+        if (j < h) expect(Number.isNaN(v)).toBe(false);
+        else expect(Number.isNaN(v)).toBe(true);
+      }
+    }
+  });
+});
+
 describe('minimum withdrawal vs plan', () => {
   function flatParams(overrides = {}) {
     return {

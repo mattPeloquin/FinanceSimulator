@@ -30,6 +30,104 @@ import {
 const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
+// Withdrawal Heatmap: cap the number of run-coherent columns. Below the cap
+// every column IS a single run; above it each column averages a narrow band of
+// adjacent ranks (≈13 runs per column at 10,000 simulations).
+const HEATMAP_MAX_COLUMNS = 480;
+
+// Robust quantile of an unsorted sample: sorts a copy, then indexes with the
+// same floor(n*p) convention as percentileIndex. Used to clamp the heatmap's
+// color domains so a few extreme gift/glide spikes don't wash out the ramp.
+function quantileOf(values, p) {
+  if (values.length === 0) return 0;
+  const sorted = Float64Array.from(values).sort();
+  return sorted[Math.min(sorted.length - 1, percentileIndex(sorted.length, p))];
+}
+
+// Aggregate the full per-run withdrawal matrix (allYearsWithdrawals, one row
+// per simulation) into the compact grid the Withdrawal Heatmap renders:
+// columns = runs ranked P5..P65 by the lifetime-withdrawal metric (run-coherent
+// — each column is one run or a narrow band of adjacent ranks, so a lean year
+// inside an otherwise-good run stays visible), rows = years, cell = mean actual
+// withdrawal that year across the column's band. Built worker-side so the raw
+// numSimulations×maxYears matrix (megabytes) never crosses to the main thread.
+export function buildWithdrawalHeatmap(result, rankW, p5Rank, p65Rank, planByYear, maxYears) {
+  const matrix = result.allYearsWithdrawals;
+  // Number of runs in the P5..P65 window (inclusive of both endpoint ranks).
+  const span = Math.max(1, p65Rank - p5Rank + 1);
+  const numCols = Math.min(HEATMAP_MAX_COLUMNS, span);
+
+  const values = new Float64Array(numCols * maxYears);
+  values.fill(NaN);
+  const colCenterRank = new Int32Array(numCols);
+  const colSimIndex = new Int32Array(numCols);
+  const colRunCount = new Int32Array(numCols);
+
+  for (let c = 0; c < numCols; c++) {
+    // Partition the rank window evenly: column c covers ranks [bandLo, bandHi).
+    // Integer rounding via floor keeps bands contiguous and non-overlapping.
+    const bandLo = p5Rank + Math.floor((c * span) / numCols);
+    const bandHi = p5Rank + Math.floor(((c + 1) * span) / numCols);
+    const bandSize = Math.max(1, bandHi - bandLo);
+    const centerRank = bandLo + Math.floor((bandSize - 1) / 2);
+    colCenterRank[c] = centerRank;
+    colSimIndex[c] = rankW[centerRank];
+    colRunCount[c] = bandSize;
+
+    for (let j = 0; j < maxYears; j++) {
+      // Mean over the band's runs, skipping NaN (a run whose sampled horizon
+      // ended before year j). Depleted-but-active years contribute their true
+      // ~$0 withdrawal — that's real data, not a gap.
+      let sum = 0;
+      let count = 0;
+      for (let r = bandLo; r < bandLo + bandSize; r++) {
+        const v = matrix[rankW[r] * maxYears + j];
+        if (!Number.isNaN(v)) {
+          sum += v;
+          count++;
+        }
+      }
+      if (count > 0) values[c * maxYears + j] = sum / count;
+    }
+  }
+
+  // Color domains, precomputed here so the renderer never touches raw data.
+  // Absolute mode clamps to the P2..P98 of finite cells; deviation mode uses a
+  // symmetric ±P98(|actual − plan|) so "on plan" always sits at the midpoint.
+  const finite = [];
+  const absDeltas = [];
+  for (let c = 0; c < numCols; c++) {
+    for (let j = 0; j < maxYears; j++) {
+      const v = values[c * maxYears + j];
+      if (!Number.isNaN(v)) {
+        finite.push(v);
+        absDeltas.push(Math.abs(v - planByYear[j]));
+      }
+    }
+  }
+  const absLo = quantileOf(finite, 0.02);
+  const absHi = quantileOf(finite, 0.98);
+
+  return {
+    numCols,
+    numYears: maxYears,
+    // Rank window + population size, kept here so the renderer can place
+    // percentile tick labels without reaching into surfaceMeta.
+    numSimulations: result.numSimulations,
+    p5Rank,
+    p65Rank,
+    // Column-major: cell (col, year) lives at values[col * numYears + year].
+    values,
+    colCenterRank,
+    colSimIndex,
+    colRunCount,
+    planByYear,
+    // Guard degenerate domains (e.g. every run withdrew the same fixed amount)
+    // so the renderer never divides by zero.
+    absDomain: { lo: absLo, hi: absHi > absLo ? absHi : absLo + 1 },
+    deltaDomain: { max: quantileOf(absDeltas, 0.98) || 1 },
+  };
+}
 
 // Build a smoothed "representative" outcome for a percentile by triangular-kernel
 // averaging the band of runs whose withdrawal rank sits within ±halfW of the
@@ -169,6 +267,13 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdrawalMetric));
   }
 
+  // The heatmap's deviation baseline: the planned schedule is a pure function
+  // of year index (growth factors accumulate by year, and specific-withdrawal
+  // lists are pre-fitted to maxYears in buildSimParams), so one per-year array
+  // is the correct plan for every run regardless of its sampled horizon.
+  const heatmapPlanByYear = Float64Array.from(plannedYearlySchedule(params.portfolio, maxYears));
+  const withdrawalHeatmap = buildWithdrawalHeatmap(result, rankW, p5i, p65i, heatmapPlanByYear, maxYears);
+
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
   const returnSummary = summarizeReturns(result.avgReturn);
   const irrSummary = summarizeReturns(result.irr);
@@ -253,6 +358,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       outcome: scatterOutcome,
       requiredIrr: Number.isNaN(requiredIrr) ? null : requiredIrr,
     },
+    withdrawalHeatmap,
     histogram,
     returnSummary,
     irrSummary,

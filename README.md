@@ -176,7 +176,9 @@ Only the paths that will actually appear on screen are regenerated in full year-
 - The **7 percentile paths** (5th–65th) for the timeline charts.
 - About **200 paths sampled evenly between the 5th and 65th percentile** for the 3D chart.
 
-When you open an individual simulation (click a dot on the sequence-risk scatter chart, or pin a column on the 3D chart), hover a year on its withdrawal chart to see how that year's spending differed from your plan — adjustments, floor lifts, gifts, balance caps, and other levers are listed in the tooltip.
+The **Withdrawal Heatmap** is the exception: it is built from *every* simulation run. The engine keeps each run's per-year withdrawals, and the worker compresses them into a compact grid — one column per run (or a narrow band of neighboring runs), ranked P5–P65 by lifetime withdrawal, one row per year. A toggle switches the color between absolute withdrawal dollars and deviation from your planned schedule (red = cut, blue = boost).
+
+When you open an individual simulation (click a dot on the sequence-risk scatter chart, a column on the withdrawal heatmap, or pin a column on the 3D chart), hover a year on its withdrawal chart to see how that year's spending differed from your plan — adjustments, floor lifts, gifts, balance caps, and other levers are listed in the tooltip.
 
 The worker then sends this compact, chart-ready package back to the page for display in cards and charts  (`src/ui/results.js` and `src/ui/charts/`).
 

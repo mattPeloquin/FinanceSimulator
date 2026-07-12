@@ -178,7 +178,7 @@ describe('computeDerivedPresetValues', () => {
     expect(out.dynLowAdj).toBe(-33);
     expect(out.dynMedAdj).toBe(0);
     expect(out.dynHighAdj).toBe(33);
-    expect(out.glideFraction).toBe(50);
+    expect(out.glideFraction).toBe(30);
     expect(out.spendingOverTimeTiers[0].extra).toBe(33);
   });
 
@@ -319,7 +319,7 @@ describe('computeDerivedPresetValues', () => {
     expect(out.ceilingBalance).toBe(2400);
     expect(out.dynLowAdj).toBe(-33);
     expect(out.dynHighAdj).toBe(33);
-    expect(out.glideFraction).toBe(50);
+    expect(out.glideFraction).toBe(30);
     expect(out.spendingOverTimeTiers).toBeUndefined();
   });
 

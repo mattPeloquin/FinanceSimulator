@@ -3,6 +3,7 @@ import { formatK, formatPercent } from './format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
 import { drawDistributionChart, drawAllYearsDistributionChart, drawIrrDistributionChart } from './charts/distribution.js';
 import { drawIrrScatter } from './charts/irrScatter.js';
+import { drawWithdrawalHeatmap } from './charts/withdrawalHeatmap.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
 import { isMedianYearlyMetric, isMeanYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
 
@@ -243,6 +244,11 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
 
   drawDistributionChart(result.histogram, result.returnSummary);
   drawIrrScatter(result.returnScatter, { params, seed: result.seed, meta: result.surfaceMeta });
+  drawWithdrawalHeatmap(result.withdrawalHeatmap, {
+    params,
+    seed: result.seed,
+    outcome: result.returnScatter.outcome,
+  });
 
   const ay = result.allYearsSummary;
   setText('allYearsMean', formatPercent(ay.mean));

@@ -173,7 +173,7 @@ function buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears
 // Run a single simulation deterministically from `rng`.
 // When `collectPath` is true the full per-year arrays are returned (used only
 // for the handful of paths we actually chart); otherwise only summary stats.
-export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0) {
+export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0, outWithdrawals = null) {
   const {
     numYears: endpointYears,
     maxYears: maxYearsParam,
@@ -607,6 +607,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
     totalWithdrawn += actualWithdrawal;
     yearlyWithdrawals[j] = actualWithdrawal;
+    // Every run's per-year actual spending (after all adjustments, gifts and
+    // glide extras) feeds the Withdrawal Heatmap — unlike the sampled chart
+    // paths, this captures all simulations. Depleted years record their true
+    // ~$0 withdrawal; only years past the run's horizon get NaN (below).
+    if (outWithdrawals) outWithdrawals[outOffset + j] = actualWithdrawal;
 
     // Shadow IRR cash flows: strip major-event outflows; inflows never entered
     // actualWithdrawal and are not added to irrBalance above.
@@ -639,6 +644,13 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   if (outRealReturns && maxYears > horizonYears) {
     for (let j = horizonYears; j < maxYears; j++) {
       outRealReturns[outOffset + j] = NaN;
+    }
+  }
+  // Same sentinel for withdrawals: NaN = "this run's horizon ended", which the
+  // heatmap must distinguish from a depleted-but-active $0 withdrawal year.
+  if (outWithdrawals && maxYears > horizonYears) {
+    for (let j = horizonYears; j < maxYears; j++) {
+      outWithdrawals[outOffset + j] = NaN;
     }
   }
 
@@ -696,13 +708,17 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const horizonYears = new Int32Array(numSimulations);
   const allYearsReturns = new Float64Array(numSimulations * maxYears);
   allYearsReturns.fill(NaN);
+  // Per-year actual withdrawal for every run (Withdrawal Heatmap source).
+  // Same layout as allYearsReturns: run i's years live at [i*maxYears, (i+1)*maxYears).
+  const allYearsWithdrawals = new Float64Array(numSimulations * maxYears);
+  allYearsWithdrawals.fill(NaN);
 
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
   for (let i = 0; i < numSimulations; i++) {
     const globalIndex = startIndex + i;
     const rng = createRng(deriveSeed(baseSeed, globalIndex));
-    const s = simulatePath(params, rng, false, allYearsReturns, i * maxYears);
+    const s = simulatePath(params, rng, false, allYearsReturns, i * maxYears, allYearsWithdrawals);
     avgReturn[i] = s.avgReturn;
     irr[i] = s.irr;
     finalBalance[i] = s.finalBalance;
@@ -731,6 +747,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     depletionYear,
     horizonYears,
     allYearsReturns,
+    allYearsWithdrawals,
   };
 }
 

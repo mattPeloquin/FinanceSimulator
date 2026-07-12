@@ -65,4 +65,19 @@ describe('stitchMonteCarloResults', () => {
     expect(Array.from(stitched.horizonYears.slice(0, 80))).toEqual(Array.from(chunkA.horizonYears));
     expect(Array.from(stitched.horizonYears.slice(80))).toEqual(Array.from(chunkB.horizonYears));
   });
+
+  it('stitches allYearsWithdrawals identical to a single-shot run', () => {
+    const params = lognormalParams({ numSimulations: 200, seed: 99 });
+    const single = runMonteCarlo(params);
+    const chunkA = runMonteCarlo({ ...params, numSimulations: 80 }, { startIndex: 0 });
+    const chunkB = runMonteCarlo({ ...params, numSimulations: 120 }, { startIndex: 80 });
+
+    const stitched = stitchMonteCarloResults(params, [
+      { startIndex: 0, numSimulations: 80, ...chunkA },
+      { startIndex: 80, numSimulations: 120, ...chunkB },
+    ]);
+
+    expect(stitched.allYearsWithdrawals.length).toBe(single.allYearsWithdrawals.length);
+    expect(Array.from(stitched.allYearsWithdrawals)).toEqual(Array.from(single.allYearsWithdrawals));
+  });
 });

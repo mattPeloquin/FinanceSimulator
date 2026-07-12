@@ -95,3 +95,82 @@ describe('buildRunResult returnScatter', () => {
     expect(counted).toBe(finite);
   });
 });
+
+describe('buildRunResult withdrawalHeatmap', () => {
+  const p = params();
+  const raw = runMonteCarlo(p);
+  const packaged = buildRunResult(p, raw);
+  const hm = packaged.withdrawalHeatmap;
+  // 300 sims: P5 rank 15, P65 rank 195 → 181-run window, under the column cap.
+  const p5 = Math.floor(300 * 0.05);
+  const p65 = Math.floor(300 * 0.65);
+  const span = p65 - p5 + 1;
+
+  it('has one column per run when the P5–P65 window fits the cap', () => {
+    expect(hm.p5Rank).toBe(p5);
+    expect(hm.p65Rank).toBe(p65);
+    expect(hm.numCols).toBe(span);
+    expect(hm.numYears).toBe(p.numYears);
+    expect(hm.numSimulations).toBe(p.numSimulations);
+    expect(hm.values.length).toBe(span * p.numYears);
+    expect(Array.from(hm.colRunCount).every((c) => c === 1)).toBe(true);
+  });
+
+  it('orders columns by ascending withdrawal rank within the window', () => {
+    for (let c = 0; c < hm.numCols; c++) {
+      expect(hm.colCenterRank[c]).toBeGreaterThanOrEqual(p5);
+      expect(hm.colCenterRank[c]).toBeLessThanOrEqual(p65);
+      if (c > 0) expect(hm.colCenterRank[c]).toBeGreaterThan(hm.colCenterRank[c - 1]);
+    }
+  });
+
+  it('cells reproduce the raw per-run withdrawals for single-run columns', () => {
+    const rankW = packaged.surfaceMeta.rankW;
+    for (const c of [0, 90, 180]) {
+      const simIndex = rankW[p5 + c];
+      expect(hm.colSimIndex[c]).toBe(simIndex);
+      for (const j of [0, 15, 29]) {
+        expect(hm.values[c * p.numYears + j]).toBe(raw.allYearsWithdrawals[simIndex * p.numYears + j]);
+      }
+    }
+  });
+
+  it('exposes the deterministic planned schedule as the deviation baseline', () => {
+    expect(Array.from(hm.planByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
+  });
+
+  it('computes finite, ordered color domains', () => {
+    expect(Number.isFinite(hm.absDomain.lo)).toBe(true);
+    expect(Number.isFinite(hm.absDomain.hi)).toBe(true);
+    expect(hm.absDomain.hi).toBeGreaterThan(hm.absDomain.lo);
+    expect(Number.isFinite(hm.deltaDomain.max)).toBe(true);
+    expect(hm.deltaDomain.max).toBeGreaterThanOrEqual(0);
+  });
+
+  it('bins adjacent ranks into averaged columns above the cap', () => {
+    const big = params({ numSimulations: 1000 });
+    const bigRaw = runMonteCarlo(big);
+    const bigPackaged = buildRunResult(big, bigRaw);
+    const bhm = bigPackaged.withdrawalHeatmap;
+    // 1000 sims: ranks 50..650 → 601-run window binned into 480 columns.
+    const bigSpan = bhm.p65Rank - bhm.p5Rank + 1;
+    expect(bigSpan).toBe(601);
+    expect(bhm.numCols).toBe(480);
+    // Bands partition the window: sizes sum to the span, none empty.
+    const total = Array.from(bhm.colRunCount).reduce((a, b) => a + b, 0);
+    expect(total).toBe(bigSpan);
+    expect(Array.from(bhm.colRunCount).every((c) => c >= 1)).toBe(true);
+    // A banded cell is the mean of its band's raw values (skipping NaN — none
+    // here since horizons are fixed).
+    const rankW = bigPackaged.surfaceMeta.rankW;
+    const c = 100;
+    const bandLo = bhm.p5Rank + Math.floor((c * bigSpan) / bhm.numCols);
+    const bandSize = bhm.colRunCount[c];
+    const j = 10;
+    let sum = 0;
+    for (let r = bandLo; r < bandLo + bandSize; r++) {
+      sum += bigRaw.allYearsWithdrawals[rankW[r] * big.numYears + j];
+    }
+    expect(bhm.values[c * big.numYears + j]).toBeCloseTo(sum / bandSize, 8);
+  });
+});

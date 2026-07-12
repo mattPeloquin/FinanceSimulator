@@ -195,8 +195,9 @@ test('Session description, Copy, and New', async ({ page }) => {
 
   await expect(sessionSelect).toHaveValue('');
   await expect(sessionNote).toBeHidden();
-  await page.waitForFunction(() => document.getElementById('startBalance').value === '3,000');
-  await expect(balanceInput).toHaveValue('3,000');
+  // Defaults leave the start balance blank (Easy Mode).
+  await page.waitForFunction(() => document.getElementById('startBalance').value === '');
+  await expect(balanceInput).toHaveValue('');
 
   // Reload saved edits from before New (original was auto-saved with 6,666)
   await sessionSelect.selectOption('Desc Test Session');
@@ -245,11 +246,12 @@ test('Unsaved session persists when switching away and back', async ({ page }) =
   await expect(balanceInput).toHaveValue('9,999');
 
   await page.click('#newSessionButton');
-  await page.waitForFunction(() => document.getElementById('startBalance').value === '3,000');
-  await expect(balanceInput).toHaveValue('3,000');
+  // Defaults leave the start balance blank (Easy Mode).
+  await page.waitForFunction(() => document.getElementById('startBalance').value === '');
+  await expect(balanceInput).toHaveValue('');
 
   await sessionSelect.selectOption('');
-  await expect(balanceInput).toHaveValue('3,000');
+  await expect(balanceInput).toHaveValue('');
 
   await sessionSelect.selectOption('Stash Test Session');
   await page.click('#deleteSessionButton');

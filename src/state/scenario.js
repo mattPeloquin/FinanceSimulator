@@ -54,7 +54,10 @@ const FIELDS = [
   field('bondAllocation', 'bondAllocation', 'float'),
   field('cashAllocation', 'cashAllocation', 'float'),
 
-  field('startBalance', 'startBalance', 'currency'),
+  // 'optionalCurrency' so the blank Easy Mode default survives a session
+  // save/restore instead of coming back as "0" (0 is never a valid start —
+  // validateScenario requires a positive amount).
+  field('startBalance', 'startBalance', 'optionalCurrency'),
   field('baseWithdrawal', 'baseWithdrawal', 'currency'),
   field('floorBalance', 'floorBalance', 'currency'),
   field('floorPenalty', 'floorPenalty', 'float'),
@@ -164,7 +167,8 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
 
   if (schemaVersion < 2) {
     for (const f of FIELDS) {
-      if (f.type === 'currency' && migrated[f.key] != null && migrated[f.key] !== '') {
+      const isCurrency = f.type === 'currency' || f.type === 'optionalCurrency';
+      if (isCurrency && migrated[f.key] != null && migrated[f.key] !== '') {
         migrated[f.key] = migrated[f.key] / MONEY_SCALE;
       }
     }

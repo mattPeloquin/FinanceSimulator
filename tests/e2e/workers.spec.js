@@ -12,6 +12,9 @@ test('High core-usage parallel workers complete a simulation in dev', async ({ p
   await page.goto('/');
   await disableGoalSeek(page);
 
+  // Defaults leave start balance blank (Easy Mode); the run needs a portfolio.
+  await page.fill('#startBalance', '2000');
+
   // In Vite serve, `?worker&inline` must resolve to a blob WorkerWrapper (virtual
   // module), not a `?worker_file` module Worker — the latter shares the page ESM
   // cache and can hang after HMR until the browser process is killed.
