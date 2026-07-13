@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runMonteCarlo } from '../src/core/simulation.js';
-import { buildRunResult, heatmapFrameMember } from '../src/core/resultPackaging.js';
+import { buildRunResult, heatmapFrameMember, bandWithdrawalHeatmap } from '../src/core/resultPackaging.js';
 import { plannedYearlySchedule } from '../src/core/goalSeek.js';
 
 const baseAllocation = {
@@ -100,25 +100,31 @@ describe('buildRunResult withdrawalHeatmap', () => {
   const p = params();
   const raw = runMonteCarlo(p);
   const packaged = buildRunResult(p, raw);
-  const hm = packaged.withdrawalHeatmap;
-  // 300 sims: the grid is built P5..P90 (ranks 15..270 → 256 runs), under the
-  // column cap; the renderer crops the displayed upper end.
+  const src = packaged.withdrawalHeatmap;
+  // 300 sims: the source holds P5..P90 (ranks 15..270 → 256 runs); the
+  // renderer rebands the active from/to window to fill the plot width.
   const p5 = Math.floor(300 * 0.05);
   const p90 = Math.floor(300 * 0.9);
   const span = p90 - p5 + 1;
 
-  it('has one column per run when the P5–P90 window fits the cap', () => {
-    expect(hm.p5Rank).toBe(p5);
-    expect(hm.hiRank).toBe(p90);
-    expect(hm.hiPercentile).toBe(90);
-    expect(hm.numCols).toBe(span);
-    expect(hm.numYears).toBe(p.numYears);
-    expect(hm.numSimulations).toBe(p.numSimulations);
-    expect(hm.values.length).toBe(span * p.numYears);
-    expect(Array.from(hm.colRunCount).every((c) => c === 1)).toBe(true);
+  it('ships a per-run source over the P5–P90 rank window', () => {
+    expect(src.p5Rank).toBe(p5);
+    expect(src.hiRank).toBe(p90);
+    expect(src.hiPercentile).toBe(90);
+    expect(src.sourceSpan).toBe(span);
+    expect(src.numYears).toBe(p.numYears);
+    expect(src.numSimulations).toBe(p.numSimulations);
+    expect(src.sourceValues.length).toBe(span * p.numYears);
+    expect(src.sourceSimIndex.length).toBe(span);
   });
 
-  it('orders columns by ascending withdrawal rank within the window', () => {
+  it('orders source rows by ascending withdrawal rank within the window', () => {
+    const rankW = packaged.surfaceMeta.rankW;
+    for (let i = 0; i < src.sourceSpan; i++) {
+      expect(src.sourceSimIndex[i]).toBe(rankW[p5 + i]);
+    }
+    // Band columns partition the same rank window in ascending order.
+    const hm = bandWithdrawalHeatmap(src, p5, p90, span);
     for (let c = 0; c < hm.numCols; c++) {
       expect(hm.colCenterRank[c]).toBeGreaterThanOrEqual(p5);
       expect(hm.colCenterRank[c]).toBeLessThanOrEqual(p90);
@@ -126,45 +132,43 @@ describe('buildRunResult withdrawalHeatmap', () => {
     }
   });
 
-  it('cells reproduce the raw per-run withdrawals for single-run columns', () => {
-    const rankW = packaged.surfaceMeta.rankW;
-    for (const c of [0, 90, 180]) {
-      const simIndex = rankW[p5 + c];
-      expect(hm.colSimIndex[c]).toBe(simIndex);
+  it('source rows reproduce the raw per-run withdrawals', () => {
+    for (const i of [0, 90, 180]) {
+      const simIndex = src.sourceSimIndex[i];
       for (const j of [0, 15, 29]) {
-        expect(hm.values[c * p.numYears + j]).toBe(raw.allYearsWithdrawals[simIndex * p.numYears + j]);
+        expect(src.sourceValues[i * p.numYears + j]).toBe(raw.allYearsWithdrawals[simIndex * p.numYears + j]);
       }
     }
   });
 
   it('exposes the deterministic planned schedule as the deviation baseline', () => {
-    expect(Array.from(hm.planByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
+    expect(Array.from(src.planByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
   });
 
-  it('ships no animation frames when every column is a single run', () => {
+  it('bands the full source 1:1 when maxCols exceeds the span', () => {
+    const hm = bandWithdrawalHeatmap(src, p5, p90, span);
+    expect(hm.numCols).toBe(span);
+    expect(Array.from(hm.colRunCount).every((c) => c === 1)).toBe(true);
     expect(hm.numFrames).toBe(1);
     expect(hm.frameValues).toBeNull();
     expect(hm.frameSimIndex).toBeNull();
   });
 
-  it('bins adjacent ranks into averaged columns above the cap', () => {
+  it('bins adjacent ranks into averaged columns when span exceeds maxCols', () => {
     const big = params({ numSimulations: 1000 });
     const bigRaw = runMonteCarlo(big);
     const bigPackaged = buildRunResult(big, bigRaw);
-    const bhm = bigPackaged.withdrawalHeatmap;
-    // 1000 sims: ranks 50..900 → 851-run window binned into 480 columns.
-    const bigSpan = bhm.hiRank - bhm.p5Rank + 1;
+    const bigSrc = bigPackaged.withdrawalHeatmap;
+    const bigSpan = bigSrc.hiRank - bigSrc.p5Rank + 1;
     expect(bigSpan).toBe(851);
+    const bhm = bandWithdrawalHeatmap(bigSrc, bigSrc.p5Rank, bigSrc.hiRank, 480);
     expect(bhm.numCols).toBe(480);
-    // Bands partition the window: sizes sum to the span, none empty.
     const total = Array.from(bhm.colRunCount).reduce((a, b) => a + b, 0);
     expect(total).toBe(bigSpan);
     expect(Array.from(bhm.colRunCount).every((c) => c >= 1)).toBe(true);
-    // A banded cell is the mean of its band's raw values (skipping NaN — none
-    // here since horizons are fixed).
     const rankW = bigPackaged.surfaceMeta.rankW;
     const c = 100;
-    const bandLo = bhm.p5Rank + Math.floor((c * bigSpan) / bhm.numCols);
+    const bandLo = bigSrc.p5Rank + Math.floor((c * bigSpan) / bhm.numCols);
     const bandSize = bhm.colRunCount[c];
     const j = 10;
     let sum = 0;
@@ -173,9 +177,6 @@ describe('buildRunResult withdrawalHeatmap', () => {
     }
     expect(bhm.values[c * big.numYears + j]).toBeCloseTo(sum / bandSize, 8);
 
-    // Animation frames: one per band member (851 runs / 480 columns → bands
-    // of 1–2 → 2 frames), each frame carrying a real run's raw withdrawals
-    // and its sim index.
     expect(bhm.numFrames).toBe(2);
     expect(bhm.frameValues.length).toBe(2 * bhm.numCols * big.numYears);
     expect(bhm.frameSimIndex.length).toBe(2 * bhm.numCols);
@@ -184,9 +185,17 @@ describe('buildRunResult withdrawalHeatmap', () => {
       const simIndex = rankW[bandLo + member];
       expect(bhm.frameSimIndex[f * bhm.numCols + c]).toBe(simIndex);
       const cell = bhm.frameValues[(f * bhm.numCols + c) * big.numYears + j];
-      // Float32 storage: compare within single-precision tolerance.
       expect(cell).toBeCloseTo(bigRaw.allYearsWithdrawals[simIndex * big.numYears + j], 0);
     }
+  });
+
+  it('rebands a narrower percentile window to maxCols', () => {
+    const p65 = Math.floor(300 * 0.65);
+    const windowSpan = p65 - p5 + 1;
+    const hm = bandWithdrawalHeatmap(src, p5, p65, 480);
+    expect(hm.numCols).toBe(windowSpan);
+    expect(hm.loRank).toBe(p5);
+    expect(hm.windowHiRank).toBe(p65);
   });
 });
 

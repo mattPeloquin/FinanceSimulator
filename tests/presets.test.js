@@ -48,6 +48,11 @@ describe('preset files', () => {
     }
   });
 
+  it('steps Specific List minimum % down from conservative to aggressive', () => {
+    const floors = PRESETS.map((p) => p.derived.specificMinPctOfPlan);
+    expect(floors).toEqual([90, 80, 70, 60, 50]);
+  });
+
   it('steps max consecutive minimums up from conservative to aggressive', () => {
     const streaks = PRESETS.map((p) => p.scenario.maxConsecutiveMinWithdrawals);
     expect(streaks).toEqual([2, 2, 3, 3, 4]);
@@ -290,7 +295,7 @@ describe('computeDerivedPresetValues', () => {
       specificWithdrawalFloors: [],
     });
     expect(out.withdrawalFloors).toBeUndefined();
-    expect(out.specificWithdrawalFloors).toEqual([{ pct: 56 }]);
+    expect(out.specificWithdrawalFloors).toEqual([{ pct: 70 }]);
   });
 
   it('patches only tier 0 of Specific List minimum floors', () => {
@@ -298,9 +303,26 @@ describe('computeDerivedPresetValues', () => {
       startThousands: 3000,
       numYears: 25,
       withdrawalStrategy: 'specific',
-      specificWithdrawalFloors: [{ pct: 90, years: 5 }, { pct: 70 }],
+      specificWithdrawalFloors: [{ pct: 90, years: 5 }, { pct: 40 }],
     });
-    expect(out.specificWithdrawalFloors).toEqual([{ pct: 56, years: 5 }, { pct: 70 }]);
+    expect(out.specificWithdrawalFloors).toEqual([{ pct: 70, years: 5 }, { pct: 40 }]);
+  });
+
+  it('Specific List minimum % does not change with horizon', () => {
+    const at25 = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 25,
+      withdrawalStrategy: 'specific',
+      specificWithdrawalFloors: [],
+    });
+    const at50 = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 50,
+      withdrawalStrategy: 'specific',
+      specificWithdrawalFloors: [],
+    });
+    expect(at25.specificWithdrawalFloors).toEqual([{ pct: 70 }]);
+    expect(at50.specificWithdrawalFloors).toEqual([{ pct: 70 }]);
   });
 
   it('fills shared plan fields for Specific List without base withdrawal or spending extras', () => {

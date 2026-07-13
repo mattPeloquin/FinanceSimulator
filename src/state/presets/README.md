@@ -41,10 +41,10 @@ Each file has two sections:
     `ceilingBalanceMultipleOfStart`, `floorPenalty`, `ceilingBonus`,
     `dynAdjPctOfBase.low/med/high` (% of base withdrawal), `spendingExtraPctOfBase`
     (tier-0 go-go extra as % of base), `glideFraction`
-  - **Specific List minimum (Easy Mode, any Find Best Plan state):** tier-0
-    `specificWithdrawalFloors` pct = `(minWithdrawalLifetimePctOfStart / numYears)
-    / baseWithdrawalPctOfStart × 100`, clamped 0–99. The typed year-by-year list
-    is never filled or scaled by the slider.
+  - `specificMinPctOfPlan` — Specific List Easy Mode minimum: tier-0
+    `specificWithdrawalFloors` pct of each year's typed plan amount (90 / 80 /
+    70 / 60 / 50 from Conservative → Aggressive), clamped 0–99. Independent of
+    horizon. The typed year-by-year list is never filled or scaled by the slider.
 
 When **Use easy mode** is on and **Find Best Plan** is off, the slider fills the full
 spending plan from those derived keys (Base strategy) or the shared guardrail/

@@ -27,9 +27,16 @@ export function setupAccordionResize() {
     details.addEventListener('toggle', () => {
       if (details.id) setAccordionOpen(details.id, details.open);
       if (!details.open) return;
+      // Charts created while this accordion was closed may never have painted
+      // (0×0 canvas). Resize existing instances, and rebuild the schedule
+      // sparklines so an Easy Mode minimum written while collapsed shows up.
       details.querySelectorAll('canvas').forEach((canvas) => {
         Chart.getChart(canvas)?.resize();
       });
+      if (details.id === 'section-withdrawal') {
+        syncBaseWithdrawalPreview();
+        syncWithdrawalPreviewFromForm();
+      }
     });
   });
 }

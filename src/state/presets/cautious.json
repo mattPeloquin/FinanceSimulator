@@ -26,6 +26,7 @@
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 75,
+    "specificMinPctOfPlan": 80,
     "gifting": {
       "amountPctOfStart": 0.75,
       "balanceMultipleOfStart": 1

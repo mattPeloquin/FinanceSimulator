@@ -14,8 +14,9 @@
 // Rendered straight to a canvas: cells are painted into an offscreen canvas
 // (one pixel column per data column, VSS sub-pixels per year), then blitted
 // with nearest-neighbor so columns stay crisp horizontally. Data arrives
-// pre-aggregated from resultPackaging.buildWithdrawalHeatmap — the renderer
-// never touches the raw per-run matrix.
+// pre-aggregated from resultPackaging — the renderer rebands the per-run
+// source to fill the plot width for the active Show from/to window.
+import { bandWithdrawalHeatmap } from '../../core/resultPackaging.js';
 import { Chart } from './chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
 import { getChartTheme, chartJsCartesianScales, sampleRunTooltipOptions } from './chartTheme.js';
@@ -91,16 +92,27 @@ function lerpRgb(a, b, t) {
   ];
 }
 
+// Below-arm length for color transfer: at least as long as the above arm.
+// Cuts are often a smaller dollar range than boosts; if we normalized orange
+// against the shallow cut end alone, a modest −$33k would hit peak burnt
+// orange while +$33k on a +$169k indigo arm still looked pale. Flooring the
+// below end at `hi` keeps those colors matched — peak orange only appears
+// once the cut side itself exceeds the top range (lo > hi).
+export function belowArmEnd(domain) {
+  return Math.max(domain.lo, domain.hi);
+}
+
 // Anchored diverging cell color. `delta` = actual − anchor; negative runs
 // down the orange arm, positive up the indigo arm, zero sits exactly on the
 // mode's neutral midpoint. The domain is ASYMMETRIC — `{lo, hi}` with lo
-// stored positive — because cuts are bounded while boosts are not: each arm
-// normalizes against its own end, then gamma easing (< 1) accelerates color
-// onset near the anchor. Deltas beyond the domain clamp to the poles.
+// stored positive — because cuts are bounded while boosts are not. The above
+// arm normalizes against `hi`; the below arm against max(lo, hi) so a shallow
+// cut range never saturates orange early. Gamma easing (< 1) accelerates
+// color onset near the anchor. Deltas beyond each arm's end clamp to the poles.
 export function divergingRgb(delta, domain, isDark = isDarkMode()) {
   const arms = ARM_RGB[isDark ? 'dark' : 'light'];
   const below = delta < 0;
-  const end = below ? domain.lo : domain.hi;
+  const end = below ? belowArmEnd(domain) : domain.hi;
   const t = Math.min(1, end > 0 ? Math.abs(delta) / end : 0);
   const eased = t ** (below ? GAMMA.below : GAMMA.above);
   const stops = below ? arms.below : arms.above;
@@ -236,7 +248,9 @@ export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, me
 }
 
 const state = {
-  heatmap: null,
+  source: null, // per-run P5..P90 source from resultPackaging (immutable per run)
+  heatmap: null, // width-aware band for the active from/to window
+  bandKey: null, // cache key: loRank:hiRank:maxCols
   params: null,
   seed: null,
   outcome: null, // per-sim outcome tags from returnScatter (0 met / 1 below / 2 ran out)
@@ -304,12 +318,15 @@ export function windowAnchorSeries(values, colRunCount, numYears, start, end) {
   return { mean, median: medianArr };
 }
 
-// Asymmetric color clamps from the visible window's cell deltas: the below
-// arm saturates at |P2| while the above arm saturates at P(upper axis + 3),
-// so widening the axis re-spreads the indigo range over the newly shown
-// better runs. Each side guards against a degenerate spread so the renderer
-// never divides by zero. Exported pure for unit tests.
-export function windowDeltaDomain(values, anchor, numYears, start, end, upperPct) {
+// Color clamps from the visible window's cell deltas. Mean/median anchors are
+// already recomputed for the from/to crop, so the delta cloud is roughly
+// centered on zero — both arms therefore use mirrored tails (|P2| and P98)
+// instead of the outcome-axis "show to" percentile. (Coupling hi to that
+// slider used to clip indigo at ~P68 whenever the axis sat at P65, so the
+// spectrum only looked centered at the full P5–P90 window.) Each side guards
+// against a degenerate spread so the renderer never divides by zero.
+// Exported pure for unit tests.
+export function windowDeltaDomain(values, anchor, numYears, start, end) {
   const deltas = [];
   for (let c = start; c < end; c++) {
     for (let j = 0; j < numYears; j++) {
@@ -321,27 +338,54 @@ export function windowDeltaDomain(values, anchor, numYears, start, end, upperPct
   const q = (p) => (deltas.length ? deltas[Math.min(deltas.length - 1, Math.floor((deltas.length * p) / 100))] : 0);
   return {
     lo: Math.max(1, -q(2)),
-    hi: Math.max(1, q(Math.min(100, Math.round(upperPct) + 3))),
+    hi: Math.max(1, q(98)),
   };
 }
 
-// The rank a given outcome percentile maps to, clamped to the built window.
+// The rank a given outcome percentile maps to, clamped to the built source window.
 function rankAtPct(pct) {
-  const hm = state.heatmap;
-  return Math.max(hm.p5Rank, Math.min(hm.hiRank, Math.floor((hm.numSimulations * pct) / 100)));
+  const src = state.source;
+  if (!src) return 0;
+  return Math.max(src.p5Rank, Math.min(src.hiRank, Math.floor((src.numSimulations * pct) / 100)));
 }
 
-// The slice of built columns the "show from/to" sliders display: the grid is
-// built P5..P{hiPercentile}, and columns partition the rank window evenly, so
-// cropping both ends is proportional.
+// Reband the source to fill the plot for the current from/to window. Skips
+// work when loRank, hiRank, and maxCols are unchanged (slider drags / resize).
+function ensureBanded(canvas) {
+  if (!state.source || !canvas) return false;
+  const geom = plotGeometry(canvas);
+  const maxCols = Math.max(1, Math.floor(geom.plotW));
+  const loRank = rankAtPct(state.lowerPct);
+  const hiRank = rankAtPct(state.upperPct);
+  const key = `${loRank}:${hiRank}:${maxCols}`;
+  if (state.bandKey === key && state.heatmap) return false;
+
+  const prevCols = state.heatmap?.numCols ?? 0;
+  state.heatmap = bandWithdrawalHeatmap(state.source, loRank, hiRank, maxCols);
+  state.bandKey = key;
+  state.windowAnchors = null;
+  state.windowAnchorsKey = null;
+  state.windowDomain = null;
+  state.windowDomainKey = null;
+  state.offscreen = null;
+  state.offscreenKey = null;
+
+  if (state.heatmap.numCols !== prevCols) {
+    state.randomAssign = null;
+    state.frame = 0;
+    if (state.selectedCol != null && state.selectedCol >= state.heatmap.numCols) {
+      state.selectedCol = null;
+      state.selectedSimIndex = null;
+    }
+  }
+  return true;
+}
+
+// All banded columns are painted — no cropping of a pre-built grid.
 function visibleRange() {
   const hm = state.heatmap;
-  const span = hm.hiRank - hm.p5Rank + 1;
-  const startRank = rankAtPct(state.lowerPct);
-  const endRank = rankAtPct(state.upperPct);
-  const start = Math.min(hm.numCols - 1, Math.round(hm.numCols * ((startRank - hm.p5Rank) / span)));
-  const end = Math.max(start + 1, Math.min(hm.numCols, Math.round(hm.numCols * ((endRank - hm.p5Rank + 1) / span))));
-  return { start, end, count: end - start };
+  if (!hm) return { start: 0, end: 0, count: 0 };
+  return { start: 0, end: hm.numCols, count: hm.numCols };
 }
 
 // Window-local anchors, cached per visible range: the mean/median the colors
@@ -365,9 +409,9 @@ function anchorInfo() {
   const { start, end } = visibleRange();
   const anchors = windowAnchors();
   const anchor = state.encoding === 'plan' ? hm.planByYear : state.encoding === 'median' ? anchors.median : anchors.mean;
-  const key = `${state.encoding}:${start}:${end}:${state.upperPct}`;
+  const key = `${state.encoding}:${start}:${end}`;
   if (!state.windowDomain || state.windowDomainKey !== key) {
-    state.windowDomain = windowDeltaDomain(hm.values, anchor, hm.numYears, start, end, state.upperPct);
+    state.windowDomain = windowDeltaDomain(hm.values, anchor, hm.numYears, start, end);
     state.windowDomainKey = key;
   }
   return { anchor, domain: state.windowDomain };
@@ -416,9 +460,9 @@ function cellValue(col, year) {
 function buildOffscreen() {
   const hm = state.heatmap;
   const isDark = isDarkMode();
-  const { start, end, count } = visibleRange();
+  const { count } = visibleRange();
   const displayKey = isPlaying() ? `t${state.tick}` : state.frame > 0 ? `f${state.frame}` : 'avg';
-  const key = `${state.encoding}:${isDark ? 'dark' : 'light'}:${displayKey}:w${state.lowerPct}-${state.upperPct}`;
+  const key = `${state.encoding}:${isDark ? 'dark' : 'light'}:${displayKey}:w${state.lowerPct}-${state.upperPct}:${count}`;
   if (state.offscreen && state.offscreenKey === key) return state.offscreen;
 
   const { anchor, domain } = anchorInfo();
@@ -431,7 +475,7 @@ function buildOffscreen() {
   const data = img.data;
   const deltas = new Float64Array(hm.numYears);
 
-  for (let c = start; c < end; c++) {
+  for (let c = 0; c < hm.numCols; c++) {
     for (let j = 0; j < hm.numYears; j++) {
       const v = cellValue(c, j);
       deltas[j] = Number.isNaN(v) ? NaN : v - anchor[j];
@@ -439,8 +483,8 @@ function buildOffscreen() {
     const sub = smoothColumnSeries(deltas, VSS);
     for (let s = 0; s < rows; s++) {
       // Sub-sample s counts up from year 1 at the bottom; ImageData rows count
-      // down from the top. Pixel column is window-relative.
-      const p = ((rows - 1 - s) * count + (c - start)) * 4;
+      // down from the top.
+      const p = ((rows - 1 - s) * count + c) * 4;
       const d = sub[s];
       if (Number.isNaN(d)) {
         data[p + 3] = 0;
@@ -523,17 +567,16 @@ function drawAxes(ctx, theme, geom, layout) {
 function cellRect(geom, col, year) {
   const hm = state.heatmap;
   const layout = state.rowLayout ?? heatmapRowLayout(hm.numYears, state.emphasis);
-  const { start, count } = visibleRange();
+  const { count } = visibleRange();
   const w = geom.plotW / count;
   const top = geom.plotY + geom.plotH * (1 - layout[year + 1]);
   const bottom = geom.plotY + geom.plotH * (1 - layout[year]);
-  return { x: geom.plotX + (col - start) * w, y: top, w, h: bottom - top };
+  return { x: geom.plotX + col * w, y: top, w, h: bottom - top };
 }
 
 function drawHighlights(ctx, theme, geom) {
-  const { start, end } = visibleRange();
   // Selected column: a full-height outline so the drilled-down run stays located.
-  if (state.selectedCol != null && state.selectedCol >= start && state.selectedCol < end) {
+  if (state.selectedCol != null && state.selectedCol < state.heatmap.numCols) {
     const r = cellRect(geom, state.selectedCol, 0);
     ctx.strokeStyle = theme.accent;
     ctx.lineWidth = 1.5;
@@ -550,7 +593,9 @@ function drawHighlights(ctx, theme, geom) {
 
 function draw() {
   const canvas = document.getElementById('withdrawalHeatmapCanvas');
-  if (!canvas || !state.heatmap) return;
+  if (!canvas || !state.source) return;
+  ensureBanded(canvas);
+  if (!state.heatmap) return;
   const geom = plotGeometry(canvas);
   if (geom.plotW <= 0 || geom.plotH <= 0) return;
 
@@ -589,7 +634,9 @@ function draw() {
 }
 
 // CSS gradient that mirrors the actual (asymmetric, gamma-eased) color
-// transfer by sampling it left-to-right across [−lo, +hi].
+// transfer by sampling it left-to-right across [−lo, +hi]. When lo < hi the
+// left side only reaches a fraction of the orange pole — matching cells that
+// normalize below against max(lo, hi).
 function legendGradient(domain) {
   const stops = [];
   const K = 12;
@@ -692,7 +739,7 @@ function syncControlUi() {
     frameEl.disabled = state.speed > 0;
   }
   const frameLabel = document.getElementById('withdrawalHeatmapFrameLabel');
-  if (frameLabel) frameLabel.textContent = state.frame === 0 ? 'Avg' : `${state.frame}/${hm.numFrames}`;
+  if (frameLabel) frameLabel.textContent = state.frame === 0 ? 'Avg' : `${state.frame}/${hm?.numFrames ?? 0}`;
 
   const speedEl = document.getElementById('withdrawalHeatmapSpeed');
   if (speedEl) speedEl.value = String(state.speed);
@@ -769,22 +816,18 @@ function setEmphasis(v) {
   draw();
 }
 
-// "Show from"/"show to": move the x axis's outcome-percentile window. The
-// grid is pre-built P5..hiPercentile, so this only re-crops columns and
-// re-derives the window-local anchors and color clamps — no worker round-trip.
+// "Show from"/"show to": reband the source to fill the plot for the new
+// percentile window — no worker round-trip.
 function afterWindowChange() {
-  // A previously selected column may fall outside the moved window.
-  const { start, end } = visibleRange();
-  if (state.selectedCol != null && (state.selectedCol < start || state.selectedCol >= end)) {
-    state.selectedCol = null;
-  }
+  const canvas = document.getElementById('withdrawalHeatmapCanvas');
+  ensureBanded(canvas);
   syncControlUi();
   renderLegend();
   draw();
 }
 
 function setLowerPct(v) {
-  if (!state.heatmap) return;
+  if (!state.source) return;
   const next = Math.max(5, Math.min(30, Math.round(v) || 5));
   if (state.lowerPct === next) return;
   state.lowerPct = next;
@@ -792,8 +835,7 @@ function setLowerPct(v) {
 }
 
 function setUpperPct(v) {
-  const hm = state.heatmap;
-  const cap = hm?.hiPercentile ?? 90;
+  const cap = state.source?.hiPercentile ?? 90;
   const next = Math.max(65, Math.min(cap, Math.round(v) || 65));
   if (state.upperPct === next) return;
   state.upperPct = next;
@@ -804,9 +846,8 @@ function hitTest(ev) {
   const canvas = document.getElementById('withdrawalHeatmapCanvas');
   if (!canvas || !state.heatmap || !state.geom) return null;
   const rect = canvas.getBoundingClientRect();
-  const { start, count } = visibleRange();
-  const rel = heatmapColumnAtX(ev.clientX - rect.left, state.geom, count);
-  const col = rel < 0 ? -1 : start + rel;
+  const { count } = visibleRange();
+  const col = heatmapColumnAtX(ev.clientX - rect.left, state.geom, count);
   const year = heatmapYearAtY(ev.clientY - rect.top, state.geom, state.heatmap.numYears, state.rowLayout);
   if (col < 0 || year < 0) return null;
   // NaN cells (past the displayed run's/band's horizon) are not interactive.
@@ -978,8 +1019,8 @@ function onMouseLeave() {
 }
 
 function selectColumn(col) {
-  const { start, end } = visibleRange();
-  if (col < start || col >= end) return;
+  const hm = state.heatmap;
+  if (!hm || col < 0 || col >= hm.numCols) return;
   state.selectedCol = col;
   // Pin the run that was on screen at click time — during replay the column
   // keeps changing, but the drill-down is a snapshot of that run.
@@ -1015,15 +1056,24 @@ function bindEvents(canvas) {
     ?.addEventListener('input', (ev) => setLowerPct(Number(ev.target.value)));
   document.getElementById('withdrawalHeatmapUpper')
     ?.addEventListener('input', (ev) => setUpperPct(Number(ev.target.value)));
-  state.resizeObserver = new ResizeObserver(() => draw());
+  state.resizeObserver = new ResizeObserver(() => {
+    const rebanded = ensureBanded(canvas);
+    if (rebanded) {
+      syncControlUi();
+      renderLegend();
+    }
+    draw();
+  });
   state.resizeObserver.observe(canvas.parentElement);
   state.eventsBound = true;
 }
 
-export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
+export function drawWithdrawalHeatmap(source, { params, seed, outcome } = {}) {
   const canvas = document.getElementById('withdrawalHeatmapCanvas');
-  if (!canvas || !heatmap) return;
-  state.heatmap = heatmap;
+  if (!canvas || !source) return;
+  state.source = source;
+  state.heatmap = null;
+  state.bandKey = null;
   state.params = params ?? null;
   state.seed = seed ?? null;
   state.outcome = outcome ?? null;
@@ -1053,6 +1103,7 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
   }
   document.getElementById('withdrawalHeatmapDrilldown')?.classList.add('hidden');
   bindEvents(canvas);
+  ensureBanded(canvas);
   syncToggleUi();
   syncControlUi();
   renderLegend();
@@ -1060,19 +1111,51 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
 
   if (typeof window !== 'undefined') {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
-    window.__TEST_HOOKS__.withdrawalHeatmap = () => ({
-      numCols: state.heatmap.numCols,
-      visibleCols: visibleRange().count,
-      numYears: state.heatmap.numYears,
-      encoding: state.encoding,
-      numFrames: state.heatmap.numFrames,
-      frame: state.frame,
-      speed: state.speed,
-      playing: isPlaying(),
-      emphasis: state.emphasis,
-      lowerPct: state.lowerPct,
-      upperPct: state.upperPct,
-    });
+    window.__TEST_HOOKS__.withdrawalHeatmap = () => {
+      const canvas = document.getElementById('withdrawalHeatmapCanvas');
+      const geom = canvas ? plotGeometry(canvas) : { plotW: 0 };
+      const { start, end, count } = visibleRange();
+      const { domain } = anchorInfo();
+      const anchors = windowAnchors();
+      const loRank = rankAtPct(state.lowerPct);
+      const hiRank = rankAtPct(state.upperPct);
+      const rankSpan = Math.max(1, hiRank - loRank + 1);
+      // Weighted mean of (cell − year-mean) over the banded columns.
+      let signed = 0;
+      let weight = 0;
+      const hm = state.heatmap;
+      for (let c = start; c < end; c++) {
+        const w = hm.colRunCount[c];
+        for (let j = 0; j < hm.numYears; j++) {
+          const v = hm.values[c * hm.numYears + j];
+          const a = anchors.mean[j];
+          if (!Number.isNaN(v) && !Number.isNaN(a)) {
+            signed += (v - a) * w;
+            weight += w;
+          }
+        }
+      }
+      return {
+        sourceSpan: state.source?.sourceSpan ?? 0,
+        rankSpan,
+        plotW: Math.floor(geom.plotW),
+        numCols: hm?.numCols ?? 0,
+        visibleCols: count,
+        numYears: hm?.numYears ?? 0,
+        encoding: state.encoding,
+        numFrames: hm?.numFrames ?? 1,
+        frame: state.frame,
+        speed: state.speed,
+        playing: isPlaying(),
+        emphasis: state.emphasis,
+        lowerPct: state.lowerPct,
+        upperPct: state.upperPct,
+        domainLo: domain.lo,
+        domainHi: domain.hi,
+        year0Mean: anchors.mean[0],
+        meanDeltaBias: weight > 0 ? signed / weight : 0,
+      };
+    };
     window.__TEST_HOOKS__.withdrawalHeatmapSetEncoding = (mode) => setEncoding(mode);
     window.__TEST_HOOKS__.withdrawalHeatmapClickColumn = (col) => selectColumn(col);
     window.__TEST_HOOKS__.withdrawalHeatmapSetFrame = (k) => setFrame(k);
@@ -1084,7 +1167,7 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
 }
 
 onThemeChange(() => {
-  if (!state.heatmap) return;
+  if (!state.source) return;
   renderLegend();
   draw();
   if (state.selectedCol != null && state.pathChart) {

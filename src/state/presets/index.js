@@ -131,8 +131,9 @@ function isPositiveFinite(n) {
  *                    spendingOverTimeTiers — the CURRENT tier lists to patch
  *                    (arrays; may be empty/missing).
  *   withdrawalStrategy — 'base' (default) or 'specific'. Under Specific List,
- *                        minimum floors are % of each year's plan amount, not
- *                        absolute $; spending-over-time tiers are not patched.
+ *                        minimum floors are preset % of each year's plan amount
+ *                        (specificMinPctOfPlan), not absolute $; spending-over-
+ *                        time tiers are not patched.
  *   includePlanFields — when true and start > 0, also compute the full spending
  *                       plan (base withdrawal, guardrails, adjustments, glide
  *                       fraction, tier-0 extra). Used when Easy Mode is on and
@@ -157,49 +158,50 @@ export function computeDerivedPresetValues(preset, {
   const hasYears = isPositiveFinite(numYears);
   const isSpecific = withdrawalStrategy === 'specific';
 
-  // --- Minimum withdrawal: first tier = a lifetime floor spread over the
-  // horizon. lifetimePctOfStart is the total minimum spending (as % of start)
-  // guaranteed across all years; the annual amount is that total ÷ years.
-  // e.g. Balanced 70% of a 3,000 start over 35 years → 60/yr.
+  // --- Minimum withdrawal (Base strategy): first tier = a lifetime floor
+  // spread over the horizon. lifetimePctOfStart is the total minimum spending
+  // (as % of start) guaranteed across all years; the annual amount is that
+  // total ÷ years. e.g. Balanced 70% of a 3,000 start over 35 years → 60/yr.
   // Conservative uses a higher lifetime % (steadier cash flow); Aggressive a
   // lower one (more willing to cut spending in bad markets). The absolute
   // levels stay modest so Conservative's high success + high ending-balance
   // targets remain Goal-Seek feasible.
-  //
-  // Under Specific List the same lifetime guarantee is expressed as a % of
-  // each year's typed plan amount: (lifetimePct / years) / baseWithdrawalPct
-  // × 100, clamped below 100. e.g. Balanced @ 25 years → ~56%.
   if (
-    hasStart
+    !isSpecific
+    && hasStart
     && hasYears
     && isPositiveFinite(d.minWithdrawalLifetimePctOfStart)
   ) {
-    if (isSpecific) {
-      const basePct = d.baseWithdrawalPctOfStart;
-      if (isPositiveFinite(basePct)) {
-        const rawPct = (d.minWithdrawalLifetimePctOfStart / numYears / basePct) * 100;
-        const pct = Math.min(99, Math.max(0, Math.round(rawPct)));
-        const floors = specificWithdrawalFloors.map((t) => ({ ...t }));
-        if (floors.length === 0) {
-          floors.push({ pct });
-        } else {
-          floors[0] = { ...floors[0], pct };
-        }
-        out.specificWithdrawalFloors = floors;
-      }
+    const amount = Math.max(
+      0,
+      Math.round(startThousands * (d.minWithdrawalLifetimePctOfStart / 100) / numYears),
+    );
+    const floors = withdrawalFloors.map((t) => ({ ...t }));
+    if (floors.length === 0) {
+      floors.push({ amount });
     } else {
-      const amount = Math.max(
-        0,
-        Math.round(startThousands * (d.minWithdrawalLifetimePctOfStart / 100) / numYears),
-      );
-      const floors = withdrawalFloors.map((t) => ({ ...t }));
-      if (floors.length === 0) {
-        floors.push({ amount });
-      } else {
-        floors[0] = { ...floors[0], amount };
-      }
-      out.withdrawalFloors = floors;
+      floors[0] = { ...floors[0], amount };
     }
+    out.withdrawalFloors = floors;
+  }
+
+  // --- Minimum withdrawal (Specific List): tier-0 pct is a fixed % of each
+  // year's typed plan amount from the preset (specificMinPctOfPlan). Higher
+  // on Conservative (steadier floor), lower on Aggressive. Independent of
+  // horizon and start size; clamped below 100 so the floor cannot erase cuts.
+  if (
+    isSpecific
+    && hasStart
+    && Number.isFinite(d.specificMinPctOfPlan)
+  ) {
+    const pct = Math.min(99, Math.max(0, Math.round(d.specificMinPctOfPlan)));
+    const floors = specificWithdrawalFloors.map((t) => ({ ...t }));
+    if (floors.length === 0) {
+      floors.push({ pct });
+    } else {
+      floors[0] = { ...floors[0], pct };
+    }
+    out.specificWithdrawalFloors = floors;
   }
 
   // --- Gifting: first tier gives Y% of start each year, but only while the

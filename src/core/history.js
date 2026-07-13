@@ -136,6 +136,50 @@ export function profilesToScenarioFields(profiles) {
   };
 }
 
+// Convert one year's nominal total return (%) and inflation (%) into a real
+// (purchasing-power) return (%): how much the investment grew after prices rose.
+export function toRealReturnPct(nominalPct, inflationPct) {
+  return ((1 + nominalPct / 100) / (1 + inflationPct / 100) - 1) * 100;
+}
+
+// Arithmetic average of real annual returns (%) across a year range.
+export function averageRealReturn(nominalSeries, inflationSeries) {
+  if (!nominalSeries?.length || !inflationSeries?.length) return null;
+  if (nominalSeries.length !== inflationSeries.length) return null;
+  let sum = 0;
+  for (let i = 0; i < nominalSeries.length; i++) {
+    sum += toRealReturnPct(nominalSeries[i], inflationSeries[i]);
+  }
+  return sum / nominalSeries.length;
+}
+
+// Min/max of values that drive the sparkline Y axis: the asset series, inflation
+// overlay, and the zero line. Matches Chart.js auto-scale for those datasets.
+export function sparklineRange(assetSeries, inflationSeries) {
+  if (!assetSeries?.length) return null;
+  let min = 0;
+  let max = 0;
+  for (let i = 0; i < assetSeries.length; i++) {
+    const assetReturn = assetSeries[i];
+    const inflation = inflationSeries?.[i] ?? 0;
+    if (assetReturn < min) min = assetReturn;
+    if (assetReturn > max) max = assetReturn;
+    if (inflation < min) min = inflation;
+    if (inflation > max) max = inflation;
+  }
+  return { min, max };
+}
+
+// Where the zero line sits on the sparkline, as % from the top of the chart.
+// Used to park min/max labels just above/below the axis (and to shift the
+// sparkline so that axis lines up with the allocation % field).
+export function sparklineZeroTopPct(range) {
+  if (!range) return 50;
+  const { min, max } = range;
+  if (max === min) return 50;
+  return ((max - 0) / (max - min)) * 100;
+}
+
 // Per-year series for the allocation mini-charts.
 export function getMiniChartSeries(startYear, endYear, data = historicalData) {
   const years = Object.keys(data)

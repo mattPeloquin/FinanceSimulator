@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  belowArmEnd,
   divergingColor,
   heatmapColumnAtX,
   heatmapYearAtY,
@@ -16,18 +17,34 @@ function channels(rgb) {
 }
 
 describe('divergingColor (asymmetric PuOr transfer)', () => {
-  const dom = { lo: 10_000, hi: 40_000 };
+  // Shallow cuts vs deep boosts — the common case the below-arm floor fixes.
+  const shallowLo = { lo: 33_000, hi: 169_000 };
+  // Deep cuts vs smaller boosts — below arm uses its own lo end.
+  const deepLo = { lo: 40_000, hi: 10_000 };
+  const dom = shallowLo;
 
   it('returns the mode-specific neutral midpoint exactly on the anchor', () => {
     expect(divergingColor(0, dom, false)).toBe('rgb(247, 247, 247)'); // #f7f7f7 (light)
     expect(divergingColor(0, dom, true)).toBe('rgb(61, 61, 61)'); // #3d3d3d (dark)
   });
 
-  it('reaches the poles at each arm’s own domain end', () => {
-    expect(divergingColor(-dom.lo, dom, false)).toBe('rgb(230, 97, 1)'); // #e66101
-    expect(divergingColor(dom.hi, dom, false)).toBe('rgb(94, 60, 153)'); // #5e3c99
-    expect(divergingColor(-dom.lo, dom, true)).toBe('rgb(230, 97, 1)');
-    expect(divergingColor(dom.hi, dom, true)).toBe('rgb(94, 60, 153)');
+  it('floors the below arm at the above arm so shallow cuts do not peak early', () => {
+    expect(belowArmEnd(shallowLo)).toBe(169_000);
+    expect(belowArmEnd(deepLo)).toBe(40_000);
+    // −33k on a +169k above arm matches coloring as if the spectrum ran to −169k.
+    expect(divergingColor(-33_000, shallowLo, false)).toBe(divergingColor(-33_000, { lo: 169_000, hi: 169_000 }, false));
+    // Peak orange only once |delta| reaches the floored below end (= hi here).
+    expect(divergingColor(-shallowLo.hi, shallowLo, false)).toBe('rgb(230, 97, 1)'); // #e66101
+    expect(divergingColor(-shallowLo.lo, shallowLo, false)).not.toBe('rgb(230, 97, 1)');
+  });
+
+  it('reaches the poles at each arm’s effective end', () => {
+    expect(divergingColor(-belowArmEnd(shallowLo), shallowLo, false)).toBe('rgb(230, 97, 1)'); // #e66101
+    expect(divergingColor(shallowLo.hi, shallowLo, false)).toBe('rgb(94, 60, 153)'); // #5e3c99
+    expect(divergingColor(-belowArmEnd(deepLo), deepLo, false)).toBe('rgb(230, 97, 1)');
+    expect(divergingColor(deepLo.hi, deepLo, false)).toBe('rgb(94, 60, 153)');
+    expect(divergingColor(-belowArmEnd(shallowLo), shallowLo, true)).toBe('rgb(230, 97, 1)');
+    expect(divergingColor(shallowLo.hi, shallowLo, true)).toBe('rgb(94, 60, 153)');
   });
 
   it('tints indigo immediately above the anchor (narrow neutral band)', () => {
@@ -35,26 +52,27 @@ describe('divergingColor (asymmetric PuOr transfer)', () => {
     const justAbove = channels(divergingColor(dom.hi * 0.02, dom, false));
     // +2% of the positive domain is already visibly purple: red channel drops.
     expect(mid[0] - justAbove[0]).toBeGreaterThan(10);
-    const justBelow = channels(divergingColor(-dom.lo * 0.02, dom, false));
+    const justBelow = channels(divergingColor(-belowArmEnd(dom) * 0.02, dom, false));
     // −2% warms visibly too (blue channel drops), but less aggressively.
     expect(mid[2] - justBelow[2]).toBeGreaterThan(5);
     expect(mid[0] - justAbove[0]).toBeGreaterThan(mid[2] - justBelow[2]);
   });
 
-  it('normalizes each arm against its own end (asymmetry)', () => {
-    // Same absolute delta: 8k is 80% of the way down the below arm but only
-    // 20% up the above arm, so the below color sits much closer to its pole.
-    const below = channels(divergingColor(-8_000, dom, false));
-    const above = channels(divergingColor(8_000, dom, false));
-    const poleBelow = channels(divergingColor(-dom.lo, dom, false));
-    const poleAbove = channels(divergingColor(dom.hi, dom, false));
+  it('keeps below-arm saturation when cuts exceed the top range', () => {
+    // Same absolute delta on a deep-lo domain: 8k is 20% of the below end (40k)
+    // but 80% of the above end (10k), so above sits closer to its pole.
+    const below = channels(divergingColor(-8_000, deepLo, false));
+    const above = channels(divergingColor(8_000, deepLo, false));
+    const poleBelow = channels(divergingColor(-belowArmEnd(deepLo), deepLo, false));
+    const poleAbove = channels(divergingColor(deepLo.hi, deepLo, false));
     const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
-    expect(dist(below, poleBelow)).toBeLessThan(dist(above, poleAbove));
+    expect(dist(above, poleAbove)).toBeLessThan(dist(below, poleBelow));
   });
 
-  it('clamps deltas beyond the domain to the poles', () => {
-    expect(divergingColor(-3 * dom.lo, dom, false)).toBe(divergingColor(-dom.lo, dom, false));
-    expect(divergingColor(3 * dom.hi, dom, false)).toBe(divergingColor(dom.hi, dom, false));
+  it('clamps deltas beyond each arm’s effective end to the poles', () => {
+    const belowEnd = belowArmEnd(shallowLo);
+    expect(divergingColor(-3 * belowEnd, shallowLo, false)).toBe(divergingColor(-belowEnd, shallowLo, false));
+    expect(divergingColor(3 * shallowLo.hi, shallowLo, false)).toBe(divergingColor(shallowLo.hi, shallowLo, false));
   });
 
   it('degrades to the midpoint when a domain side is zero', () => {
@@ -197,25 +215,37 @@ describe('windowAnchorSeries', () => {
 });
 
 describe('windowDeltaDomain', () => {
-  it('derives asymmetric clamps from the window cells', () => {
+  it('mirrors the delta tails so a centered window stays balanced', () => {
     // One column, many years, deltas from -50..+49 around a zero anchor.
     const numYears = 100;
     const values = new Float64Array(numYears);
     for (let j = 0; j < numYears; j++) values[j] = j - 50;
     const anchor = new Float64Array(numYears); // all zeros
-    const domain = windowDeltaDomain(values, anchor, numYears, 0, 1, 65);
-    // lo = |P2| of the deltas = |-48|; hi = P68 = +18.
+    const domain = windowDeltaDomain(values, anchor, numYears, 0, 1);
+    // lo = |P2| = |-48|; hi = P98 = +48 — mirrored, not tied to the axis.
     expect(domain.lo).toBe(48);
-    expect(domain.hi).toBe(18);
-    // Raising the upper axis raises the upper clamp with it.
-    const wider = windowDeltaDomain(values, anchor, numYears, 0, 1, 90);
-    expect(wider.hi).toBeGreaterThan(domain.hi);
+    expect(domain.hi).toBe(48);
+  });
+
+  it('uses only the visible column slice', () => {
+    // Three columns × one year: left-heavy cuts, right-heavy boosts.
+    const values = Float64Array.from([-100, 0, 100]);
+    const fullMean = Float64Array.from([0]);
+    const leftMean = Float64Array.from([-50]);
+    const full = windowDeltaDomain(values, fullMean, 1, 0, 3);
+    const left = windowDeltaDomain(values, leftMean, 1, 0, 2);
+    // Left window deltas vs its own mean are −50 and +50 → mirrored clamps.
+    expect(left.lo).toBe(50);
+    expect(left.hi).toBe(50);
+    // Full window has larger tails than the left crop alone.
+    expect(full.lo).toBeGreaterThanOrEqual(left.lo);
+    expect(full.hi).toBeGreaterThanOrEqual(left.hi);
   });
 
   it('guards degenerate spreads', () => {
     const values = Float64Array.from([5, 5, 5]);
     const anchor = Float64Array.from([5]);
-    const domain = windowDeltaDomain(values, anchor, 1, 0, 3, 65);
+    const domain = windowDeltaDomain(values, anchor, 1, 0, 3);
     expect(domain.lo).toBe(1);
     expect(domain.hi).toBe(1);
   });

@@ -322,13 +322,13 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
 
   await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
 
-  // 100 sims: the grid is built P5..P90 (86 run-coherent columns, one per
-  // run); the default "show to" P65 crops the display to 61 of them. Rows
-  // span maxYears, which exceeds 30 when the default scenario carries a
-  // variable-horizon buffer.
+  // 100 sims: source holds P5..P90 (86 runs); default P5–P65 rebands to
+  // min(61 runs, plotW) columns filling the chart width.
   const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
-  expect(shape.numCols).toBe(86);
-  expect(shape.visibleCols).toBe(61);
+  expect(shape.sourceSpan).toBe(86);
+  expect(shape.rankSpan).toBe(61);
+  expect(shape.numCols).toBe(Math.min(61, shape.plotW));
+  expect(shape.visibleCols).toBe(shape.numCols);
   expect(shape.upperPct).toBe(65);
   expect(shape.numYears).toBeGreaterThanOrEqual(30);
   expect(shape.encoding).toBe('mean');
@@ -338,8 +338,7 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   await expect(page.locator('#withdrawalHeatmapEmphasis')).toBeVisible();
   await expect(page.locator('#withdrawalHeatmapLower')).toBeVisible();
 
-  // 86 runs fit the column cap → every column is a single run, so there is
-  // nothing to scrub/replay and the run/speed sliders stay hidden.
+  // 61 runs at P5–P65 → one run per column (plot wider than rank span).
   expect(shape.numFrames).toBe(1);
   await expect(page.locator('#withdrawalHeatmapFrameWrap')).toBeHidden();
   await expect(page.locator('#withdrawalHeatmapSpeedWrap')).toBeHidden();
@@ -347,12 +346,27 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   // Legend describes the mean-anchored spectrum.
   await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('mean withdrawal');
 
-  // Moving the from/to window changes the visible columns; both snap back
-  // for the rest of the assertions.
+  // Mean mode re-anchors to the visible from/to window: the weighted mean of
+  // cell−yearMean stays near zero, and the color domain's arms stay balanced
+  // at the default P5–P65 crop (not only at the full P5–P90 build).
+  const atDefault = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(Math.abs(atDefault.meanDeltaBias)).toBeLessThan(1);
+  expect(atDefault.domainLo / atDefault.domainHi).toBeGreaterThan(0.25);
+  expect(atDefault.domainLo / atDefault.domainHi).toBeLessThan(4);
+
+  // Moving the from/to window changes the visible columns and the year-mean
+  // anchor; both snap back for the rest of the assertions.
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(90));
-  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().visibleCols)).toBe(86);
+  const atFull = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(atFull.rankSpan).toBe(86);
+  expect(atFull.numCols).toBe(Math.min(86, atFull.plotW));
+  expect(Math.abs(atFull.meanDeltaBias)).toBeLessThan(1);
+  expect(atFull.year0Mean).not.toBe(atDefault.year0Mean);
+
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(30));
-  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().visibleCols)).toBeLessThan(86);
+  const atNarrow = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(atNarrow.rankSpan).toBeLessThan(atFull.rankSpan);
+  expect(atNarrow.numCols).toBe(Math.min(atNarrow.rankSpan, atNarrow.plotW));
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(5));
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(65));
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-absolute.png' });
@@ -387,23 +401,25 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
 });
 
 test('Withdrawal heatmap animates individual runs when columns are banded', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   await page.goto('/');
   await disableGoalSeek(page);
 
   await page.fill('#startBalance', '2000');
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#numYears', '30');
-  // 1000 sims: the P5–P65 window holds 601 runs → 480 columns in bands of
-  // 1–2, so the animation carries 2 frames.
-  await page.fill('#numSimulations', '1000');
+  // 2000 sims: P5–P65 holds 1201 runs → rebanded to plotW columns (bands of
+  // 1–2 when plotW < 1201), so the animation carries 2 frames.
+  await page.fill('#numSimulations', '2000');
   await page.fill('#randomSeed', '12345');
   await page.click('#runButton');
-  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
 
   await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
   const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
-  expect(shape.numCols).toBe(480);
+  expect(shape.rankSpan).toBe(1201);
+  expect(shape.numCols).toBe(Math.min(1201, shape.plotW));
+  expect(shape.numCols).toBeGreaterThan(480);
   expect(shape.numFrames).toBe(2);
   expect(shape.frame).toBe(0);
   expect(shape.playing).toBe(false);
@@ -417,7 +433,8 @@ test('Withdrawal heatmap animates individual runs when columns are banded', asyn
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-animated-frame.png' });
 
   // Clicking while showing runs drills into the exact run on screen.
-  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapClickColumn(240));
+  const midCol = Math.floor((await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().numCols)) / 2);
+  await page.evaluate((col) => window.__TEST_HOOKS__.withdrawalHeatmapClickColumn(col), midCol);
   await expect(page.locator('#withdrawalHeatmapDrilldown')).toBeVisible();
   await expect(page.locator('#withdrawalHeatmapDrilldownTitle')).toHaveText(/Simulation #\d+ · P\d+/);
 

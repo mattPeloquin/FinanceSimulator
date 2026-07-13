@@ -108,3 +108,17 @@ export function resizeWithdrawalPreviewChart() {
 onThemeChange(() => {
   if (lastAmounts && isSectionVisible()) renderPreview(lastAmounts, lastFloorSeries, lastGiftAmounts);
 });
+
+if (typeof window !== 'undefined') {
+  window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
+  window.__TEST_HOOKS__.specificSchedulePreview = () => {
+    if (!previewChart) return null;
+    const min = previewChart.data.datasets.find((d) => d.label === 'Minimum');
+    return {
+      labels: previewChart.data.labels?.length ?? 0,
+      hasMinimum: !!min,
+      minimumFirst: min?.data?.[0] ?? null,
+      withdrawalFirst: previewChart.data.datasets[0]?.data?.[0] ?? null,
+    };
+  };
+}

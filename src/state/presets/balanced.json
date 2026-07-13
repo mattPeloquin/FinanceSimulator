@@ -13,9 +13,9 @@
     "planRiskTolerancePct": 5,
     "usLgGrowthAllocation": 25,
     "usLgValueAllocation": 25,
-    "usSmMidAllocation": 15,
+    "usSmMidAllocation": 10,
     "exUsAllocation": 15,
-    "bondAllocation": 0,
+    "bondAllocation": 5,
     "cashAllocation": 20,
     "dynLowRet": -15,
     "dynMedRet": 5,
@@ -26,6 +26,7 @@
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 70,
+    "specificMinPctOfPlan": 70,
     "gifting": {
       "amountPctOfStart": 1,
       "balanceMultipleOfStart": 0.9

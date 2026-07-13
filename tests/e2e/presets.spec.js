@@ -391,16 +391,65 @@ test('Specific List: Easy Mode fills percentage minimum without changing the typ
   await page.check('#withdrawal-strategy-specific');
   await page.locator('#details-specific-min-withdrawal').evaluate((el) => { el.open = true; });
 
-  // Balanced @ 3,000 / 25 years → (70/25)/5 × 100 = 56%.
-  await expect(firstSpecificFloorPct(page)).toHaveValue('56');
+  // Balanced Easy Mode Specific List minimum is 70% of plan.
+  await expect(firstSpecificFloorPct(page)).toHaveValue('70');
   await expect(page.locator('#presetActive')).toBeChecked();
 
   await page.fill('#specificWithdrawals', '100\n110');
   await page.focus('#presetLevel');
   await page.keyboard.press('Home');
-  // Conservative: (80/25)/4 × 100 = 80%.
-  await expect(firstSpecificFloorPct(page)).toHaveValue('80');
+  // Conservative Easy Mode Specific List minimum is 90%.
+  await expect(firstSpecificFloorPct(page)).toHaveValue('90');
   await expect(page.locator('#specificWithdrawals')).toHaveValue('100\n110');
+});
+
+test('Specific List: schedule chart Minimum updates when Easy Mode sets the floor', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#section-withdrawal > summary');
+  await page.check('#withdrawal-strategy-specific');
+  await page.fill('#specificWithdrawals', '100\n100\n100\n100\n100');
+
+  // Switching to Specific List applies Easy Mode's % floor after the first
+  // chart sync — the sparkline must pick up that write (70% of $100k = $70k).
+  await expect(firstSpecificFloorPct(page)).toHaveValue('70');
+  await page.waitForFunction(() => {
+    const preview = window.__TEST_HOOKS__?.specificSchedulePreview?.();
+    return preview?.hasMinimum && Math.round(preview.minimumFirst) === 70_000;
+  });
+
+  await page.focus('#presetLevel');
+  await page.keyboard.press('End');
+  // Aggressive Easy Mode Specific List minimum is 50% → $50k.
+  await expect(firstSpecificFloorPct(page)).toHaveValue('50');
+  await page.waitForFunction(() => {
+    const preview = window.__TEST_HOOKS__?.specificSchedulePreview?.();
+    return preview?.hasMinimum && Math.round(preview.minimumFirst) === 50_000;
+  });
+});
+
+test('Base schedule chart Minimum updates when Easy Mode sets the floor', async ({ page }) => {
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#section-withdrawal > summary');
+
+  // Balanced @ 3,000 / 25 years → 84/yr minimum (in $000s → chart dollars).
+  await expect(firstFloorAmount(page)).toHaveValue('84');
+  await page.waitForFunction(() => {
+    const preview = window.__TEST_HOOKS__?.baseSchedulePreview?.();
+    return preview?.hasMinimum && preview.minimumFirst === 84_000;
+  });
+
+  await page.fill('#numYears', '50');
+  await expect(firstFloorAmount(page)).toHaveValue('42');
+  await page.waitForFunction(() => {
+    const preview = window.__TEST_HOOKS__?.baseSchedulePreview?.();
+    return preview?.hasMinimum && preview.minimumFirst === 42_000;
+  });
 });
 
 test('Specific List: toggling Goal Seek off fills guardrails but does not force Goal Seek on', async ({ page }) => {
@@ -428,7 +477,7 @@ test('Specific List: editing tier-0 minimum % detaches Easy Mode', async ({ page
   await page.click('#section-withdrawal > summary');
   await page.check('#withdrawal-strategy-specific');
   await page.locator('#details-specific-min-withdrawal').evaluate((el) => { el.open = true; });
-  await expect(firstSpecificFloorPct(page)).toHaveValue('56');
+  await expect(firstSpecificFloorPct(page)).toHaveValue('70');
 
   await firstSpecificFloorPct(page).fill('55');
   await expect(page.locator('#presetActive')).not.toBeChecked();

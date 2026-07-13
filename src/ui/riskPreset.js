@@ -41,6 +41,8 @@ import {
   updateAllocationTotal,
 } from './inputs.js';
 import { syncBaseWithdrawalPreview } from './charts/basePreview.js';
+import { syncWithdrawalPreviewFromForm } from './charts/withdrawalPreview.js';
+import { syncGlidePreview } from './charts/glidePreview.js';
 
 // Guards the detach listeners while our own writes are in flight (belt and
 // suspenders — programmatic value writes don't fire events anyway, but tier
@@ -102,12 +104,17 @@ function updateControlState() {
 }
 
 // Refresh the previews/toggles that depend on the fields a preset writes —
-// the same set applyScenario() re-runs after a full scenario load.
+// the same set applyScenario() re-runs after a full scenario load. Both
+// schedule sparklines are synced: Easy Mode may have just rewritten the
+// Base $ floor or the Specific List % floor, and each early-returns when
+// its panel is hidden.
 function refreshDependentUi(patch) {
   if (patch.distMethod != null) toggleDistMethod(patch.distMethod);
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
   syncBaseWithdrawalPreview();
+  syncWithdrawalPreviewFromForm();
+  syncGlidePreview();
 }
 
 function buildPresetPatch(level) {
@@ -170,6 +177,8 @@ function rescaleDerived() {
     writeScenarioFieldsToDom(patch);
     refreshDynamicAdjustmentPreviews();
     syncBaseWithdrawalPreview();
+    syncWithdrawalPreviewFromForm();
+    syncGlidePreview();
   } finally {
     isApplyingPreset = false;
   }

@@ -11,11 +11,11 @@
     "goalSeekIncludeBalanceOverrides": true,
     "goalSeekIncludeGlidePath": true,
     "planRiskTolerancePct": 5,
-    "usLgGrowthAllocation": 15,
-    "usLgValueAllocation": 20,
+    "usLgGrowthAllocation": 20,
+    "usLgValueAllocation": 25,
     "usSmMidAllocation": 5,
     "exUsAllocation": 10,
-    "bondAllocation": 30,
+    "bondAllocation": 20,
     "cashAllocation": 20,
     "dynLowRet": -10,
     "dynMedRet": 5,
@@ -26,6 +26,7 @@
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 80,
+    "specificMinPctOfPlan": 90,
     "gifting": {
       "amountPctOfStart": 0.5,
       "balanceMultipleOfStart": 1.1

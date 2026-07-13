@@ -61,90 +61,205 @@
     </div>
 
     <!-- Asset Allocation -->
-    <div class="space-y-1">
-        <h4 class="font-medium text-theme-body pt-3 pb-2">Asset Allocation</h4>
+    <div id="allocationSparklines" class="space-y-1 pr-4">
+        <h4 class="font-medium text-theme-body pt-2 pb-1">Asset Allocation</h4>
 
-        <!-- Year Labels Row -->
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2">
+        <!-- year labels span the sparkline column only -->
+        <div class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] gap-x-3">
             <div></div>
-            <div id="year-labels" class="flex justify-between text-xs text-theme-faint px-1 min-w-0"></div>
+            <div></div>
+            <div class="flex min-w-0 gap-x-1">
+                <div id="year-labels" class="flex flex-1 justify-between text-xs text-theme-faint px-1 min-w-0"></div>
+                <div class="w-12 shrink-0" aria-hidden="true"></div>
+            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-            <div class="col-span-1">
-                <label for="usLgGrowthAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Lg Growth</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usLgGrowthAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <!-- Each row: label on top; % field | avg | sparkline share one baseline (row 2 center) -->
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="usLgGrowthAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">US Lg Growth</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="usLgGrowthAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="usLgGrowthAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="usLgGrowthSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="us-lg-growth-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="usLgGrowthRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usLgGrowthMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usLgGrowthMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="us-lg-growth-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-            <div class="col-span-1">
-                <label for="usLgValueAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Lg Value</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usLgValueAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="usLgValueAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">US Lg Value</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="usLgValueAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="usLgValueAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="usLgValueSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="us-lg-value-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="usLgValueRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usLgValueMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usLgValueMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="us-lg-value-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-            <div class="col-span-1">
-                <label for="usSmMidAllocation" class="block text-xs font-medium text-theme-body leading-tight">US Sm/Mid</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="usSmMidAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="usSmMidAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">US Sm/Mid</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="usSmMidAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="usSmMidAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="usSmMidSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="us-sm-mid-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="usSmMidRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usSmMidMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="usSmMidMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="us-sm-mid-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-            <div class="col-span-1">
-                <label for="exUsAllocation" class="block text-xs font-medium text-theme-body leading-tight">ex-US Stocks</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="exUsAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="exUsAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">ex-US Stocks</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="exUsAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="exUsAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="exUsSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="ex-us-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="exUsRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="exUsMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="exUsMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="ex-us-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-            <div class="col-span-1">
-                <label for="bondAllocation" class="block text-xs font-medium text-theme-body leading-tight">Bonds</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="bondAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="bondAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">Bonds</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="bondAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="bondAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="bondSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="bond-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="bondRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="bondMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="bondMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="bond-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="grid grid-cols-[5.3rem_minmax(0,1fr)] gap-x-2 items-center">
-           <div class="col-span-1">
-                <label for="cashAllocation" class="block text-xs font-medium text-theme-body leading-tight">Cash</label>
-                <div class="input-adorned has-suffix mt-1">
-                    <input type="number" id="cashAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
-                    <span class="input-adorn-suffix">%</span>
+
+        <div data-alloc-row class="grid grid-cols-[6.25rem_3.5rem_minmax(0,1fr)] grid-rows-[auto_auto] gap-x-3">
+            <label for="cashAllocation" class="row-start-1 col-start-1 block text-xs font-medium text-theme-body leading-tight">Cash</label>
+            <div class="row-start-2 col-start-1 self-center justify-self-center w-[4.75rem] input-adorned has-suffix">
+                <input type="number" id="cashAllocation" class="allocation-input block w-full rounded-md input-theme text-xs p-1 text-center">
+                <span class="input-adorn-suffix">%</span>
+            </div>
+            <p class="row-start-2 col-start-2 self-center text-right pr-3 text-xs text-theme-faint tabular-nums leading-none" title="Average real (inflation-adjusted) annual return">
+                <span id="cashAvgReturn">—</span>%
+            </p>
+            <div class="row-start-2 col-start-3 relative h-14 min-w-0">
+                <div id="cashSparkPlot" class="absolute left-0 right-0 h-14 flex gap-x-1 items-stretch" style="top: 0%">
+                    <div class="relative h-14 w-full min-w-0 flex-1">
+                        <canvas id="cash-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="relative h-14 w-12 shrink-0" title="Sparkline high / low (nominal %)">
+                        <div id="cashRangeCluster" class="absolute left-0 right-0 flex flex-col gap-1 text-[10px] text-theme-faint tabular-nums leading-none -translate-y-1/2" style="top: 50%">
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="cashMaxReturn">—</span><span>%</span>
+                            </span>
+                            <span class="flex justify-end items-baseline">
+                                <span data-sign class="inline-block w-2 text-right"></span>
+                                <span id="cashMinReturn">—</span><span>%</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="relative h-16 w-full min-w-0">
-                <canvas id="cash-mini-chart" class="absolute inset-0 w-full h-full"></canvas>
-            </div>
         </div>
-        <div class="text-left pt-1">
+
+        <div class="text-left">
             <p class="text-xs font-semibold">Total: <span id="totalAllocation">100</span>%</p>
         </div>
     </div>
+
 
     </div>
 </details>

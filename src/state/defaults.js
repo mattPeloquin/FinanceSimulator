@@ -78,7 +78,7 @@ export const BASE_DEFAULTS = {
   // First year included when sampling history or computing profiles.
   // Must be within built-in history (see minAvailableYear–maxAvailableYear in
   // historicalData.js) and ≤ endYear.
-  startYear: 1950,
+  startYear: 1960,
 
   // Last year included. Must be within built-in history and ≥ startYear.
   endYear: 2025,

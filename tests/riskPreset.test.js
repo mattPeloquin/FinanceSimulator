@@ -70,11 +70,7 @@ function expectedMinAmount(level = DEFAULT_PRESET_LEVEL) {
 }
 
 function expectedSpecificMinPct(level = DEFAULT_PRESET_LEVEL) {
-  const d = PRESETS[level].derived;
-  return Math.min(
-    99,
-    Math.max(0, Math.round((d.minWithdrawalLifetimePctOfStart / 25 / d.baseWithdrawalPctOfStart) * 100)),
-  );
+  return PRESETS[level].derived.specificMinPctOfPlan;
 }
 
 describe('applyPresetLevel minimum tier', () => {
