@@ -2,17 +2,20 @@
 // spending over time. Each COLUMN is one simulation (or a narrow band of
 // adjacent ones) placed by its lifetime-withdrawal rank from P5 to P65 — the
 // same run-coherent ordering as the 3D surface — so a lean year inside an
-// otherwise-good run stays visible as a dark cell in a light column. Each ROW
-// is a year (year 1 at the top, where sequence risk bites). Cell color encodes
-// either the absolute withdrawal (sequential blue ramp) or the deviation from
-// the planned schedule (diverging red-cut / blue-boost ramp), switched by a
-// segmented toggle.
+// otherwise-good run stays visible as an off-color cell in its column. Each
+// ROW is a year, year 1 at the BOTTOM (time reads upward, like the balance
+// axis on the other charts); an "Early years" slider stretches the first rows
+// taller for emphasis. Cell color is a diverging orange↔indigo spectrum
+// around a per-year anchor — the year's mean withdrawal (default), its
+// median, or the planned schedule — switched by a segmented toggle. Values
+// are smoothed and interpolated along years so each column reads as a
+// continuous vertical gradient.
 //
-// Rendered straight to a canvas: cells are painted once into an offscreen
-// canvas at exactly numCols × numYears pixels, then blitted scaled with
-// nearest-neighbor so columns stay crisp. Data arrives pre-aggregated from
-// resultPackaging.buildWithdrawalHeatmap — the renderer never touches the raw
-// per-run matrix.
+// Rendered straight to a canvas: cells are painted into an offscreen canvas
+// (one pixel column per data column, VSS sub-pixels per year), then blitted
+// with nearest-neighbor so columns stay crisp horizontally. Data arrives
+// pre-aggregated from resultPackaging.buildWithdrawalHeatmap — the renderer
+// never touches the raw per-run matrix.
 import { Chart } from './chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
 import { getChartTheme, chartJsCartesianScales, sampleRunTooltipOptions } from './chartTheme.js';
@@ -24,35 +27,60 @@ import { createLinkedBalanceBars } from './balanceBars.js';
 
 const MARGIN = { top: 10, right: 14, bottom: 40, left: 52 };
 
-// Sequential ramp (absolute withdrawal $): single blue hue, validated ramp
-// steps. Light mode runs light→dark so bigger withdrawals read darker; dark
-// mode inverts lightness so small values recede into the dark surface.
-const SEQ_STOPS = {
-  light: ['#cde2fb', '#86b6ef', '#3987e5', '#1c5cab', '#0d366b'],
-  dark: ['#16283c', '#1c4570', '#2a78d6', '#6da7ec', '#b7d3f6'],
+// Vertical supersampling: sub-pixels painted per year row, interpolated
+// between year values so columns read as continuous gradients.
+const VSS = 8;
+
+// Random-replay cadence: speed slider has 10 settings mapping to a tick
+// interval of ~800ms (contemplative) down to 40ms (shimmering ensemble). The
+// quadratic curve biases the scale toward the faster side — the midpoint is
+// already well under half the slowest interval.
+export const SPEED_STEPS = 10;
+export function tickMsForSpeed(speed) {
+  const s = Math.max(1, Math.min(SPEED_STEPS, speed));
+  const t = (SPEED_STEPS - s) / (SPEED_STEPS - 1);
+  return Math.round(40 + 760 * t * t);
+}
+
+// Early-year emphasis: at slider 100 the year-1 row is EMPHASIS_MAX_RATIO
+// times taller than the last row (exponentially graded in between).
+// Default slider mid-point (50) lands at roughly half that stretch.
+const EMPHASIS_MAX_RATIO = 5;
+const EMPHASIS_DEFAULT = 50;
+
+// One diverging spectrum for every encoding, anchored per cell: burnt orange
+// = below the anchor (bad), a neutral midpoint on the anchor, deep indigo =
+// above it (good). Light mode uses the ColorBrewer PuOr poles with PuOr's own
+// intermediate steps kept as ramp anchors so the gradient stays perceptually
+// smooth. Dark mode keeps the same poles but swaps the midpoint to a dark
+// neutral gray — an off-white midpoint would make "on anchor" the brightest
+// thing on a dark surface, inverting salience — with each arm blending
+// straight to its pole.
+const ARM_STOPS = {
+  light: {
+    below: ['#f7f7f7', '#fdb863', '#e66101'], // anchor → light orange → burnt orange
+    above: ['#f7f7f7', '#b2abd2', '#5e3c99'], // anchor → light purple → deep indigo
+  },
+  dark: {
+    below: ['#3d3d3d', '#e66101'], // dark neutral anchor → burnt orange
+    above: ['#3d3d3d', '#5e3c99'], // dark neutral anchor → deep indigo
+  },
 };
 
-// Diverging ramp (Δ vs plan): red = spending cut, neutral gray = on plan,
-// blue = boost. Red matches the app's danger semantics; blue (not green) keeps
-// the pair colorblind-safe. The midpoint is a hue-less gray so "on plan"
-// recedes rather than reading as a third category.
-const DIV_STOPS = {
-  light: { cut: '#b91c1c', mid: '#f0efec', boost: '#1c5cab' },
-  dark: { cut: '#f87171', mid: '#383835', boost: '#6da7ec' },
-};
+// Per-arm gamma easing applied to |t| before stop interpolation. Values < 1
+// pull color onset toward the anchor, narrowing the neutral band; the above
+// arm is more aggressive so anything at or over the anchor tints indigo
+// immediately.
+const GAMMA = { below: 0.6, above: 0.4 };
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-const SEQ_RGB = {
-  light: SEQ_STOPS.light.map(hexToRgb),
-  dark: SEQ_STOPS.dark.map(hexToRgb),
-};
-const DIV_RGB = {
-  light: { cut: hexToRgb(DIV_STOPS.light.cut), mid: hexToRgb(DIV_STOPS.light.mid), boost: hexToRgb(DIV_STOPS.light.boost) },
-  dark: { cut: hexToRgb(DIV_STOPS.dark.cut), mid: hexToRgb(DIV_STOPS.dark.mid), boost: hexToRgb(DIV_STOPS.dark.boost) },
+const ARM_RGB = {
+  light: { below: ARM_STOPS.light.below.map(hexToRgb), above: ARM_STOPS.light.above.map(hexToRgb) },
+  dark: { below: ARM_STOPS.dark.below.map(hexToRgb), above: ARM_STOPS.dark.above.map(hexToRgb) },
 };
 
 function lerpRgb(a, b, t) {
@@ -63,38 +91,26 @@ function lerpRgb(a, b, t) {
   ];
 }
 
-// Piecewise-linear interpolation across the sequential stops. `t` in [0,1].
-function seqRampRgb(t, isDark) {
-  const stops = SEQ_RGB[isDark ? 'dark' : 'light'];
-  const pos = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+// Anchored diverging cell color. `delta` = actual − anchor; negative runs
+// down the orange arm, positive up the indigo arm, zero sits exactly on the
+// mode's neutral midpoint. The domain is ASYMMETRIC — `{lo, hi}` with lo
+// stored positive — because cuts are bounded while boosts are not: each arm
+// normalizes against its own end, then gamma easing (< 1) accelerates color
+// onset near the anchor. Deltas beyond the domain clamp to the poles.
+export function divergingRgb(delta, domain, isDark = isDarkMode()) {
+  const arms = ARM_RGB[isDark ? 'dark' : 'light'];
+  const below = delta < 0;
+  const end = below ? domain.lo : domain.hi;
+  const t = Math.min(1, end > 0 ? Math.abs(delta) / end : 0);
+  const eased = t ** (below ? GAMMA.below : GAMMA.above);
+  const stops = below ? arms.below : arms.above;
+  const pos = eased * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(pos));
   return lerpRgb(stops[i], stops[i + 1], pos - i);
 }
 
-// Absolute-dollar cell color. The domain is the P2–P98 of all cells (computed
-// in the worker); values beyond it clamp to the ramp ends.
-export function sequentialRgb(value, domain, isDark = isDarkMode()) {
-  const t = (value - domain.lo) / (domain.hi - domain.lo);
-  return seqRampRgb(t, isDark);
-}
-
-export function sequentialColor(value, domain, isDark = isDarkMode()) {
-  const [r, g, b] = sequentialRgb(value, domain, isDark);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-// Deviation-from-plan cell color. `delta` = actual − plan; negative (a cut)
-// runs toward the red pole, positive (a boost) toward the blue pole, and zero
-// sits exactly on the neutral gray. Symmetric domain ±deltaMax, clamped.
-export function divergingRgb(delta, deltaMax, isDark = isDarkMode()) {
-  const pair = DIV_RGB[isDark ? 'dark' : 'light'];
-  const t = Math.max(-1, Math.min(1, deltaMax > 0 ? delta / deltaMax : 0));
-  if (t < 0) return lerpRgb(pair.mid, pair.cut, -t);
-  return lerpRgb(pair.mid, pair.boost, t);
-}
-
-export function divergingColor(delta, deltaMax, isDark = isDarkMode()) {
-  const [r, g, b] = divergingRgb(delta, deltaMax, isDark);
+export function divergingColor(delta, domain, isDark = isDarkMode()) {
+  const [r, g, b] = divergingRgb(delta, domain, isDark);
   return `rgb(${r}, ${g}, ${b})`;
 }
 
@@ -104,19 +120,113 @@ export function heatmapColumnAtX(x, geom, numCols) {
   return Math.min(numCols - 1, Math.floor(((x - geom.plotX) / geom.plotW) * numCols));
 }
 
-// Pixel → year index (0-based, year 1 at the top), or -1 outside the plot.
-export function heatmapYearAtY(y, geom, numYears) {
+// Row layout for the early-year emphasis distortion: returns cumulative
+// height fractions measured from the BOTTOM of the plot — bounds[j] is the
+// bottom edge of year j's row, bounds[numYears] === 1. Row heights decay
+// exponentially with year so that at emphasis 100 the year-1 row is
+// EMPHASIS_MAX_RATIO× the last row; emphasis 0 is a uniform grid.
+export function heatmapRowLayout(numYears, emphasis) {
+  const e = Math.max(0, Math.min(100, emphasis || 0));
+  const ratio = 1 + (e / 100) * (EMPHASIS_MAX_RATIO - 1);
+  const decay = numYears > 1 ? Math.log(ratio) / (numYears - 1) : 0;
+  const bounds = new Float64Array(numYears + 1);
+  let total = 0;
+  for (let j = 0; j < numYears; j++) total += Math.exp(-decay * j);
+  let acc = 0;
+  for (let j = 0; j < numYears; j++) {
+    acc += Math.exp(-decay * j) / total;
+    bounds[j + 1] = acc;
+  }
+  bounds[numYears] = 1;
+  return bounds;
+}
+
+// Pixel → year index (0-based, year 1 at the BOTTOM — time reads upward),
+// or -1 outside the plot. `layout` is a heatmapRowLayout bounds array; omit
+// it for a uniform grid.
+export function heatmapYearAtY(y, geom, numYears, layout = null) {
   if (y < geom.plotY || y >= geom.plotY + geom.plotH) return -1;
-  return Math.min(numYears - 1, Math.floor(((y - geom.plotY) / geom.plotH) * numYears));
+  if (!layout) {
+    const rowFromTop = Math.min(numYears - 1, Math.floor(((y - geom.plotY) / geom.plotH) * numYears));
+    return numYears - 1 - rowFromTop;
+  }
+  const fracFromTop = (y - geom.plotY) / geom.plotH;
+  for (let j = numYears - 1; j >= 0; j--) {
+    // Year j's band, measured from the top, spans [1 - layout[j+1], 1 - layout[j]).
+    if (fracFromTop >= 1 - layout[j + 1] && fracFromTop < 1 - layout[j]) return j;
+  }
+  return fracFromTop < 1 - layout[numYears] ? numYears - 1 : 0;
+}
+
+// Smooth a per-year series and upsample it to `vss` sub-samples per year:
+// a NaN-aware 1-2-1 kernel along years, then linear interpolation between
+// year centers. NaN years (past a run's horizon) stay NaN — sub-samples take
+// their NEAREST year's finiteness, so the horizon edge stays hard and values
+// never bleed across it. Exported pure for unit tests.
+export function smoothColumnSeries(values, vss) {
+  const n = values.length;
+  const smoothed = new Float64Array(n);
+  for (let j = 0; j < n; j++) {
+    const v = values[j];
+    if (Number.isNaN(v)) {
+      smoothed[j] = NaN;
+      continue;
+    }
+    let sum = 2 * v;
+    let w = 2;
+    const prev = j > 0 ? values[j - 1] : NaN;
+    const next = j < n - 1 ? values[j + 1] : NaN;
+    if (!Number.isNaN(prev)) {
+      sum += prev;
+      w += 1;
+    }
+    if (!Number.isNaN(next)) {
+      sum += next;
+      w += 1;
+    }
+    smoothed[j] = sum / w;
+  }
+
+  const out = new Float64Array(n * vss);
+  for (let k = 0; k < n * vss; k++) {
+    // Sub-sample position in year-center coordinates (year j's center at j).
+    const pos = (k + 0.5) / vss - 0.5;
+    let j0 = Math.floor(pos);
+    let frac = pos - j0;
+    if (j0 < 0) {
+      j0 = 0;
+      frac = 0;
+    }
+    if (j0 >= n - 1) {
+      j0 = n - 1;
+      frac = 0;
+    }
+    const nearest = smoothed[frac < 0.5 ? j0 : Math.min(n - 1, j0 + 1)];
+    if (Number.isNaN(nearest)) {
+      out[k] = NaN;
+      continue;
+    }
+    const a = smoothed[j0];
+    const b = frac > 0 ? smoothed[Math.min(n - 1, j0 + 1)] : a;
+    if (Number.isNaN(a) || Number.isNaN(b)) {
+      // One side of the interpolation window is past a horizon: clamp to the
+      // nearest finite year instead of interpolating across the boundary.
+      out[k] = nearest;
+      continue;
+    }
+    out[k] = a + (b - a) * frac;
+  }
+  return out;
 }
 
 // Tooltip content as plain data so it is unit-testable without a DOM.
-export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, runCount }) {
-  const delta = value - plan;
+export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, mean, median, runCount }) {
+  const signed = (delta) => `${delta >= 0 ? '+' : '−'}${formatK(Math.abs(delta))}`;
   const rows = [
     `Withdrawal ${formatK(value)}`,
-    `Plan ${formatK(plan)}`,
-    `${delta >= 0 ? '+' : '−'}${formatK(Math.abs(delta))} vs plan`,
+    `${signed(value - mean)} vs year mean (${formatK(mean)})`,
+    `${signed(value - median)} vs year median (${formatK(median)})`,
+    `${signed(value - plan)} vs plan (${formatK(plan)})`,
   ];
   if (runCount > 1) rows.push(`avg of ${runCount} runs`);
   const title = runCount > 1
@@ -130,17 +240,138 @@ const state = {
   params: null,
   seed: null,
   outcome: null, // per-sim outcome tags from returnScatter (0 met / 1 below / 2 ran out)
-  encoding: 'absolute', // 'absolute' | 'deviation'
+  encoding: 'mean', // anchor: 'mean' | 'median' (per-year) | 'plan' (schedule)
+  frame: 0, // scrubber: 0 = averaged view, k ≥ 1 = pre-sliced composite k
+  speed: 0, // 0 = off; > 0 = random replay at tickMsForSpeed(speed)
+  randomAssign: null, // Int32Array(numCols): per-column random frame while replaying
+  tick: 0, // replay tick counter (busts the offscreen cache per tick)
+  animTimer: null,
+  emphasis: EMPHASIS_DEFAULT, // early-year row-height emphasis slider (0..100); default biases early years
+  lowerPct: 5, // "show from" lower axis percentile (5..30); view pref, survives runs
+  upperPct: 65, // "show to" upper axis percentile (65..90); view pref, survives runs
+  windowAnchors: null, // cached windowAnchorSeries for the visible range
+  windowAnchorsKey: null,
+  windowDomain: null, // cached windowDeltaDomain for encoding + visible range
+  windowDomainKey: null,
+  rowLayout: null, // heatmapRowLayout bounds for the current draw
   hovered: null, // { col, year } under the cursor
   selectedCol: null,
+  selectedSimIndex: null, // run shown in the drill-down (snapshot at click time)
   geom: null,
   offscreen: null,
-  offscreenKey: null, // encoding+mode the offscreen was painted for
+  offscreenKey: null, // encoding+mode+display the offscreen was painted for
   pathChart: null,
   balanceBars: null,
   resizeObserver: null,
   eventsBound: false,
 };
+
+function isPlaying() {
+  return state.speed > 0 && (state.heatmap?.numFrames ?? 1) > 1 && state.randomAssign != null;
+}
+
+// Per-year mean and median across a window of columns, weighted by band size
+// so the mean is exact (band mean × band count reconstructs the band total).
+// The median is the unweighted median of the band means — bands are narrow
+// contiguous rank groups of near-equal size, so this tracks the run median
+// closely. Exported pure for unit tests.
+export function windowAnchorSeries(values, colRunCount, numYears, start, end) {
+  const mean = new Float64Array(numYears);
+  const medianArr = new Float64Array(numYears);
+  const cells = [];
+  for (let j = 0; j < numYears; j++) {
+    let sum = 0;
+    let weight = 0;
+    cells.length = 0;
+    for (let c = start; c < end; c++) {
+      const v = values[c * numYears + j];
+      if (!Number.isNaN(v)) {
+        sum += v * colRunCount[c];
+        weight += colRunCount[c];
+        cells.push(v);
+      }
+    }
+    if (weight === 0) {
+      mean[j] = NaN;
+      medianArr[j] = NaN;
+      continue;
+    }
+    mean[j] = sum / weight;
+    cells.sort((a, b) => a - b);
+    const mid = cells.length >> 1;
+    medianArr[j] = cells.length % 2 ? cells[mid] : (cells[mid - 1] + cells[mid]) / 2;
+  }
+  return { mean, median: medianArr };
+}
+
+// Asymmetric color clamps from the visible window's cell deltas: the below
+// arm saturates at |P2| while the above arm saturates at P(upper axis + 3),
+// so widening the axis re-spreads the indigo range over the newly shown
+// better runs. Each side guards against a degenerate spread so the renderer
+// never divides by zero. Exported pure for unit tests.
+export function windowDeltaDomain(values, anchor, numYears, start, end, upperPct) {
+  const deltas = [];
+  for (let c = start; c < end; c++) {
+    for (let j = 0; j < numYears; j++) {
+      const v = values[c * numYears + j];
+      if (!Number.isNaN(v) && !Number.isNaN(anchor[j])) deltas.push(v - anchor[j]);
+    }
+  }
+  deltas.sort((a, b) => a - b);
+  const q = (p) => (deltas.length ? deltas[Math.min(deltas.length - 1, Math.floor((deltas.length * p) / 100))] : 0);
+  return {
+    lo: Math.max(1, -q(2)),
+    hi: Math.max(1, q(Math.min(100, Math.round(upperPct) + 3))),
+  };
+}
+
+// The rank a given outcome percentile maps to, clamped to the built window.
+function rankAtPct(pct) {
+  const hm = state.heatmap;
+  return Math.max(hm.p5Rank, Math.min(hm.hiRank, Math.floor((hm.numSimulations * pct) / 100)));
+}
+
+// The slice of built columns the "show from/to" sliders display: the grid is
+// built P5..P{hiPercentile}, and columns partition the rank window evenly, so
+// cropping both ends is proportional.
+function visibleRange() {
+  const hm = state.heatmap;
+  const span = hm.hiRank - hm.p5Rank + 1;
+  const startRank = rankAtPct(state.lowerPct);
+  const endRank = rankAtPct(state.upperPct);
+  const start = Math.min(hm.numCols - 1, Math.round(hm.numCols * ((startRank - hm.p5Rank) / span)));
+  const end = Math.max(start + 1, Math.min(hm.numCols, Math.round(hm.numCols * ((endRank - hm.p5Rank + 1) / span))));
+  return { start, end, count: end - start };
+}
+
+// Window-local anchors, cached per visible range: the mean/median the colors
+// diverge around is computed from the cells ON SCREEN, so the neutral
+// midpoint stays anchored to the middle of whatever range is shown.
+function windowAnchors() {
+  const { start, end } = visibleRange();
+  const key = `${start}:${end}`;
+  if (!state.windowAnchors || state.windowAnchorsKey !== key) {
+    const hm = state.heatmap;
+    state.windowAnchors = windowAnchorSeries(hm.values, hm.colRunCount, hm.numYears, start, end);
+    state.windowAnchorsKey = key;
+  }
+  return state.windowAnchors;
+}
+
+// Active anchor series + color domain for the current encoding, both derived
+// from the visible window.
+function anchorInfo() {
+  const hm = state.heatmap;
+  const { start, end } = visibleRange();
+  const anchors = windowAnchors();
+  const anchor = state.encoding === 'plan' ? hm.planByYear : state.encoding === 'median' ? anchors.median : anchors.mean;
+  const key = `${state.encoding}:${start}:${end}:${state.upperPct}`;
+  if (!state.windowDomain || state.windowDomainKey !== key) {
+    state.windowDomain = windowDeltaDomain(hm.values, anchor, hm.numYears, start, end, state.upperPct);
+    state.windowDomainKey = key;
+  }
+  return { anchor, domain: state.windowDomain };
+}
 
 function plotGeometry(canvas) {
   const width = canvas.clientWidth;
@@ -155,34 +386,67 @@ function plotGeometry(canvas) {
   };
 }
 
-// Paint every cell once into a numCols × numYears offscreen canvas (one pixel
-// per cell). NaN cells (no run active that year) stay transparent so the
-// past-horizon region recedes to the page background.
+// Which pre-sliced frame a column currently displays, or -1 for the averaged
+// view: a per-column random pick while replaying, the scrubbed composite
+// otherwise.
+function currentFrameIndex(col) {
+  if (isPlaying()) return state.randomAssign[col];
+  if (state.frame > 0) return state.frame - 1;
+  return -1;
+}
+
+// The value a cell currently displays. All painting, hit testing, and
+// tooltips read through here so every surface agrees on what is on screen.
+function cellValue(col, year) {
+  const hm = state.heatmap;
+  const f = currentFrameIndex(col);
+  if (f >= 0 && hm.frameValues) {
+    return hm.frameValues[(f * hm.numCols + col) * hm.numYears + year];
+  }
+  return hm.values[col * hm.numYears + year];
+}
+
+// Paint the cells into an offscreen canvas: one pixel column per data column,
+// VSS sub-pixels per year, each column's delta-vs-anchor series smoothed and
+// interpolated along years so the vertical gradient is continuous. NaN cells
+// (no run active that year) stay transparent so the past-horizon region
+// recedes to the page background. Smoothing happens in DELTA space — the
+// anchor varies by year, so smoothing raw values against a stepped anchor
+// would reintroduce artificial color steps.
 function buildOffscreen() {
   const hm = state.heatmap;
   const isDark = isDarkMode();
-  const key = `${state.encoding}:${isDark ? 'dark' : 'light'}`;
+  const { start, end, count } = visibleRange();
+  const displayKey = isPlaying() ? `t${state.tick}` : state.frame > 0 ? `f${state.frame}` : 'avg';
+  const key = `${state.encoding}:${isDark ? 'dark' : 'light'}:${displayKey}:w${state.lowerPct}-${state.upperPct}`;
   if (state.offscreen && state.offscreenKey === key) return state.offscreen;
 
+  const { anchor, domain } = anchorInfo();
+  const rows = hm.numYears * VSS;
   const off = document.createElement('canvas');
-  off.width = hm.numCols;
-  off.height = hm.numYears;
+  off.width = count;
+  off.height = rows;
   const ctx = off.getContext('2d');
-  const img = ctx.createImageData(hm.numCols, hm.numYears);
+  const img = ctx.createImageData(count, rows);
   const data = img.data;
+  const deltas = new Float64Array(hm.numYears);
 
-  for (let c = 0; c < hm.numCols; c++) {
+  for (let c = start; c < end; c++) {
     for (let j = 0; j < hm.numYears; j++) {
-      const v = hm.values[c * hm.numYears + j];
-      // ImageData is row-major: pixel (x=c, y=j).
-      const p = (j * hm.numCols + c) * 4;
-      if (Number.isNaN(v)) {
+      const v = cellValue(c, j);
+      deltas[j] = Number.isNaN(v) ? NaN : v - anchor[j];
+    }
+    const sub = smoothColumnSeries(deltas, VSS);
+    for (let s = 0; s < rows; s++) {
+      // Sub-sample s counts up from year 1 at the bottom; ImageData rows count
+      // down from the top. Pixel column is window-relative.
+      const p = ((rows - 1 - s) * count + (c - start)) * 4;
+      const d = sub[s];
+      if (Number.isNaN(d)) {
         data[p + 3] = 0;
         continue;
       }
-      const rgb = state.encoding === 'deviation'
-        ? divergingRgb(v - hm.planByYear[j], hm.deltaDomain.max, isDark)
-        : sequentialRgb(v, hm.absDomain, isDark);
+      const rgb = divergingRgb(d, domain, isDark);
       data[p] = rgb[0];
       data[p + 1] = rgb[1];
       data[p + 2] = rgb[2];
@@ -195,22 +459,35 @@ function buildOffscreen() {
   return off;
 }
 
-function drawAxes(ctx, theme, geom) {
+// Rounded pixel edge of year j's bottom boundary under the current layout.
+function rowEdges(geom, layout, numYears) {
+  const edges = new Float64Array(numYears + 1);
+  for (let j = 0; j <= numYears; j++) {
+    edges[j] = Math.round(geom.plotY + geom.plotH * (1 - layout[j]));
+  }
+  return edges;
+}
+
+function drawAxes(ctx, theme, geom, layout) {
   const hm = state.heatmap;
   ctx.fillStyle = theme.axisTick;
   ctx.font = '10px sans-serif';
 
   // X axis: percentile labels. Ranks map linearly onto the plot because the
-  // columns partition the P5..P65 rank window evenly.
-  const span = Math.max(1, hm.p65Rank - hm.p5Rank + 1);
-  const xForRank = (rank) => geom.plotX + ((rank - hm.p5Rank + 0.5) / span) * geom.plotW;
+  // columns partition the rank window evenly; the visible span runs between
+  // the "show from" and "show to" sliders' percentiles.
+  const startRank = rankAtPct(state.lowerPct);
+  const visSpan = Math.max(1, rankAtPct(state.upperPct) - startRank + 1);
+  const xForRank = (rank) => geom.plotX + ((rank - startRank + 0.5) / visSpan) * geom.plotW;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.strokeStyle = theme.gridLine;
   ctx.lineWidth = 1;
-  for (const pct of [5, 15, 25, 35, 45, 55, 65]) {
-    const rank = Math.min(hm.p65Rank, Math.floor((hm.numSimulations * pct) / 100));
-    if (rank < hm.p5Rank) continue;
+  const ticks = [state.lowerPct];
+  for (let pct = state.lowerPct + 10; pct < state.upperPct; pct += 10) ticks.push(pct);
+  ticks.push(state.upperPct);
+  for (const pct of ticks) {
+    const rank = rankAtPct(pct);
     const x = xForRank(rank);
     ctx.beginPath();
     ctx.moveTo(x, geom.plotY + geom.plotH);
@@ -219,12 +496,14 @@ function drawAxes(ctx, theme, geom) {
     ctx.fillText(`P${pct}`, x, geom.plotY + geom.plotH + 6);
   }
 
-  // Y axis: years, year 1 at the top.
+  // Y axis: years, year 1 at the bottom (time reads upward); label positions
+  // follow the emphasis-distorted layout.
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   const yearStep = hm.numYears > 15 ? 5 : 1;
   for (let year = 1; year <= hm.numYears; year += yearStep) {
-    const y = geom.plotY + ((year - 0.5) / hm.numYears) * geom.plotH;
+    const mid = (layout[year - 1] + layout[year]) / 2;
+    const y = geom.plotY + geom.plotH * (1 - mid);
     ctx.fillText(String(year), geom.plotX - 6, y);
   }
 
@@ -243,14 +522,18 @@ function drawAxes(ctx, theme, geom) {
 
 function cellRect(geom, col, year) {
   const hm = state.heatmap;
-  const w = geom.plotW / hm.numCols;
-  const h = geom.plotH / hm.numYears;
-  return { x: geom.plotX + col * w, y: geom.plotY + year * h, w, h };
+  const layout = state.rowLayout ?? heatmapRowLayout(hm.numYears, state.emphasis);
+  const { start, count } = visibleRange();
+  const w = geom.plotW / count;
+  const top = geom.plotY + geom.plotH * (1 - layout[year + 1]);
+  const bottom = geom.plotY + geom.plotH * (1 - layout[year]);
+  return { x: geom.plotX + (col - start) * w, y: top, w, h: bottom - top };
 }
 
 function drawHighlights(ctx, theme, geom) {
+  const { start, end } = visibleRange();
   // Selected column: a full-height outline so the drilled-down run stays located.
-  if (state.selectedCol != null) {
+  if (state.selectedCol != null && state.selectedCol >= start && state.selectedCol < end) {
     const r = cellRect(geom, state.selectedCol, 0);
     ctx.strokeStyle = theme.accent;
     ctx.lineWidth = 1.5;
@@ -279,53 +562,103 @@ function draw() {
   ctx.clearRect(0, 0, geom.width, geom.height);
   state.geom = geom;
 
+  const hm = state.heatmap;
+  const layout = heatmapRowLayout(hm.numYears, state.emphasis);
+  state.rowLayout = layout;
+
   const theme = getChartTheme();
   const off = buildOffscreen();
   // Nearest-neighbor scaling keeps each run's column a crisp vertical stripe
-  // instead of smearing adjacent runs together.
+  // instead of smearing adjacent runs together (the vertical direction is
+  // already smooth in the offscreen source). Blit one strip per year so the
+  // emphasis layout can stretch row heights without touching the cache.
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(off, geom.plotX, geom.plotY, geom.plotW, geom.plotH);
+  const edges = rowEdges(geom, layout, hm.numYears);
+  const { count } = visibleRange();
+  for (let j = 0; j < hm.numYears; j++) {
+    const destTop = edges[j + 1];
+    const destH = edges[j] - edges[j + 1];
+    if (destH <= 0) continue;
+    // Year j's sub-rows sit at offscreen rows [(numYears-1-j)*VSS, +VSS).
+    ctx.drawImage(off, 0, (hm.numYears - 1 - j) * VSS, count, VSS, geom.plotX, destTop, geom.plotW, destH);
+  }
   ctx.imageSmoothingEnabled = true;
 
-  drawAxes(ctx, theme, geom);
+  drawAxes(ctx, theme, geom, layout);
   drawHighlights(ctx, theme, geom);
 }
 
-// Legend: a gradient swatch with endpoint labels for the active encoding.
+// CSS gradient that mirrors the actual (asymmetric, gamma-eased) color
+// transfer by sampling it left-to-right across [−lo, +hi].
+function legendGradient(domain) {
+  const stops = [];
+  const K = 12;
+  for (let i = 0; i <= K; i++) {
+    const frac = i / K;
+    const delta = -domain.lo + frac * (domain.lo + domain.hi);
+    stops.push(`${divergingColor(delta, domain)} ${Math.round(frac * 100)}%`);
+  }
+  return stops.join(', ');
+}
+
+// Legend: a sampled gradient swatch with the active anchor's endpoint labels
+// and what the neutral midpoint means; the column-mode note renders into its
+// own row below the legend line.
 function renderLegend() {
   const el = document.getElementById('withdrawalHeatmapLegend');
   if (!el || !state.heatmap) return;
   const hm = state.heatmap;
-  const mode = isDarkMode() ? 'dark' : 'light';
-  const swatch = (gradient) =>
-    `<span class="inline-block w-24 h-3 rounded-sm shrink-0" style="background:linear-gradient(to right, ${gradient})"></span>`;
-  const item = (html) => `<span class="inline-flex items-center gap-1.5 text-xs text-theme-faint">${html}</span>`;
+  const { domain } = anchorInfo();
+  const swatch =
+    `<span class="inline-block w-28 h-4 rounded-sm shrink-0 border border-theme-border" style="background:linear-gradient(to right, ${legendGradient(domain)})"></span>`;
+  const item = (html) => `<span class="inline-flex items-center gap-1.5 text-sm text-theme-faint">${html}</span>`;
+  const midWord = isDarkMode() ? 'gray' : 'white';
+  const anchorWord = state.encoding === 'plan'
+    ? 'on plan'
+    : state.encoding === 'median'
+      ? 'that year’s median withdrawal'
+      : 'that year’s mean withdrawal';
 
   const items = [];
-  if (state.encoding === 'deviation') {
-    const d = DIV_STOPS[mode];
-    const max = hm.deltaDomain.max;
-    items.push(item(`<span>−${formatK(max)} cut</span>${swatch(`${d.cut}, ${d.mid}, ${d.boost}`)}<span>+${formatK(max)} boost</span>`));
-    items.push(item('<span>gray = on plan</span>'));
-  } else {
-    const s = SEQ_STOPS[mode];
-    items.push(item(`<span>${formatK(hm.absDomain.lo)}</span>${swatch(s.join(', '))}<span>${formatK(hm.absDomain.hi)}</span>`));
-  }
-  items.push(item('<span>(color range clamped at P2–P98)</span>'));
-  if (hm.colRunCount[0] > 1) {
-    items.push(item(`<span>each column averages ~${hm.colRunCount[0]} adjacent runs</span>`));
-  }
+  const loLabel = state.encoding === 'plan' ? 'cut' : 'below';
+  const hiLabel = state.encoding === 'plan' ? 'boost' : 'above';
+  items.push(item(`<span>−${formatK(domain.lo)} ${loLabel}</span>${swatch}<span>+${formatK(domain.hi)} ${hiLabel}</span>`));
+  items.push(item(`<span>${midWord} = ${anchorWord}</span>`));
   el.innerHTML = items.join('');
+
+  const noteEl = document.getElementById('withdrawalHeatmapColumnNote');
+  if (!noteEl) return;
+  let note = '';
+  if (isPlaying()) {
+    note = 'replaying: each column shows a random run from its band';
+  } else if (state.frame > 0) {
+    note = `showing run set ${state.frame} of ${hm.numFrames}`;
+  } else {
+    // Bands can be uneven (e.g. 851 runs over 480 columns → sizes 1–2), so
+    // report the widest one rather than trusting column 0.
+    const { start, end } = visibleRange();
+    let maxRuns = 1;
+    for (let c = start; c < end; c++) {
+      if (hm.colRunCount[c] > maxRuns) maxRuns = hm.colRunCount[c];
+    }
+    if (maxRuns > 1) note = `each column averages up to ${maxRuns} adjacent runs`;
+  }
+  noteEl.textContent = note;
+  noteEl.classList.toggle('hidden', note === '');
 }
 
 const TOGGLE_ACTIVE = ['bg-theme-muted', 'text-theme-heading', 'font-semibold'];
 const TOGGLE_INACTIVE = ['text-theme-faint'];
 
 function syncToggleUi() {
-  const abs = document.getElementById('withdrawalHeatmapModeAbs');
-  const delta = document.getElementById('withdrawalHeatmapModeDelta');
-  if (!abs || !delta) return;
-  for (const [btn, active] of [[abs, state.encoding === 'absolute'], [delta, state.encoding === 'deviation']]) {
+  const buttons = [
+    [document.getElementById('withdrawalHeatmapModeAbs'), 'mean'],
+    [document.getElementById('withdrawalHeatmapModeMedian'), 'median'],
+    [document.getElementById('withdrawalHeatmapModeDelta'), 'plan'],
+  ];
+  for (const [btn, mode] of buttons) {
+    if (!btn) continue;
+    const active = state.encoding === mode;
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     btn.classList.remove(...TOGGLE_ACTIVE, ...TOGGLE_INACTIVE);
     btn.classList.add(...(active ? TOGGLE_ACTIVE : TOGGLE_INACTIVE));
@@ -333,7 +666,7 @@ function syncToggleUi() {
 }
 
 function setEncoding(mode) {
-  if (mode !== 'absolute' && mode !== 'deviation') return;
+  if (mode !== 'mean' && mode !== 'median' && mode !== 'plan') return;
   if (state.encoding === mode) return;
   state.encoding = mode;
   syncToggleUi();
@@ -341,16 +674,153 @@ function setEncoding(mode) {
   draw();
 }
 
+// Keep the sliders and their value labels in step with state; hide the
+// run/speed pair when every column is a single run (nothing to scrub/replay).
+function syncControlUi() {
+  const hm = state.heatmap;
+  const available = (hm?.numFrames ?? 1) > 1;
+  const frameWrap = document.getElementById('withdrawalHeatmapFrameWrap');
+  const speedWrap = document.getElementById('withdrawalHeatmapSpeedWrap');
+  frameWrap?.classList.toggle('hidden', !available);
+  speedWrap?.classList.toggle('hidden', !available);
+
+  const frameEl = document.getElementById('withdrawalHeatmapFrame');
+  if (frameEl) {
+    frameEl.max = String(hm?.numFrames ?? 0);
+    frameEl.value = String(state.frame);
+    // The random replay owns the display while running; scrubbing is moot.
+    frameEl.disabled = state.speed > 0;
+  }
+  const frameLabel = document.getElementById('withdrawalHeatmapFrameLabel');
+  if (frameLabel) frameLabel.textContent = state.frame === 0 ? 'Avg' : `${state.frame}/${hm.numFrames}`;
+
+  const speedEl = document.getElementById('withdrawalHeatmapSpeed');
+  if (speedEl) speedEl.value = String(state.speed);
+  const speedLabel = document.getElementById('withdrawalHeatmapSpeedLabel');
+  if (speedLabel) speedLabel.textContent = state.speed === 0 ? 'off' : String(state.speed);
+
+  const emphasisEl = document.getElementById('withdrawalHeatmapEmphasis');
+  if (emphasisEl) emphasisEl.value = String(state.emphasis);
+
+  const lowerEl = document.getElementById('withdrawalHeatmapLower');
+  if (lowerEl) lowerEl.value = String(state.lowerPct);
+  const lowerLabel = document.getElementById('withdrawalHeatmapLowerLabel');
+  if (lowerLabel) lowerLabel.textContent = `P${state.lowerPct}`;
+
+  const upperEl = document.getElementById('withdrawalHeatmapUpper');
+  if (upperEl) upperEl.value = String(state.upperPct);
+  const upperLabel = document.getElementById('withdrawalHeatmapUpperLabel');
+  if (upperLabel) upperLabel.textContent = `P${state.upperPct}`;
+}
+
+// Scrubber: step through the averaged view (0) and the deterministic
+// pre-sliced composites (1..numFrames). Ignored on screen while replaying.
+function setFrame(k) {
+  const hm = state.heatmap;
+  if (!hm) return;
+  const next = Math.max(0, Math.min(hm.numFrames, Math.round(k) || 0));
+  if (state.frame === next) return;
+  state.frame = next;
+  syncControlUi();
+  renderLegend();
+  draw();
+}
+
+function onReplayTick() {
+  const hm = state.heatmap;
+  for (let c = 0; c < hm.numCols; c++) {
+    state.randomAssign[c] = Math.floor(Math.random() * hm.numFrames);
+  }
+  state.tick++;
+  draw();
+}
+
+// Speed: 0 = off; > 0 starts the fully random replay — every tick each
+// column independently samples one of its band's runs, so each instant is an
+// unbiased mixed draw from the ensemble and no composite ever repeats.
+function setSpeed(v) {
+  const hm = state.heatmap;
+  if (!hm) return;
+  const next = Math.max(0, Math.min(SPEED_STEPS, Math.round(v) || 0));
+  if (state.speed === next) return;
+  state.speed = next;
+  if (state.animTimer != null) {
+    clearInterval(state.animTimer);
+    state.animTimer = null;
+  }
+  if (next > 0 && hm.numFrames > 1) {
+    if (!state.randomAssign) state.randomAssign = new Int32Array(hm.numCols);
+    state.animTimer = setInterval(onReplayTick, tickMsForSpeed(next));
+    onReplayTick();
+  } else {
+    state.randomAssign = null;
+    draw();
+  }
+  syncControlUi();
+  renderLegend();
+}
+
+function setEmphasis(v) {
+  const next = Math.max(0, Math.min(100, Math.round(v) || 0));
+  if (state.emphasis === next) return;
+  state.emphasis = next;
+  // Only the blit layout changes — the offscreen cache stays valid, so slider
+  // drags stay fluid.
+  draw();
+}
+
+// "Show from"/"show to": move the x axis's outcome-percentile window. The
+// grid is pre-built P5..hiPercentile, so this only re-crops columns and
+// re-derives the window-local anchors and color clamps — no worker round-trip.
+function afterWindowChange() {
+  // A previously selected column may fall outside the moved window.
+  const { start, end } = visibleRange();
+  if (state.selectedCol != null && (state.selectedCol < start || state.selectedCol >= end)) {
+    state.selectedCol = null;
+  }
+  syncControlUi();
+  renderLegend();
+  draw();
+}
+
+function setLowerPct(v) {
+  if (!state.heatmap) return;
+  const next = Math.max(5, Math.min(30, Math.round(v) || 5));
+  if (state.lowerPct === next) return;
+  state.lowerPct = next;
+  afterWindowChange();
+}
+
+function setUpperPct(v) {
+  const hm = state.heatmap;
+  const cap = hm?.hiPercentile ?? 90;
+  const next = Math.max(65, Math.min(cap, Math.round(v) || 65));
+  if (state.upperPct === next) return;
+  state.upperPct = next;
+  afterWindowChange();
+}
+
 function hitTest(ev) {
   const canvas = document.getElementById('withdrawalHeatmapCanvas');
   if (!canvas || !state.heatmap || !state.geom) return null;
   const rect = canvas.getBoundingClientRect();
-  const col = heatmapColumnAtX(ev.clientX - rect.left, state.geom, state.heatmap.numCols);
-  const year = heatmapYearAtY(ev.clientY - rect.top, state.geom, state.heatmap.numYears);
+  const { start, count } = visibleRange();
+  const rel = heatmapColumnAtX(ev.clientX - rect.left, state.geom, count);
+  const col = rel < 0 ? -1 : start + rel;
+  const year = heatmapYearAtY(ev.clientY - rect.top, state.geom, state.heatmap.numYears, state.rowLayout);
   if (col < 0 || year < 0) return null;
-  // NaN cells (past every band run's horizon) are not interactive.
-  if (Number.isNaN(state.heatmap.values[col * state.heatmap.numYears + year])) return null;
+  // NaN cells (past the displayed run's/band's horizon) are not interactive.
+  if (Number.isNaN(cellValue(col, year))) return null;
   return { col, year };
+}
+
+// The run a column currently stands for: the displayed run while scrubbing
+// or replaying, the band's center run in the averaged view.
+function displayedSimIndex(col) {
+  const hm = state.heatmap;
+  const f = currentFrameIndex(col);
+  if (f >= 0 && hm.frameSimIndex) return hm.frameSimIndex[f * hm.numCols + col];
+  return hm.colSimIndex[col];
 }
 
 function showTooltip(ev, cell) {
@@ -364,13 +834,19 @@ function showTooltip(ev, cell) {
   }
   const hm = state.heatmap;
   const theme = getChartTheme();
+  const showingRuns = isPlaying() || state.frame > 0;
+  const anchors = windowAnchors();
   const { title, rows, footer } = formatHeatmapTooltip({
     year: cell.year + 1,
     pctLabel: percentileLabelForRank(hm.colCenterRank[cell.col], hm.numSimulations),
-    simIndex: hm.colSimIndex[cell.col],
-    value: hm.values[cell.col * hm.numYears + cell.year],
+    simIndex: displayedSimIndex(cell.col),
+    value: cellValue(cell.col, cell.year),
     plan: hm.planByYear[cell.year],
-    runCount: hm.colRunCount[cell.col],
+    mean: anchors.mean[cell.year],
+    median: anchors.median[cell.year],
+    // While showing individual runs each cell is exactly one real run, so the
+    // tooltip names it instead of reporting the band average.
+    runCount: showingRuns ? 1 : hm.colRunCount[cell.col],
   });
   tip.innerHTML =
     `<div style="font-weight:600;color:${theme.tooltipTitle}">${title}</div>` +
@@ -398,7 +874,7 @@ const OUTCOME_LABELS = ['Met plan', 'Below plan', 'Ran out'];
 
 // Drill into the column's representative run: same withdrawal-vs-plan line
 // chart + linked balance bars as the 3D surface and IRR scatter popups.
-function renderPathChart(col) {
+function renderPathChart(col, simIndex) {
   const container = document.getElementById('withdrawalHeatmapDrilldown');
   const titleEl = document.getElementById('withdrawalHeatmapDrilldownTitle');
   const metaEl = document.getElementById('withdrawalHeatmapDrilldownMeta');
@@ -407,7 +883,6 @@ function renderPathChart(col) {
   if (!container || !canvas || state.params == null || state.seed == null) return;
 
   const hm = state.heatmap;
-  const simIndex = hm.colSimIndex[col];
   const re = regeneratePath(state.params, state.seed, simIndex);
   const outcomeIndex = state.outcome ? state.outcome[simIndex] : 0;
   const pctLabel = percentileLabelForRank(hm.colCenterRank[col], hm.numSimulations);
@@ -503,9 +978,14 @@ function onMouseLeave() {
 }
 
 function selectColumn(col) {
+  const { start, end } = visibleRange();
+  if (col < start || col >= end) return;
   state.selectedCol = col;
+  // Pin the run that was on screen at click time — during replay the column
+  // keeps changing, but the drill-down is a snapshot of that run.
+  state.selectedSimIndex = displayedSimIndex(col);
   draw();
-  renderPathChart(col);
+  renderPathChart(col, state.selectedSimIndex);
 }
 
 function onClick(ev) {
@@ -520,9 +1000,21 @@ function bindEvents(canvas) {
   canvas.addEventListener('mouseleave', onMouseLeave);
   canvas.addEventListener('click', onClick);
   document.getElementById('withdrawalHeatmapModeAbs')
-    ?.addEventListener('click', () => setEncoding('absolute'));
+    ?.addEventListener('click', () => setEncoding('mean'));
+  document.getElementById('withdrawalHeatmapModeMedian')
+    ?.addEventListener('click', () => setEncoding('median'));
   document.getElementById('withdrawalHeatmapModeDelta')
-    ?.addEventListener('click', () => setEncoding('deviation'));
+    ?.addEventListener('click', () => setEncoding('plan'));
+  document.getElementById('withdrawalHeatmapFrame')
+    ?.addEventListener('input', (ev) => setFrame(Number(ev.target.value)));
+  document.getElementById('withdrawalHeatmapSpeed')
+    ?.addEventListener('input', (ev) => setSpeed(Number(ev.target.value)));
+  document.getElementById('withdrawalHeatmapEmphasis')
+    ?.addEventListener('input', (ev) => setEmphasis(Number(ev.target.value)));
+  document.getElementById('withdrawalHeatmapLower')
+    ?.addEventListener('input', (ev) => setLowerPct(Number(ev.target.value)));
+  document.getElementById('withdrawalHeatmapUpper')
+    ?.addEventListener('input', (ev) => setUpperPct(Number(ev.target.value)));
   state.resizeObserver = new ResizeObserver(() => draw());
   state.resizeObserver.observe(canvas.parentElement);
   state.eventsBound = true;
@@ -537,8 +1029,24 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
   state.outcome = outcome ?? null;
   state.hovered = null;
   state.selectedCol = null;
+  state.selectedSimIndex = null;
   state.offscreen = null;
   state.offscreenKey = null;
+  // New data invalidates the window-local anchor/domain caches.
+  state.windowAnchors = null;
+  state.windowAnchorsKey = null;
+  state.windowDomain = null;
+  state.windowDomainKey = null;
+  // Fresh results: stop any replay and reset the scrubber for the new grid
+  // (the emphasis and window sliders are view preferences and survive re-runs).
+  state.frame = 0;
+  state.speed = 0;
+  state.randomAssign = null;
+  state.tick = 0;
+  if (state.animTimer != null) {
+    clearInterval(state.animTimer);
+    state.animTimer = null;
+  }
   if (state.pathChart) {
     state.pathChart.destroy();
     state.pathChart = null;
@@ -546,6 +1054,7 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
   document.getElementById('withdrawalHeatmapDrilldown')?.classList.add('hidden');
   bindEvents(canvas);
   syncToggleUi();
+  syncControlUi();
   renderLegend();
   draw();
 
@@ -553,11 +1062,24 @@ export function drawWithdrawalHeatmap(heatmap, { params, seed, outcome } = {}) {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     window.__TEST_HOOKS__.withdrawalHeatmap = () => ({
       numCols: state.heatmap.numCols,
+      visibleCols: visibleRange().count,
       numYears: state.heatmap.numYears,
       encoding: state.encoding,
+      numFrames: state.heatmap.numFrames,
+      frame: state.frame,
+      speed: state.speed,
+      playing: isPlaying(),
+      emphasis: state.emphasis,
+      lowerPct: state.lowerPct,
+      upperPct: state.upperPct,
     });
     window.__TEST_HOOKS__.withdrawalHeatmapSetEncoding = (mode) => setEncoding(mode);
     window.__TEST_HOOKS__.withdrawalHeatmapClickColumn = (col) => selectColumn(col);
+    window.__TEST_HOOKS__.withdrawalHeatmapSetFrame = (k) => setFrame(k);
+    window.__TEST_HOOKS__.withdrawalHeatmapSetSpeed = (v) => setSpeed(v);
+    window.__TEST_HOOKS__.withdrawalHeatmapSetEmphasis = (v) => setEmphasis(v);
+    window.__TEST_HOOKS__.withdrawalHeatmapSetLower = (v) => setLowerPct(v);
+    window.__TEST_HOOKS__.withdrawalHeatmapSetUpper = (v) => setUpperPct(v);
   }
 }
 
@@ -565,5 +1087,7 @@ onThemeChange(() => {
   if (!state.heatmap) return;
   renderLegend();
   draw();
-  if (state.selectedCol != null && state.pathChart) renderPathChart(state.selectedCol);
+  if (state.selectedCol != null && state.pathChart) {
+    renderPathChart(state.selectedCol, state.selectedSimIndex ?? state.heatmap.colSimIndex[state.selectedCol]);
+  }
 });

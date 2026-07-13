@@ -1,51 +1,92 @@
 import { describe, it, expect } from 'vitest';
 import {
-  sequentialColor,
   divergingColor,
   heatmapColumnAtX,
   heatmapYearAtY,
+  heatmapRowLayout,
+  smoothColumnSeries,
+  tickMsForSpeed,
+  windowAnchorSeries,
+  windowDeltaDomain,
   formatHeatmapTooltip,
 } from '../src/ui/charts/withdrawalHeatmap.js';
 
-describe('sequentialColor', () => {
-  const domain = { lo: 20_000, hi: 100_000 };
+function channels(rgb) {
+  return rgb.match(/\d+/g).map(Number);
+}
 
-  it('maps the domain endpoints to the ramp ends (light)', () => {
-    expect(sequentialColor(domain.lo, domain, false)).toBe('rgb(205, 226, 251)'); // #cde2fb
-    expect(sequentialColor(domain.hi, domain, false)).toBe('rgb(13, 54, 107)'); // #0d366b
+describe('divergingColor (asymmetric PuOr transfer)', () => {
+  const dom = { lo: 10_000, hi: 40_000 };
+
+  it('returns the mode-specific neutral midpoint exactly on the anchor', () => {
+    expect(divergingColor(0, dom, false)).toBe('rgb(247, 247, 247)'); // #f7f7f7 (light)
+    expect(divergingColor(0, dom, true)).toBe('rgb(61, 61, 61)'); // #3d3d3d (dark)
   });
 
-  it('inverts lightness direction in dark mode so low values recede', () => {
-    expect(sequentialColor(domain.lo, domain, true)).toBe('rgb(22, 40, 60)'); // #16283c
-    expect(sequentialColor(domain.hi, domain, true)).toBe('rgb(183, 211, 246)'); // #b7d3f6
+  it('reaches the poles at each arm’s own domain end', () => {
+    expect(divergingColor(-dom.lo, dom, false)).toBe('rgb(230, 97, 1)'); // #e66101
+    expect(divergingColor(dom.hi, dom, false)).toBe('rgb(94, 60, 153)'); // #5e3c99
+    expect(divergingColor(-dom.lo, dom, true)).toBe('rgb(230, 97, 1)');
+    expect(divergingColor(dom.hi, dom, true)).toBe('rgb(94, 60, 153)');
   });
 
-  it('clamps values beyond the domain to the ramp ends', () => {
-    expect(sequentialColor(domain.lo - 50_000, domain, false)).toBe(sequentialColor(domain.lo, domain, false));
-    expect(sequentialColor(domain.hi + 500_000, domain, false)).toBe(sequentialColor(domain.hi, domain, false));
+  it('tints indigo immediately above the anchor (narrow neutral band)', () => {
+    const mid = channels(divergingColor(0, dom, false));
+    const justAbove = channels(divergingColor(dom.hi * 0.02, dom, false));
+    // +2% of the positive domain is already visibly purple: red channel drops.
+    expect(mid[0] - justAbove[0]).toBeGreaterThan(10);
+    const justBelow = channels(divergingColor(-dom.lo * 0.02, dom, false));
+    // −2% warms visibly too (blue channel drops), but less aggressively.
+    expect(mid[2] - justBelow[2]).toBeGreaterThan(5);
+    expect(mid[0] - justAbove[0]).toBeGreaterThan(mid[2] - justBelow[2]);
+  });
+
+  it('normalizes each arm against its own end (asymmetry)', () => {
+    // Same absolute delta: 8k is 80% of the way down the below arm but only
+    // 20% up the above arm, so the below color sits much closer to its pole.
+    const below = channels(divergingColor(-8_000, dom, false));
+    const above = channels(divergingColor(8_000, dom, false));
+    const poleBelow = channels(divergingColor(-dom.lo, dom, false));
+    const poleAbove = channels(divergingColor(dom.hi, dom, false));
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    expect(dist(below, poleBelow)).toBeLessThan(dist(above, poleAbove));
+  });
+
+  it('clamps deltas beyond the domain to the poles', () => {
+    expect(divergingColor(-3 * dom.lo, dom, false)).toBe(divergingColor(-dom.lo, dom, false));
+    expect(divergingColor(3 * dom.hi, dom, false)).toBe(divergingColor(dom.hi, dom, false));
+  });
+
+  it('degrades to the midpoint when a domain side is zero', () => {
+    expect(divergingColor(5_000, { lo: 1, hi: 0 }, false)).toBe(divergingColor(0, dom, false));
   });
 });
 
-describe('divergingColor', () => {
-  const max = 10_000;
-
-  it('returns the neutral gray midpoint exactly on plan', () => {
-    expect(divergingColor(0, max, false)).toBe('rgb(240, 239, 236)'); // #f0efec
-    expect(divergingColor(0, max, true)).toBe('rgb(56, 56, 53)'); // #383835
+describe('heatmapRowLayout', () => {
+  it('is a uniform grid at emphasis 0', () => {
+    const b = heatmapRowLayout(10, 0);
+    expect(b[0]).toBe(0);
+    expect(b[10]).toBe(1);
+    for (let j = 0; j <= 10; j++) expect(b[j]).toBeCloseTo(j / 10, 10);
   });
 
-  it('runs cuts to the red pole and boosts to the blue pole', () => {
-    expect(divergingColor(-max, max, false)).toBe('rgb(185, 28, 28)'); // #b91c1c
-    expect(divergingColor(max, max, false)).toBe('rgb(28, 92, 171)'); // #1c5cab
+  it('makes the first year ~5× the last at emphasis 100', () => {
+    const b = heatmapRowLayout(30, 100);
+    const first = b[1] - b[0];
+    const last = b[30] - b[29];
+    expect(first / last).toBeCloseTo(5, 1);
+    // Strictly decreasing heights, cumulative stays monotone and normalized.
+    for (let j = 1; j < 30; j++) {
+      expect(b[j + 1] - b[j]).toBeLessThan(b[j] - b[j - 1]);
+    }
+    expect(b[30]).toBe(1);
   });
 
-  it('clamps deltas beyond the symmetric domain to the poles', () => {
-    expect(divergingColor(-3 * max, max, false)).toBe(divergingColor(-max, max, false));
-    expect(divergingColor(3 * max, max, false)).toBe(divergingColor(max, max, false));
-  });
-
-  it('degrades to the midpoint when the domain is zero', () => {
-    expect(divergingColor(5_000, 0, false)).toBe(divergingColor(0, 1, false));
+  it('biases early years ~3× at the default mid emphasis (50)', () => {
+    const b = heatmapRowLayout(30, 50);
+    const first = b[1] - b[0];
+    const last = b[30] - b[29];
+    expect(first / last).toBeCloseTo(3, 1);
   });
 });
 
@@ -66,28 +107,137 @@ describe('heatmap hit testing', () => {
     expect(heatmapYearAtY(210, geom, 20)).toBe(-1);
   });
 
-  it('maps plot-area y pixels to year indices (year 1 at the top)', () => {
-    expect(heatmapYearAtY(10, geom, 20)).toBe(0);
-    expect(heatmapYearAtY(19.9, geom, 20)).toBe(0);
-    expect(heatmapYearAtY(20, geom, 20)).toBe(1);
-    expect(heatmapYearAtY(209.9, geom, 20)).toBe(19);
+  it('maps plot-area y pixels to year indices (year 1 at the bottom)', () => {
+    expect(heatmapYearAtY(10, geom, 20)).toBe(19);
+    expect(heatmapYearAtY(19.9, geom, 20)).toBe(19);
+    expect(heatmapYearAtY(20, geom, 20)).toBe(18);
+    expect(heatmapYearAtY(209.9, geom, 20)).toBe(0);
+  });
+
+  it('agrees with a uniform layout and round-trips a distorted one', () => {
+    const numYears = 20;
+    const uniform = heatmapRowLayout(numYears, 0);
+    for (const y of [10, 19.9, 20, 105, 209.9]) {
+      expect(heatmapYearAtY(y, geom, numYears, uniform)).toBe(heatmapYearAtY(y, geom, numYears));
+    }
+    const distorted = heatmapRowLayout(numYears, 100);
+    for (let j = 0; j < numYears; j++) {
+      const mid = (distorted[j] + distorted[j + 1]) / 2;
+      const y = geom.plotY + geom.plotH * (1 - mid);
+      expect(heatmapYearAtY(y, geom, numYears, distorted)).toBe(j);
+    }
+  });
+});
+
+describe('smoothColumnSeries', () => {
+  it('keeps a flat series flat', () => {
+    const out = smoothColumnSeries([10, 10, 10, 10], 4);
+    expect(out.length).toBe(16);
+    for (const v of out) expect(v).toBeCloseTo(10, 10);
+  });
+
+  it('turns a step between years into a monotone gradient', () => {
+    const out = smoothColumnSeries([10, 20], 8);
+    for (let k = 1; k < out.length; k++) {
+      expect(out[k]).toBeGreaterThanOrEqual(out[k - 1]);
+    }
+    expect(out[0]).toBeLessThan(out[out.length - 1]);
+  });
+
+  it('never bleeds values across a NaN horizon boundary', () => {
+    const out = smoothColumnSeries([5, 5, NaN, NaN], 4);
+    // Sub-samples whose nearest year is finite keep the value; the rest are
+    // NaN — the horizon edge stays hard at the half-year boundary.
+    for (let k = 0; k < 8; k++) expect(out[k]).toBeCloseTo(5, 10);
+    for (let k = 8; k < 16; k++) expect(Number.isNaN(out[k])).toBe(true);
+  });
+});
+
+describe('tickMsForSpeed', () => {
+  it('maps the 10 slider settings to the cadence range, biased fast', () => {
+    expect(tickMsForSpeed(1)).toBe(800);
+    expect(tickMsForSpeed(10)).toBe(40);
+    for (let s = 2; s <= 10; s++) {
+      expect(tickMsForSpeed(s)).toBeLessThan(tickMsForSpeed(s - 1));
+    }
+    // Quadratic bias: the midpoint setting is already well under the linear
+    // midpoint of the interval range.
+    expect(tickMsForSpeed(5)).toBeLessThan((800 + 40) / 2);
+  });
+});
+
+describe('windowAnchorSeries', () => {
+  // 3 columns × 2 years, column-major values[col*numYears + year].
+  const values = Float64Array.from([
+    10, 100, // col 0
+    20, 200, // col 1
+    60, NaN, // col 2 (year 1 past its horizon)
+  ]);
+  const counts = Int32Array.from([1, 1, 2]);
+
+  it('computes the band-size-weighted mean and cell median per year', () => {
+    const { mean, median } = windowAnchorSeries(values, counts, 2, 0, 3);
+    // Year 0: (10·1 + 20·1 + 60·2) / 4 = 37.5; median of [10, 20, 60] = 20.
+    expect(mean[0]).toBeCloseTo(37.5, 10);
+    expect(median[0]).toBe(20);
+    // Year 1: col 2 is NaN → (100·1 + 200·1) / 2; median of [100, 200] = 150.
+    expect(mean[1]).toBeCloseTo(150, 10);
+    expect(median[1]).toBe(150);
+  });
+
+  it('responds to the window bounds', () => {
+    const { mean } = windowAnchorSeries(values, counts, 2, 0, 2);
+    expect(mean[0]).toBeCloseTo(15, 10);
+    const narrow = windowAnchorSeries(values, counts, 2, 2, 3);
+    expect(narrow.mean[0]).toBe(60);
+    // A year with no finite cells in the window anchors to NaN.
+    expect(Number.isNaN(narrow.mean[1])).toBe(true);
+    expect(Number.isNaN(narrow.median[1])).toBe(true);
+  });
+});
+
+describe('windowDeltaDomain', () => {
+  it('derives asymmetric clamps from the window cells', () => {
+    // One column, many years, deltas from -50..+49 around a zero anchor.
+    const numYears = 100;
+    const values = new Float64Array(numYears);
+    for (let j = 0; j < numYears; j++) values[j] = j - 50;
+    const anchor = new Float64Array(numYears); // all zeros
+    const domain = windowDeltaDomain(values, anchor, numYears, 0, 1, 65);
+    // lo = |P2| of the deltas = |-48|; hi = P68 = +18.
+    expect(domain.lo).toBe(48);
+    expect(domain.hi).toBe(18);
+    // Raising the upper axis raises the upper clamp with it.
+    const wider = windowDeltaDomain(values, anchor, numYears, 0, 1, 90);
+    expect(wider.hi).toBeGreaterThan(domain.hi);
+  });
+
+  it('guards degenerate spreads', () => {
+    const values = Float64Array.from([5, 5, 5]);
+    const anchor = Float64Array.from([5]);
+    const domain = windowDeltaDomain(values, anchor, 1, 0, 3, 65);
+    expect(domain.lo).toBe(1);
+    expect(domain.hi).toBe(1);
   });
 });
 
 describe('formatHeatmapTooltip', () => {
-  it('names the single run and shows a signed delta vs plan', () => {
+  it('names the single run and shows signed deltas vs mean, median, and plan', () => {
     const tip = formatHeatmapTooltip({
       year: 12,
       pctLabel: 'P37',
       simIndex: 41,
       value: 58_000,
       plan: 55_000,
+      mean: 53_000,
+      median: 52_000,
       runCount: 1,
     });
     expect(tip.title).toBe('Year 12 · P37 · Simulation #42');
-    expect(tip.rows.some((r) => r.startsWith('Withdrawal '))).toBe(true);
-    expect(tip.rows.some((r) => r.startsWith('Plan '))).toBe(true);
-    expect(tip.rows.find((r) => r.endsWith('vs plan')).startsWith('+')).toBe(true);
+    expect(tip.rows[0]).toBe('Withdrawal 58');
+    expect(tip.rows[1]).toBe('+5 vs year mean (53)');
+    expect(tip.rows[2]).toBe('+6 vs year median (52)');
+    expect(tip.rows[3]).toBe('+3 vs plan (55)');
     expect(tip.footer).toBe('Click to see this path');
   });
 
@@ -98,10 +248,13 @@ describe('formatHeatmapTooltip', () => {
       simIndex: 7,
       value: 40_000,
       plan: 55_000,
+      mean: 53_000,
+      median: 52_000,
       runCount: 13,
     });
     expect(tip.title).toBe('Year 3 · P20');
     expect(tip.rows).toContain('avg of 13 runs');
-    expect(tip.rows.find((r) => r.endsWith('vs plan')).startsWith('−')).toBe(true);
+    expect(tip.rows.find((r) => r.includes('vs year mean')).startsWith('−')).toBe(true);
+    expect(tip.rows.find((r) => r.includes('vs plan')).startsWith('−')).toBe(true);
   });
 });

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx playwright test charts -g \"animates individual\" 2>&1)",
+      "PowerShell(npx vitest run tests/withdrawalHeatmap.test.js tests/resultPackaging.test.js 2>&1)"
+    ]
+  }
+}

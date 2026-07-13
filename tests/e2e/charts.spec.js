@@ -322,21 +322,44 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
 
   await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
 
-  // 100 sims: ranks 5..65 inclusive → 61 run-coherent columns, one per run.
-  // Rows span maxYears, which exceeds 30 when the default scenario carries a
+  // 100 sims: the grid is built P5..P90 (86 run-coherent columns, one per
+  // run); the default "show to" P65 crops the display to 61 of them. Rows
+  // span maxYears, which exceeds 30 when the default scenario carries a
   // variable-horizon buffer.
   const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
-  expect(shape.numCols).toBe(61);
+  expect(shape.numCols).toBe(86);
+  expect(shape.visibleCols).toBe(61);
+  expect(shape.upperPct).toBe(65);
   expect(shape.numYears).toBeGreaterThanOrEqual(30);
-  expect(shape.encoding).toBe('absolute');
+  expect(shape.encoding).toBe('mean');
+  expect(shape.emphasis).toBe(50); // default biases early-year rows taller
 
-  // Legend describes the active (absolute $) ramp with its clamp note.
-  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('clamped at P2–P98');
+  // Early years + Show from/to share one control row under the color legend.
+  await expect(page.locator('#withdrawalHeatmapEmphasis')).toBeVisible();
+  await expect(page.locator('#withdrawalHeatmapLower')).toBeVisible();
+
+  // 86 runs fit the column cap → every column is a single run, so there is
+  // nothing to scrub/replay and the run/speed sliders stay hidden.
+  expect(shape.numFrames).toBe(1);
+  await expect(page.locator('#withdrawalHeatmapFrameWrap')).toBeHidden();
+  await expect(page.locator('#withdrawalHeatmapSpeedWrap')).toBeHidden();
+
+  // Legend describes the mean-anchored spectrum.
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('mean withdrawal');
+
+  // Moving the from/to window changes the visible columns; both snap back
+  // for the rest of the assertions.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(90));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().visibleCols)).toBe(86);
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(30));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().visibleCols)).toBeLessThan(86);
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(5));
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(65));
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-absolute.png' });
 
-  // Toggle to the deviation-from-plan encoding.
+  // Toggle to the plan-anchored encoding.
   await page.click('#withdrawalHeatmapModeDelta');
-  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('deviation');
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('plan');
   await expect(page.locator('#withdrawalHeatmapModeDelta')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('on plan');
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-deviation.png' });
@@ -354,4 +377,63 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapClickColumn(30));
   await expect(page.locator('#withdrawalHeatmapDrilldown')).toBeVisible();
   await expect(page.locator('#withdrawalHeatmapDrilldownTitle')).toHaveText(/Simulation #\d+ · P\d+/);
+
+  // Dark mode redraws with the dark neutral midpoint and gray legend wording.
+  await page.click('#themeToggle');
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('gray = on plan');
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-dark.png' });
+  await page.click('#themeToggle');
+});
+
+test('Withdrawal heatmap animates individual runs when columns are banded', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await disableGoalSeek(page);
+
+  await page.fill('#startBalance', '2000');
+  await page.click('summary:has-text("Advanced simulation settings")');
+  await page.fill('#numYears', '30');
+  // 1000 sims: the P5–P65 window holds 601 runs → 480 columns in bands of
+  // 1–2, so the animation carries 2 frames.
+  await page.fill('#numSimulations', '1000');
+  await page.fill('#randomSeed', '12345');
+  await page.click('#runButton');
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
+
+  await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
+  const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(shape.numCols).toBe(480);
+  expect(shape.numFrames).toBe(2);
+  expect(shape.frame).toBe(0);
+  expect(shape.playing).toBe(false);
+  await expect(page.locator('#withdrawalHeatmapFrameWrap')).toBeVisible();
+  await expect(page.locator('#withdrawalHeatmapSpeedWrap')).toBeVisible();
+
+  // Scrub to the first individual-run snapshot.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetFrame(1));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().frame)).toBe(1);
+  await expect(page.locator('#withdrawalHeatmapColumnNote')).toContainText('run set 1 of 2');
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-animated-frame.png' });
+
+  // Clicking while showing runs drills into the exact run on screen.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapClickColumn(240));
+  await expect(page.locator('#withdrawalHeatmapDrilldown')).toBeVisible();
+  await expect(page.locator('#withdrawalHeatmapDrilldownTitle')).toHaveText(/Simulation #\d+ · P\d+/);
+
+  // Speed slider starts the random replay (Run scrubber disables); 0 stops it.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetSpeed(5));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().playing)).toBe(true);
+  await expect(page.locator('#withdrawalHeatmapColumnNote')).toContainText('random run');
+  await expect(page.locator('#withdrawalHeatmapFrame')).toBeDisabled();
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetSpeed(0));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().playing)).toBe(false);
+  await expect(page.locator('#withdrawalHeatmapFrame')).toBeEnabled();
+
+  // Back to the averaged view; the early-year emphasis slider redraws safely.
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetFrame(0));
+  await expect(page.locator('#withdrawalHeatmapColumnNote')).toContainText('averages');
+  await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetEmphasis(100));
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().emphasis)).toBe(100);
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-emphasis.png' });
 });

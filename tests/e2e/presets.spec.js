@@ -60,9 +60,9 @@ test('Entering a balance rescales derived values while Goal Seek is on', async (
 
   await page.fill('#startBalance', '3,000');
 
-  // Balanced @ 3,000 start / 25 years: 70% lifetime → 84/yr minimum; 40% target.
+  // Balanced @ 3,000 start / 25 years: 70% lifetime → 84/yr minimum; 30% target.
   await expect(firstFloorAmount(page)).toHaveValue('84');
-  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
+  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('900');
   await expect(page.locator('#presetActive')).toBeChecked();
 });
 
@@ -107,7 +107,7 @@ test('Changing the starting balance live-rescales the derived values while attac
   await expect(firstFloorAmount(page)).toHaveValue('168');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-amount]')).toHaveValue('60');
   await expect(page.locator('[data-gifting-tier-row="0"] [data-gift-balance]')).toHaveValue('5,400');
-  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('2,400');
+  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,800');
   // No-cut threshold = 1 × start.
   await expect(page.locator('#dynNoCutBal')).toHaveValue('6,000');
   // Balanced Easy Mode max-boost drawdown is 1%.
@@ -304,7 +304,7 @@ test('Balanced Easy Mode Find Best Plan retunes guardrails (not an instant infea
   await expect(page.locator('#presetLevelName')).toContainText('Balanced');
   await expect(firstFloorAmount(page)).toHaveValue('84');
   await expect(page.locator('#goalSeekDesiredSuccessPct')).toHaveValue('90');
-  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('1,200');
+  await expect(page.locator('#goalSeekTargetEndingBalance')).toHaveValue('900');
 
   await page.click('summary:has-text("Advanced simulation settings")');
   await page.fill('#goalSeekNumSimulations', '400');

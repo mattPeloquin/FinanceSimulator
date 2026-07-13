@@ -34,15 +34,43 @@
     <!-- Withdrawal heatmap: every run's spending per year, ranked P5–P65 -->
     <div>
         <h3 class="text-lg font-semibold text-theme-body mb-2">Withdrawal Heatmap</h3>
-        <p class="text-sm text-theme-faint mb-4">Built from <strong>every simulation run</strong>, not a sample. Each column is one simulation (or a narrow band of adjacent ones), ranked left-to-right from the 5th to 65th percentile by lifetime withdrawal; rows are years, starting at the top. Color shows how much was withdrawn that year — switch to <strong>vs Plan</strong> to see spending cuts (red) and boosts (blue) relative to your planned schedule. Runs below P5 or above P65 are outside this window. <strong>Click</strong> a column to see that path's withdrawals against its plan.</p>
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
-            <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color encoding">
-                <button id="withdrawalHeatmapModeAbs" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">Withdrawal $</button>
+        <p class="text-sm text-theme-faint mb-4">Built from <strong>every simulation run</strong>, not a sample. Each column is one simulation (or a narrow band of adjacent ones), ranked left-to-right by lifetime withdrawal across the <strong>Show from/to</strong> percentile window; rows are years, starting at the bottom — the <strong>Early years</strong> slider stretches the first rows taller. Color compares each year's withdrawal to <strong>that year's mean</strong> (or median) across the runs shown — orange = below, neutral = typical, indigo = above — so the neutral midpoint stays anchored to the middle of whatever window is on screen. Switch to <strong>vs Plan</strong> to compare against your planned schedule instead (orange = cut, indigo = boost). When columns are averaged bands, <strong>Speed</strong> replays random runs continuously and the <strong>Run</strong> slider scrubs individual-run snapshots, so you see the real spread rather than a smoothed mean. Runs outside the shown percentile window are not drawn. <strong>Click</strong> a column to see that path's withdrawals against its plan.</p>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
+            <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color anchor">
+                <button id="withdrawalHeatmapModeAbs" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">vs Mean</button>
+                <button id="withdrawalHeatmapModeMedian" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs Median</button>
                 <button id="withdrawalHeatmapModeDelta" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs Plan</button>
             </div>
-            <div id="withdrawalHeatmapLegend" class="flex flex-wrap items-center gap-x-4 gap-y-2"></div>
+            <label id="withdrawalHeatmapSpeedWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Continuously replay random runs per column; 0 = off">
+                <span>Speed</span>
+                <input type="range" id="withdrawalHeatmapSpeed" min="0" max="10" step="1" value="0" class="range-theme w-24">
+                <span id="withdrawalHeatmapSpeedLabel" class="w-6">off</span>
+            </label>
+            <label id="withdrawalHeatmapFrameWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Scrub through individual-run snapshots; leftmost shows the band averages. Disabled while replaying.">
+                <span>Run</span>
+                <input type="range" id="withdrawalHeatmapFrame" min="0" max="0" step="1" value="0" class="range-theme w-24 disabled:opacity-40">
+                <span id="withdrawalHeatmapFrameLabel" class="w-8">Avg</span>
+            </label>
         </div>
-        <div class="relative h-96 w-full">
+        <div id="withdrawalHeatmapLegend" class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-1"></div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-1">
+            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Stretch early-year rows taller for emphasis">
+                <span>Early years</span>
+                <input type="range" id="withdrawalHeatmapEmphasis" min="0" max="100" step="1" value="50" class="range-theme w-24">
+            </label>
+            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Lower end of the outcome-percentile axis">
+                <span>Show from</span>
+                <input type="range" id="withdrawalHeatmapLower" min="5" max="30" step="5" value="5" class="range-theme w-20">
+                <span id="withdrawalHeatmapLowerLabel" class="w-7">P5</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Upper end of the outcome-percentile axis">
+                <span>to</span>
+                <input type="range" id="withdrawalHeatmapUpper" min="65" max="90" step="5" value="65" class="range-theme w-20">
+                <span id="withdrawalHeatmapUpperLabel" class="w-7">P65</span>
+            </label>
+        </div>
+        <div id="withdrawalHeatmapColumnNote" class="hidden text-xs text-theme-faint mb-3"></div>
+        <div class="relative h-[17rem] w-full">
             <canvas id="withdrawalHeatmapCanvas" class="w-full h-full block"></canvas>
             <div id="withdrawalHeatmapTooltip" style="display:none" class="absolute pointer-events-none flex flex-col gap-0.5 text-xs rounded-md border border-theme-border shadow-lg px-2 py-1.5 z-10"></div>
         </div>
