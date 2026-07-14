@@ -5,9 +5,10 @@
 // otherwise-good run stays visible as an off-color cell in its column. Each
 // ROW is a year, year 1 at the BOTTOM (time reads upward, like the balance
 // axis on the other charts); an "Early years" slider stretches the first rows
-// taller for emphasis. Cell color is a diverging orange↔indigo spectrum
-// around a per-year anchor — the year's mean withdrawal (default), its
-// median, or the planned schedule — switched by a segmented toggle. Values
+// taller for emphasis. Cell color is a diverging orange↔teal spectrum
+// around a per-year anchor — the planned schedule (default), that year's
+// median, or absolute withdrawal dollars over the from/to window — switched
+// by a segmented toggle. Values
 // are smoothed and interpolated along years so each column reads as a
 // continuous vertical gradient.
 //
@@ -50,29 +51,29 @@ const EMPHASIS_MAX_RATIO = 5;
 const EMPHASIS_DEFAULT = 50;
 
 // One diverging spectrum for every encoding, anchored per cell: burnt orange
-// = below the anchor (bad), a neutral midpoint on the anchor, deep indigo =
-// above it (good). Light mode uses the ColorBrewer PuOr poles with PuOr's own
-// intermediate steps kept as ramp anchors so the gradient stays perceptually
-// smooth. Dark mode keeps the same poles but swaps the midpoint to a dark
-// neutral gray — an off-white midpoint would make "on anchor" the brightest
-// thing on a dark surface, inverting salience — with each arm blending
-// straight to its pole.
+// = below the anchor (bad), an indigo-tinted gray midpoint on the anchor, teal
+// = above it (good). Teal competes with orange better than purple; the mid is
+// cool/indigo enough to bridge the poles without leaning into either. Dark
+// mode uses the same poles with a darker indigo-gray mid — a light midpoint
+// would make "on anchor" the brightest thing on a dark surface, inverting
+// salience — with each arm blending straight to its pole.
 const ARM_STOPS = {
   light: {
-    below: ['#f7f7f7', '#fdb863', '#e66101'], // anchor → light orange → burnt orange
-    above: ['#f7f7f7', '#b2abd2', '#5e3c99'], // anchor → light purple → deep indigo
+    below: ['#9894b0', '#fdb863', '#e66101'], // indigo-gray → light orange → burnt orange
+    above: ['#9894b0', '#5ecfc4', '#0d9488'], // indigo-gray → light teal → teal
   },
   dark: {
-    below: ['#3d3d3d', '#e66101'], // dark neutral anchor → burnt orange
-    above: ['#3d3d3d', '#5e3c99'], // dark neutral anchor → deep indigo
+    below: ['#4a4862', '#e66101'], // indigo-gray anchor → burnt orange
+    above: ['#4a4862', '#0d9488'], // indigo-gray anchor → teal
   },
 };
 
-// Per-arm gamma easing applied to |t| before stop interpolation. Values < 1
-// pull color onset toward the anchor, narrowing the neutral band; the above
-// arm is more aggressive so anything at or over the anchor tints indigo
-// immediately.
-const GAMMA = { below: 0.6, above: 0.4 };
+// Per-arm gamma easing applied to |t| before stop interpolation. Values > 1
+// widen the neutral band (slow color onset near the midpoint, saturation
+// near the poles). Below (orange/cuts) uses a higher gamma so modest cuts
+// stay closer to neutral; above (teal/boosts) is also slightly > 1 so the
+// mid stays a bit wider while surplus still maps fairly evenly.
+const GAMMA = { below: 1.4, above: 1.2 };
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -103,12 +104,12 @@ export function belowArmEnd(domain) {
 }
 
 // Anchored diverging cell color. `delta` = actual − anchor; negative runs
-// down the orange arm, positive up the indigo arm, zero sits exactly on the
+// down the orange arm, positive up the teal arm, zero sits exactly on the
 // mode's neutral midpoint. The domain is ASYMMETRIC — `{lo, hi}` with lo
 // stored positive — because cuts are bounded while boosts are not. The above
 // arm normalizes against `hi`; the below arm against max(lo, hi) so a shallow
-// cut range never saturates orange early. Gamma easing (< 1) accelerates
-// color onset near the anchor. Deltas beyond each arm's end clamp to the poles.
+// cut range never saturates orange early. Gamma easing (> 1) widens the
+// neutral band near the anchor. Deltas beyond each arm's end clamp to the poles.
 export function divergingRgb(delta, domain, isDark = isDarkMode()) {
   const arms = ARM_RGB[isDark ? 'dark' : 'light'];
   const below = delta < 0;
@@ -232,13 +233,12 @@ export function smoothColumnSeries(values, vss) {
 }
 
 // Tooltip content as plain data so it is unit-testable without a DOM.
-export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, mean, median, runCount }) {
+export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, median, runCount }) {
   const signed = (delta) => `${delta >= 0 ? '+' : '−'}${formatK(Math.abs(delta))}`;
   const rows = [
     `Withdrawal ${formatK(value)}`,
-    `${signed(value - mean)} vs year mean (${formatK(mean)})`,
-    `${signed(value - median)} vs year median (${formatK(median)})`,
     `${signed(value - plan)} vs plan (${formatK(plan)})`,
+    `${signed(value - median)} vs year median (${formatK(median)})`,
   ];
   if (runCount > 1) rows.push(`avg of ${runCount} runs`);
   const title = runCount > 1
@@ -254,7 +254,7 @@ const state = {
   params: null,
   seed: null,
   outcome: null, // per-sim outcome tags from returnScatter (0 met / 1 below / 2 ran out)
-  encoding: 'mean', // anchor: 'mean' | 'median' (per-year) | 'plan' (schedule)
+  encoding: 'plan', // 'plan' | 'median' (per-year delta) | 'abs' (absolute $ over from/to)
   frame: 0, // scrubber: 0 = averaged view, k ≥ 1 = pre-sliced composite k
   speed: 0, // 0 = off; > 0 = random replay at tickMsForSpeed(speed)
   randomAssign: null, // Int32Array(numCols): per-column random frame while replaying
@@ -342,6 +342,31 @@ export function windowDeltaDomain(values, anchor, numYears, start, end) {
   };
 }
 
+// Absolute withdrawal scale for Amount mode: P2/P98 of finite cell values in
+// the visible from/to columns (all years). The midpoint splits the orange↔
+// indigo spectrum; guard hi > lo so color transfer never divides by zero.
+// Exported pure for unit tests.
+export function windowAbsoluteDomain(values, numYears, start, end) {
+  const samples = [];
+  for (let c = start; c < end; c++) {
+    for (let j = 0; j < numYears; j++) {
+      const v = values[c * numYears + j];
+      if (!Number.isNaN(v)) samples.push(v);
+    }
+  }
+  samples.sort((a, b) => a - b);
+  const q = (p) => (samples.length
+    ? samples[Math.min(samples.length - 1, Math.floor((samples.length * p) / 100))]
+    : 0);
+  let lo = q(2);
+  let hi = q(98);
+  if (hi <= lo) {
+    const spread = Math.max(1, Math.abs(lo) * 0.01 || 1);
+    hi = lo + spread;
+  }
+  return { lo, hi, mid: (lo + hi) / 2 };
+}
+
 // The rank a given outcome percentile maps to, clamped to the built source window.
 function rankAtPct(pct) {
   const src = state.source;
@@ -402,19 +427,37 @@ function windowAnchors() {
   return state.windowAnchors;
 }
 
-// Active anchor series + color domain for the current encoding, both derived
-// from the visible window.
+// Active anchor / color domain for the current encoding, derived from the
+// visible from/to window.
 function anchorInfo() {
   const hm = state.heatmap;
   const { start, end } = visibleRange();
-  const anchors = windowAnchors();
-  const anchor = state.encoding === 'plan' ? hm.planByYear : state.encoding === 'median' ? anchors.median : anchors.mean;
   const key = `${state.encoding}:${start}:${end}`;
+
+  if (state.encoding === 'abs') {
+    if (!state.windowDomain || state.windowDomainKey !== key) {
+      state.windowDomain = windowAbsoluteDomain(hm.values, hm.numYears, start, end);
+      state.windowDomainKey = key;
+    }
+    const abs = state.windowDomain;
+    const armLo = abs.mid - abs.lo;
+    const armHi = abs.hi - abs.mid;
+    return {
+      mode: 'abs',
+      abs,
+      anchor: null,
+      domain: { lo: armLo, hi: armHi },
+      mid: abs.mid,
+    };
+  }
+
+  const anchors = windowAnchors();
+  const anchor = state.encoding === 'plan' ? hm.planByYear : anchors.median;
   if (!state.windowDomain || state.windowDomainKey !== key) {
     state.windowDomain = windowDeltaDomain(hm.values, anchor, hm.numYears, start, end);
     state.windowDomainKey = key;
   }
-  return { anchor, domain: state.windowDomain };
+  return { mode: 'delta', abs: null, anchor, domain: state.windowDomain, mid: null };
 }
 
 function plotGeometry(canvas) {
@@ -451,12 +494,11 @@ function cellValue(col, year) {
 }
 
 // Paint the cells into an offscreen canvas: one pixel column per data column,
-// VSS sub-pixels per year, each column's delta-vs-anchor series smoothed and
-// interpolated along years so the vertical gradient is continuous. NaN cells
-// (no run active that year) stay transparent so the past-horizon region
-// recedes to the page background. Smoothing happens in DELTA space — the
-// anchor varies by year, so smoothing raw values against a stepped anchor
-// would reintroduce artificial color steps.
+// VSS sub-pixels per year, each column smoothed and interpolated along years
+// so the vertical gradient is continuous. NaN cells (no run active that year)
+// stay transparent so the past-horizon region recedes to the page background.
+// Delta modes smooth in delta space (anchor varies by year); Amount mode
+// smooths raw withdrawal dollars then maps through the absolute scale.
 function buildOffscreen() {
   const hm = state.heatmap;
   const isDark = isDarkMode();
@@ -465,7 +507,7 @@ function buildOffscreen() {
   const key = `${state.encoding}:${isDark ? 'dark' : 'light'}:${displayKey}:w${state.lowerPct}-${state.upperPct}:${count}`;
   if (state.offscreen && state.offscreenKey === key) return state.offscreen;
 
-  const { anchor, domain } = anchorInfo();
+  const info = anchorInfo();
   const rows = hm.numYears * VSS;
   const off = document.createElement('canvas');
   off.width = count;
@@ -473,24 +515,29 @@ function buildOffscreen() {
   const ctx = off.getContext('2d');
   const img = ctx.createImageData(count, rows);
   const data = img.data;
-  const deltas = new Float64Array(hm.numYears);
+  const series = new Float64Array(hm.numYears);
 
   for (let c = 0; c < hm.numCols; c++) {
     for (let j = 0; j < hm.numYears; j++) {
       const v = cellValue(c, j);
-      deltas[j] = Number.isNaN(v) ? NaN : v - anchor[j];
+      if (info.mode === 'abs') {
+        series[j] = v;
+      } else {
+        series[j] = Number.isNaN(v) ? NaN : v - info.anchor[j];
+      }
     }
-    const sub = smoothColumnSeries(deltas, VSS);
+    const sub = smoothColumnSeries(series, VSS);
     for (let s = 0; s < rows; s++) {
       // Sub-sample s counts up from year 1 at the bottom; ImageData rows count
       // down from the top.
       const p = ((rows - 1 - s) * count + c) * 4;
-      const d = sub[s];
-      if (Number.isNaN(d)) {
+      const sample = sub[s];
+      if (Number.isNaN(sample)) {
         data[p + 3] = 0;
         continue;
       }
-      const rgb = divergingRgb(d, domain, isDark);
+      const d = info.mode === 'abs' ? sample - info.mid : sample;
+      const rgb = divergingRgb(d, info.domain, isDark);
       data[p] = rgb[0];
       data[p + 1] = rgb[1];
       data[p + 2] = rgb[2];
@@ -655,22 +702,25 @@ function renderLegend() {
   const el = document.getElementById('withdrawalHeatmapLegend');
   if (!el || !state.heatmap) return;
   const hm = state.heatmap;
-  const { domain } = anchorInfo();
+  const info = anchorInfo();
   const swatch =
-    `<span class="inline-block w-28 h-4 rounded-sm shrink-0 border border-theme-border" style="background:linear-gradient(to right, ${legendGradient(domain)})"></span>`;
+    `<span class="inline-block w-28 h-4 rounded-sm shrink-0 border border-theme-border" style="background:linear-gradient(to right, ${legendGradient(info.domain)})"></span>`;
   const item = (html) => `<span class="inline-flex items-center gap-1.5 text-sm text-theme-faint">${html}</span>`;
-  const midWord = isDarkMode() ? 'gray' : 'white';
-  const anchorWord = state.encoding === 'plan'
-    ? 'on plan'
-    : state.encoding === 'median'
-      ? 'that year’s median withdrawal'
-      : 'that year’s mean withdrawal';
+  const midWord = 'gray';
 
   const items = [];
-  const loLabel = state.encoding === 'plan' ? 'cut' : 'below';
-  const hiLabel = state.encoding === 'plan' ? 'boost' : 'above';
-  items.push(item(`<span>−${formatK(domain.lo)} ${loLabel}</span>${swatch}<span>+${formatK(domain.hi)} ${hiLabel}</span>`));
-  items.push(item(`<span>${midWord} = ${anchorWord}</span>`));
+  if (info.mode === 'abs') {
+    items.push(item(`<span>${formatK(info.abs.lo)} low</span>${swatch}<span>${formatK(info.abs.hi)} high</span>`));
+    items.push(item(`<span>${midWord} = mid of shown range</span>`));
+  } else {
+    const anchorWord = state.encoding === 'plan'
+      ? 'on plan'
+      : 'that year’s median withdrawal';
+    const loLabel = state.encoding === 'plan' ? 'cut' : 'below';
+    const hiLabel = state.encoding === 'plan' ? 'boost' : 'above';
+    items.push(item(`<span>−${formatK(info.domain.lo)} ${loLabel}</span>${swatch}<span>+${formatK(info.domain.hi)} ${hiLabel}</span>`));
+    items.push(item(`<span>${midWord} = ${anchorWord}</span>`));
+  }
   el.innerHTML = items.join('');
 
   const noteEl = document.getElementById('withdrawalHeatmapColumnNote');
@@ -699,9 +749,9 @@ const TOGGLE_INACTIVE = ['text-theme-faint'];
 
 function syncToggleUi() {
   const buttons = [
-    [document.getElementById('withdrawalHeatmapModeAbs'), 'mean'],
-    [document.getElementById('withdrawalHeatmapModeMedian'), 'median'],
     [document.getElementById('withdrawalHeatmapModeDelta'), 'plan'],
+    [document.getElementById('withdrawalHeatmapModeMedian'), 'median'],
+    [document.getElementById('withdrawalHeatmapModeAbs'), 'abs'],
   ];
   for (const [btn, mode] of buttons) {
     if (!btn) continue;
@@ -713,9 +763,13 @@ function syncToggleUi() {
 }
 
 function setEncoding(mode) {
-  if (mode !== 'mean' && mode !== 'median' && mode !== 'plan') return;
+  if (mode !== 'abs' && mode !== 'median' && mode !== 'plan') return;
   if (state.encoding === mode) return;
   state.encoding = mode;
+  state.windowDomain = null;
+  state.windowDomainKey = null;
+  state.offscreen = null;
+  state.offscreenKey = null;
   syncToggleUi();
   renderLegend();
   draw();
@@ -883,7 +937,6 @@ function showTooltip(ev, cell) {
     simIndex: displayedSimIndex(cell.col),
     value: cellValue(cell.col, cell.year),
     plan: hm.planByYear[cell.year],
-    mean: anchors.mean[cell.year],
     median: anchors.median[cell.year],
     // While showing individual runs each cell is exactly one real run, so the
     // tooltip names it instead of reporting the band average.
@@ -1041,7 +1094,7 @@ function bindEvents(canvas) {
   canvas.addEventListener('mouseleave', onMouseLeave);
   canvas.addEventListener('click', onClick);
   document.getElementById('withdrawalHeatmapModeAbs')
-    ?.addEventListener('click', () => setEncoding('mean'));
+    ?.addEventListener('click', () => setEncoding('abs'));
   document.getElementById('withdrawalHeatmapModeMedian')
     ?.addEventListener('click', () => setEncoding('median'));
   document.getElementById('withdrawalHeatmapModeDelta')
@@ -1115,27 +1168,12 @@ export function drawWithdrawalHeatmap(source, { params, seed, outcome } = {}) {
       const canvas = document.getElementById('withdrawalHeatmapCanvas');
       const geom = canvas ? plotGeometry(canvas) : { plotW: 0 };
       const { start, end, count } = visibleRange();
-      const { domain } = anchorInfo();
-      const anchors = windowAnchors();
+      const info = anchorInfo();
       const loRank = rankAtPct(state.lowerPct);
       const hiRank = rankAtPct(state.upperPct);
       const rankSpan = Math.max(1, hiRank - loRank + 1);
-      // Weighted mean of (cell − year-mean) over the banded columns.
-      let signed = 0;
-      let weight = 0;
       const hm = state.heatmap;
-      for (let c = start; c < end; c++) {
-        const w = hm.colRunCount[c];
-        for (let j = 0; j < hm.numYears; j++) {
-          const v = hm.values[c * hm.numYears + j];
-          const a = anchors.mean[j];
-          if (!Number.isNaN(v) && !Number.isNaN(a)) {
-            signed += (v - a) * w;
-            weight += w;
-          }
-        }
-      }
-      return {
+      const out = {
         sourceSpan: state.source?.sourceSpan ?? 0,
         rankSpan,
         plotW: Math.floor(geom.plotW),
@@ -1150,11 +1188,33 @@ export function drawWithdrawalHeatmap(source, { params, seed, outcome } = {}) {
         emphasis: state.emphasis,
         lowerPct: state.lowerPct,
         upperPct: state.upperPct,
-        domainLo: domain.lo,
-        domainHi: domain.hi,
-        year0Mean: anchors.mean[0],
-        meanDeltaBias: weight > 0 ? signed / weight : 0,
+        domainLo: info.domain.lo,
+        domainHi: info.domain.hi,
       };
+      if (info.mode === 'abs') {
+        out.absLo = info.abs.lo;
+        out.absHi = info.abs.hi;
+        out.absMid = info.abs.mid;
+      } else {
+        // Weighted mean of (cell − year-median) over the banded columns.
+        const anchors = windowAnchors();
+        let signed = 0;
+        let weight = 0;
+        for (let c = start; c < end; c++) {
+          const w = hm.colRunCount[c];
+          for (let j = 0; j < hm.numYears; j++) {
+            const v = hm.values[c * hm.numYears + j];
+            const a = anchors.median[j];
+            if (!Number.isNaN(v) && !Number.isNaN(a)) {
+              signed += (v - a) * w;
+              weight += w;
+            }
+          }
+        }
+        out.medianDeltaBias = weight > 0 ? signed / weight : 0;
+        out.year0Median = anchors.median[0];
+      }
+      return out;
     };
     window.__TEST_HOOKS__.withdrawalHeatmapSetEncoding = (mode) => setEncoding(mode);
     window.__TEST_HOOKS__.withdrawalHeatmapClickColumn = (col) => selectColumn(col);

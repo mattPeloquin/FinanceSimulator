@@ -331,7 +331,7 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   expect(shape.visibleCols).toBe(shape.numCols);
   expect(shape.upperPct).toBe(65);
   expect(shape.numYears).toBeGreaterThanOrEqual(30);
-  expect(shape.encoding).toBe('mean');
+  expect(shape.encoding).toBe('plan');
   expect(shape.emphasis).toBe(50); // default biases early-year rows taller
 
   // Early years + Show from/to share one control row under the color legend.
@@ -343,25 +343,15 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   await expect(page.locator('#withdrawalHeatmapFrameWrap')).toBeHidden();
   await expect(page.locator('#withdrawalHeatmapSpeedWrap')).toBeHidden();
 
-  // Legend describes the mean-anchored spectrum.
-  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('mean withdrawal');
+  // Legend describes the plan-anchored spectrum by default.
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('on plan');
+  await expect(page.locator('#withdrawalHeatmapModeDelta')).toHaveAttribute('aria-pressed', 'true');
 
-  // Mean mode re-anchors to the visible from/to window: the weighted mean of
-  // cell−yearMean stays near zero, and the color domain's arms stay balanced
-  // at the default P5–P65 crop (not only at the full P5–P90 build).
-  const atDefault = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
-  expect(Math.abs(atDefault.meanDeltaBias)).toBeLessThan(1);
-  expect(atDefault.domainLo / atDefault.domainHi).toBeGreaterThan(0.25);
-  expect(atDefault.domainLo / atDefault.domainHi).toBeLessThan(4);
-
-  // Moving the from/to window changes the visible columns and the year-mean
-  // anchor; both snap back for the rest of the assertions.
+  // Moving the from/to window changes the visible columns; snap back afterward.
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(90));
   const atFull = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
   expect(atFull.rankSpan).toBe(86);
   expect(atFull.numCols).toBe(Math.min(86, atFull.plotW));
-  expect(Math.abs(atFull.meanDeltaBias)).toBeLessThan(1);
-  expect(atFull.year0Mean).not.toBe(atDefault.year0Mean);
 
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(30));
   const atNarrow = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
@@ -369,12 +359,32 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   expect(atNarrow.numCols).toBe(Math.min(atNarrow.rankSpan, atNarrow.plotW));
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetLower(5));
   await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmapSetUpper(65));
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-plan.png' });
+
+  // Toggle to Amount mode: absolute dollars over the from/to window.
+  await page.click('#withdrawalHeatmapModeAbs');
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('abs');
+  await expect(page.locator('#withdrawalHeatmapModeAbs')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('mid of shown range');
+  await expect(page.locator('#withdrawalHeatmapLegend')).not.toContainText('mean withdrawal');
+  const atAbs = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(atAbs.absLo).toBeLessThan(atAbs.absHi);
+  expect(atAbs.absMid).toBeGreaterThan(atAbs.absLo);
+  expect(atAbs.absMid).toBeLessThan(atAbs.absHi);
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-absolute.png' });
 
-  // Toggle to the plan-anchored encoding.
+  // Toggle to median-anchored encoding.
+  await page.click('#withdrawalHeatmapModeMedian');
+  expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('median');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('median withdrawal');
+  const atMedian = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(atMedian.domainLo).toBeGreaterThan(0);
+  expect(atMedian.domainHi).toBeGreaterThan(0);
+  await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-median.png' });
+
+  // Back to plan for hover/drill-down assertions.
   await page.click('#withdrawalHeatmapModeDelta');
   expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('plan');
-  await expect(page.locator('#withdrawalHeatmapModeDelta')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('on plan');
   await page.locator('#withdrawalHeatmapCanvas').screenshot({ path: 'test-results/withdrawal-heatmap-deviation.png' });
 

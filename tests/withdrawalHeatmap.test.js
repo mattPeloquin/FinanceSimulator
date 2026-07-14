@@ -9,6 +9,7 @@ import {
   tickMsForSpeed,
   windowAnchorSeries,
   windowDeltaDomain,
+  windowAbsoluteDomain,
   formatHeatmapTooltip,
 } from '../src/ui/charts/withdrawalHeatmap.js';
 
@@ -24,8 +25,8 @@ describe('divergingColor (asymmetric PuOr transfer)', () => {
   const dom = shallowLo;
 
   it('returns the mode-specific neutral midpoint exactly on the anchor', () => {
-    expect(divergingColor(0, dom, false)).toBe('rgb(247, 247, 247)'); // #f7f7f7 (light)
-    expect(divergingColor(0, dom, true)).toBe('rgb(61, 61, 61)'); // #3d3d3d (dark)
+    expect(divergingColor(0, dom, false)).toBe('rgb(152, 148, 176)'); // #9894b0 (light)
+    expect(divergingColor(0, dom, true)).toBe('rgb(74, 72, 98)'); // #4a4862 (dark)
   });
 
   it('floors the below arm at the above arm so shallow cuts do not peak early', () => {
@@ -40,22 +41,21 @@ describe('divergingColor (asymmetric PuOr transfer)', () => {
 
   it('reaches the poles at each arm’s effective end', () => {
     expect(divergingColor(-belowArmEnd(shallowLo), shallowLo, false)).toBe('rgb(230, 97, 1)'); // #e66101
-    expect(divergingColor(shallowLo.hi, shallowLo, false)).toBe('rgb(94, 60, 153)'); // #5e3c99
+    expect(divergingColor(shallowLo.hi, shallowLo, false)).toBe('rgb(13, 148, 136)'); // #0d9488
     expect(divergingColor(-belowArmEnd(deepLo), deepLo, false)).toBe('rgb(230, 97, 1)');
-    expect(divergingColor(deepLo.hi, deepLo, false)).toBe('rgb(94, 60, 153)');
+    expect(divergingColor(deepLo.hi, deepLo, false)).toBe('rgb(13, 148, 136)');
     expect(divergingColor(-belowArmEnd(shallowLo), shallowLo, true)).toBe('rgb(230, 97, 1)');
-    expect(divergingColor(shallowLo.hi, shallowLo, true)).toBe('rgb(94, 60, 153)');
+    expect(divergingColor(shallowLo.hi, shallowLo, true)).toBe('rgb(13, 148, 136)');
   });
 
-  it('tints indigo immediately above the anchor (narrow neutral band)', () => {
+  it('keeps a wide neutral band near the anchor (gamma > 1)', () => {
     const mid = channels(divergingColor(0, dom, false));
     const justAbove = channels(divergingColor(dom.hi * 0.02, dom, false));
-    // +2% of the positive domain is already visibly purple: red channel drops.
-    expect(mid[0] - justAbove[0]).toBeGreaterThan(10);
     const justBelow = channels(divergingColor(-belowArmEnd(dom) * 0.02, dom, false));
-    // −2% warms visibly too (blue channel drops), but less aggressively.
-    expect(mid[2] - justBelow[2]).toBeGreaterThan(5);
-    expect(mid[0] - justAbove[0]).toBeGreaterThan(mid[2] - justBelow[2]);
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    // At 2% of each arm, color barely moves — the middle stays wide.
+    expect(dist(mid, justAbove)).toBeLessThan(25);
+    expect(dist(mid, justBelow)).toBeLessThan(25);
   });
 
   it('keeps below-arm saturation when cuts exceed the top range', () => {
@@ -251,23 +251,48 @@ describe('windowDeltaDomain', () => {
   });
 });
 
+describe('windowAbsoluteDomain', () => {
+  it('uses P2/P98 of finite cells in the visible window', () => {
+    const values = Float64Array.from([
+      10, 100,
+      20, 200,
+      60, 300,
+    ]);
+    const domain = windowAbsoluteDomain(values, 2, 0, 3);
+    expect(domain.lo).toBe(10);
+    expect(domain.hi).toBe(300);
+    expect(domain.mid).toBeCloseTo(155, 10);
+  });
+
+  it('responds to the window bounds', () => {
+    const values = Float64Array.from([10, 100, 20, 200, 60, 300]);
+    const narrow = windowAbsoluteDomain(values, 2, 0, 2);
+    expect(narrow.lo).toBe(10);
+    expect(narrow.hi).toBe(200);
+  });
+
+  it('guards degenerate spreads', () => {
+    const values = Float64Array.from([5, 5, 5]);
+    const domain = windowAbsoluteDomain(values, 1, 0, 3);
+    expect(domain.hi).toBeGreaterThan(domain.lo);
+  });
+});
+
 describe('formatHeatmapTooltip', () => {
-  it('names the single run and shows signed deltas vs mean, median, and plan', () => {
+  it('names the single run and shows signed deltas vs plan and median', () => {
     const tip = formatHeatmapTooltip({
       year: 12,
       pctLabel: 'P37',
       simIndex: 41,
       value: 58_000,
       plan: 55_000,
-      mean: 53_000,
       median: 52_000,
       runCount: 1,
     });
     expect(tip.title).toBe('Year 12 · P37 · Simulation #42');
     expect(tip.rows[0]).toBe('Withdrawal 58');
-    expect(tip.rows[1]).toBe('+5 vs year mean (53)');
+    expect(tip.rows[1]).toBe('+3 vs plan (55)');
     expect(tip.rows[2]).toBe('+6 vs year median (52)');
-    expect(tip.rows[3]).toBe('+3 vs plan (55)');
     expect(tip.footer).toBe('Click to see this path');
   });
 
@@ -278,13 +303,12 @@ describe('formatHeatmapTooltip', () => {
       simIndex: 7,
       value: 40_000,
       plan: 55_000,
-      mean: 53_000,
       median: 52_000,
       runCount: 13,
     });
     expect(tip.title).toBe('Year 3 · P20');
     expect(tip.rows).toContain('avg of 13 runs');
-    expect(tip.rows.find((r) => r.includes('vs year mean')).startsWith('−')).toBe(true);
+    expect(tip.rows.find((r) => r.includes('vs year median')).startsWith('−')).toBe(true);
     expect(tip.rows.find((r) => r.includes('vs plan')).startsWith('−')).toBe(true);
   });
 });
