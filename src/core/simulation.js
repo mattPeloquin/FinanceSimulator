@@ -9,6 +9,7 @@ import {
   balanceScaleMultiplier,
   buildBaseWithdrawalSchedule,
   buildGlideRequiredBalances,
+  glideSpendAmount,
 } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
@@ -67,10 +68,12 @@ function estimateSpendingExGlide({
 
   let prospectiveGlideExtra = 0;
   if (glideRequired && targetWithdrawal >= 0) {
-    const provisionalSurplus = postGrowthBalance - glideRequired[yearIndex];
-    if (provisionalSurplus > 0) {
-      prospectiveGlideExtra = Math.min(balance, glideFraction * provisionalSurplus);
-    }
+    prospectiveGlideExtra = glideSpendAmount(
+      postGrowthBalance - glideRequired[yearIndex],
+      balance,
+      glideFraction,
+      portfolio.glideTarget,
+    );
   }
   const metPlan =
     targetWithdrawal < 0
@@ -564,10 +567,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     // Deposit years always meet the plan, so only the balance check applies.
     let prospectiveGlideExtra = 0;
     if (glideRequired && targetWithdrawal >= 0) {
-      const provisionalSurplus = balanceBeforeYearWithdrawals - glideRequired[j];
-      if (provisionalSurplus > 0) {
-        prospectiveGlideExtra = Math.min(balance, glideFraction * provisionalSurplus);
-      }
+      prospectiveGlideExtra = glideSpendAmount(
+        balanceBeforeYearWithdrawals - glideRequired[j],
+        balance,
+        glideFraction,
+        portfolio.glideTarget,
+      );
     }
     const metPlan =
       targetWithdrawal < 0
@@ -582,10 +587,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     // still above this year's required glide balance. Surplus is measured from
     // the pre-withdrawal balance; gifts already paid reduce what glide may take.
     // Skipped on deposit years so surplus recycling never fights a deposit.
+    // glideSpendAmount also stops the recycle at the glide target itself, so
+    // glide spending can never be the reason a run ends below the target.
     if (glideRequired && targetWithdrawal >= 0) {
       const glideSurplus = balanceBeforeYearWithdrawals - glideRequired[j] - giftPaid;
-      if (glideSurplus > 0) {
-        glideExtra = Math.min(balance, glideFraction * glideSurplus);
+      glideExtra = glideSpendAmount(glideSurplus, balance, glideFraction, portfolio.glideTarget);
+      if (glideExtra > 0) {
         balance -= glideExtra;
         actualWithdrawal += glideExtra;
       }

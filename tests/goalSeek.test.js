@@ -1245,3 +1245,84 @@ describe('runGoalSeek', () => {
     expect(summary.glideSpendDown.fraction).toBeGreaterThanOrEqual(0.05);
   });
 });
+
+describe('runGoalSeek glide-target tolerance band', () => {
+  // Fake engine: every run ends at exactly 90% of the target with generous
+  // spending and no depletion. The glide lever deliberately lands runs right
+  // AT the target, so while it is part of the search the ending test must
+  // accept endings within the shortfall-tolerance band below the target —
+  // otherwise near-misses on noise alone would fail every candidate and the
+  // search would exit "infeasible" with base = the minimum withdrawal.
+  const TARGET = 1_000_000;
+
+  function fakeResult(numSimulations, numYears, endingBalance = TARGET * 0.9) {
+    return {
+      finalBalance: new Float64Array(numSimulations).fill(endingBalance),
+      depletionYear: new Float64Array(numSimulations).fill(numYears + 1),
+      horizonYears: Int32Array.from(new Array(numSimulations).fill(numYears)),
+      totalWithdrawn: new Float64Array(numSimulations).fill(50_000_000),
+      medianYearlyWithdrawal: new Float64Array(numSimulations).fill(2_000_000),
+      earlyWithdrawn: new Float64Array(numSimulations).fill(0),
+    };
+  }
+
+  const fakeSimulate = (p) => Promise.resolve(fakeResult(p.numSimulations, p.numYears));
+
+  const bandConfig = {
+    targetEndingBalance: TARGET,
+    desiredSuccessRate: 0.9,
+    shortfallTolerance: 0.2,
+    includeSpendingOverTime: false,
+    includeMarketAdjustments: false,
+    includeBalanceOverrides: false,
+    searchNumSimulations: 300,
+    maxRounds: 1,
+    glideFractions: [0.1],
+  };
+
+  it('accepts endings within the tolerance band while the glide lever is searched', async () => {
+    const { summary } = await runGoalSeek(
+      makeParams(),
+      { ...bandConfig, includeGlidePath: true },
+      fakeSimulate,
+    );
+    // 900k ending ≥ 1M × (1 − 0.2) = 800k → every run passes the banded test.
+    expect(summary.feasible).toBe(true);
+  });
+
+  it('keeps the strict ending test when the glide lever is not searched', async () => {
+    const { summary } = await runGoalSeek(
+      makeParams(),
+      { ...bandConfig, includeGlidePath: false },
+      fakeSimulate,
+    );
+    // 900k ending < 1M strict target → infeasible even at the minimum base.
+    expect(summary.feasible).toBe(false);
+  });
+
+  it('runs Phase 1 with glide off so feasibility is not blocked by an active lever', async () => {
+    // Endings pass only while glideFraction is 0 (Phase 1 + base bisection).
+    // Any positive recycle rate fails the banded ending test — if Phase 1
+    // still turned glide on, the search would exit infeasible immediately.
+    const glideSensitiveSimulate = (p) => {
+      const glideOn = (p.portfolio.glideFraction ?? 0) > 0;
+      const ending = glideOn ? TARGET * 0.5 : TARGET;
+      return Promise.resolve(fakeResult(p.numSimulations, p.numYears, ending));
+    };
+
+    const { summary } = await runGoalSeek(
+      makeParams(),
+      {
+        ...bandConfig,
+        includeGlidePath: true,
+        desiredSuccessRate: 0.75,
+        glideFractions: [0.1, 0.2],
+      },
+      glideSensitiveSimulate,
+    );
+
+    expect(summary.feasible).toBe(true);
+    // No glide candidate qualified; final clamp still applies the minimum rate.
+    expect(summary.glideSpendDown.fraction).toBe(0.1);
+  });
+});

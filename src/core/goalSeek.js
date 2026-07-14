@@ -547,11 +547,20 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     );
     const actualWithdrawn = perRunWithdrawalMetric(result, config.withdrawalMetric);
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+    // While the glide-path lever is part of the search, its target is pinned
+    // to the Goal Seek target and it deliberately spends the portfolio down
+    // TO that number — so successful runs cluster right at the target, and a
+    // strict `ending >= target` test would fail many of them on noise alone.
+    // Accept endings within the risk-tolerance band below the target instead
+    // (the same slack the lifetime-spending check already allows).
+    const effectiveTargetEndingBalance = config.includeGlidePath
+      ? config.targetEndingBalance * (1 - shortfallTolerance)
+      : config.targetEndingBalance;
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,
       result.depletionYear,
       result.horizonYears,
-      config.targetEndingBalance,
+      effectiveTargetEndingBalance,
       actualWithdrawn,
       perRunBenchmarks,
       shortfallTolerance,
@@ -597,11 +606,14 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
   }
   if (config.includeGlidePath) {
-    // The lever's whole purpose is landing on the Goal Seek target, so the
-    // glide target is pinned to it rather than searched; only the recycle
-    // fraction is tuned. The assumed glide rate stays as the user typed it.
+    // The glide target is pinned to the Goal Seek target; only the recycle
+    // fraction is tuned later. Phase 1 (feasibility + base bisection) runs
+    // with glide OFF — success is judged at the P5/P10 tail, and an active
+    // glide lever compresses the median toward the target and can falsely
+    // fail the initial check before the search even starts. Tuning rounds
+    // re-introduce glide candidates and let the sequences decide.
     working.portfolio.glideTarget = config.targetEndingBalance;
-    working.portfolio.glideFraction = minGlideFraction(config);
+    working.portfolio.glideFraction = 0;
   }
 
   if (pinBase && !hasIncludedLevers(config)) {
@@ -633,6 +645,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     // preset-derived dynNoCutBal value the user just loaded.
     if (config.includeMarketAdjustments) {
       clampMarketAdjustments(config, working.dynConfig, baseLowerBound);
+    }
+    if (config.includeGlidePath) {
+      clampGlideFraction(config, working.portfolio);
     }
     return {
       params: { ...working, numSimulations: params.numSimulations },

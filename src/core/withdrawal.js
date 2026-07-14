@@ -122,6 +122,23 @@ export function buildGlideRequiredBalances(plannedAmounts, glideTarget, glideRat
   return required;
 }
 
+// One year's glide-path spend-down amount. `surplus` is how far the
+// pre-withdrawal balance sits above the year's required glide balance (minus
+// any gift already paid); the lever recycles `glideFraction` of it as extra
+// spending. Two caps apply:
+//   1. Never spend more than the money actually left (`remainingBalance`).
+//   2. Never let the glide spend itself push the remaining balance below the
+//      glide target. The lever's job is to land ON the target, so when other
+//      spending (minimum floors, gifts, boosts) has already pulled the balance
+//      near it, glide stops short instead of spending past it. Bad markets can
+//      still finish a run below the target — glide spending just can never be
+//      the cause.
+export function glideSpendAmount(surplus, remainingBalance, glideFraction, glideTarget) {
+  if (!(surplus > 0)) return 0;
+  const headroomAboveTarget = Math.max(0, remainingBalance - glideTarget);
+  return Math.min(glideFraction * surplus, remainingBalance, headroomAboveTarget);
+}
+
 // Build a per-year minimum-withdrawal backstop from staged tiers ($000s in tiers).
 // Intermediate tiers run for their year count; the final tier fills the horizon.
 export function buildWithdrawalFloorSeries(tiers, numYears, toDollarsFn) {

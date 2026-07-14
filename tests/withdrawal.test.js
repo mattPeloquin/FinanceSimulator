@@ -9,6 +9,7 @@ import {
   buildBaseWithdrawalSchedule,
   buildMajorEventsSeries,
   buildGlideRequiredBalances,
+  glideSpendAmount,
   getDynamicAdjustment,
   resolveAdjustment,
   limitBoostForDrawdown,
@@ -60,6 +61,31 @@ describe('buildGlideRequiredBalances', () => {
       balance = (balance - plan[j]) * (j < plan.length - 1 ? 1 + rate : 1);
     }
     expect(balance).toBeCloseTo(target, 9);
+  });
+});
+
+describe('glideSpendAmount', () => {
+  it('recycles the fraction of the surplus when the balance is far above the target', () => {
+    // Surplus $500k, half recycled = $250k; the $2M remaining balance is well
+    // above the $1M target so neither cap binds.
+    expect(glideSpendAmount(500_000, 2_000_000, 0.5, 1_000_000)).toBe(250_000);
+  });
+
+  it('returns 0 when there is no surplus above the glide path', () => {
+    expect(glideSpendAmount(0, 2_000_000, 0.5, 1_000_000)).toBe(0);
+    expect(glideSpendAmount(-100_000, 2_000_000, 0.5, 1_000_000)).toBe(0);
+  });
+
+  it('never spends the remaining balance below the glide target', () => {
+    // Fraction of surplus would be $50k, but only $30k of headroom remains
+    // above the $850k target — glide stops at the target instead.
+    expect(glideSpendAmount(50_000, 880_000, 1, 850_000)).toBe(30_000);
+    // Already at the target: glide spends nothing even with surplus vs path.
+    expect(glideSpendAmount(50_000, 850_000, 1, 850_000)).toBe(0);
+  });
+
+  it('is capped by the money actually left when the target is 0', () => {
+    expect(glideSpendAmount(1_000_000, 20_000, 1, 0)).toBe(20_000);
   });
 });
 

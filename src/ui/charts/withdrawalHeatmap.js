@@ -343,8 +343,14 @@ export function windowDeltaDomain(values, anchor, numYears, start, end) {
 }
 
 // Absolute withdrawal scale for Amount mode: P2/P98 of finite cell values in
-// the visible from/to columns (all years). The midpoint splits the orange↔
-// indigo spectrum; guard hi > lo so color transfer never divides by zero.
+// the visible from/to columns (all years), split by the actual MEDIAN of
+// those values (not the arithmetic mean of lo/hi). Anchoring on the mean
+// would make armLo === armHi by construction — always exactly symmetric —
+// so a skewed distribution (say, low sitting 3x closer to zero than high is
+// far above it) would still saturate both color arms equally, hiding that
+// asymmetry. The median instead reflects where the data actually centers, so
+// the shorter arm reaches its pole sooner and reads visibly paler. Guard
+// hi > lo so color transfer never divides by zero.
 // Exported pure for unit tests.
 export function windowAbsoluteDomain(values, numYears, start, end) {
   const samples = [];
@@ -364,7 +370,8 @@ export function windowAbsoluteDomain(values, numYears, start, end) {
     const spread = Math.max(1, Math.abs(lo) * 0.01 || 1);
     hi = lo + spread;
   }
-  return { lo, hi, mid: (lo + hi) / 2 };
+  const mid = q(50);
+  return { lo, hi, mid: Math.min(hi, Math.max(lo, mid)) };
 }
 
 // The rank a given outcome percentile maps to, clamped to the built source window.
@@ -711,7 +718,7 @@ function renderLegend() {
   const items = [];
   if (info.mode === 'abs') {
     items.push(item(`<span>${formatK(info.abs.lo)} low</span>${swatch}<span>${formatK(info.abs.hi)} high</span>`));
-    items.push(item(`<span>${midWord} = mid of shown range</span>`));
+    items.push(item(`<span>${midWord} = median of shown range</span>`));
   } else {
     const anchorWord = state.encoding === 'plan'
       ? 'on plan'

@@ -252,7 +252,7 @@ describe('windowDeltaDomain', () => {
 });
 
 describe('windowAbsoluteDomain', () => {
-  it('uses P2/P98 of finite cells in the visible window', () => {
+  it('uses P2/P98 of finite cells in the visible window, split at the median', () => {
     const values = Float64Array.from([
       10, 100,
       20, 200,
@@ -261,7 +261,9 @@ describe('windowAbsoluteDomain', () => {
     const domain = windowAbsoluteDomain(values, 2, 0, 3);
     expect(domain.lo).toBe(10);
     expect(domain.hi).toBe(300);
-    expect(domain.mid).toBeCloseTo(155, 10);
+    // Median of [10,20,60,100,200,300] is the 50th-percentile sample (100),
+    // not the mean of lo/hi (155) — see below for why that distinction matters.
+    expect(domain.mid).toBeCloseTo(100, 10);
   });
 
   it('responds to the window bounds', () => {
@@ -275,6 +277,25 @@ describe('windowAbsoluteDomain', () => {
     const values = Float64Array.from([5, 5, 5]);
     const domain = windowAbsoluteDomain(values, 1, 0, 3);
     expect(domain.hi).toBeGreaterThan(domain.lo);
+  });
+
+  it('produces an off-center mid for a skewed distribution, not the mean of lo/hi', () => {
+    // Mostly clustered near the top of the range with one low outlier: the
+    // median sits much closer to hi than to lo, so the above-anchor arm
+    // (hi - mid) is far shorter than the below-anchor arm (mid - lo) — the
+    // cluster near hi saturates teal almost immediately, while the lone low
+    // outlier has to travel much further to reach peak orange. Anchoring on
+    // the mean of lo/hi instead would force both arms to be exactly equal,
+    // masking that asymmetry (and equally saturating both poles).
+    const values = Float64Array.from([149, 430, 435, 438, 440, 441]);
+    const domain = windowAbsoluteDomain(values, 1, 0, 6);
+    expect(domain.lo).toBe(149);
+    expect(domain.hi).toBe(441);
+    const mean = (domain.lo + domain.hi) / 2;
+    expect(domain.mid).not.toBeCloseTo(mean, 0);
+    const armLo = domain.mid - domain.lo;
+    const armHi = domain.hi - domain.mid;
+    expect(armHi).toBeLessThan(armLo);
   });
 });
 

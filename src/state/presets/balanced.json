@@ -21,7 +21,7 @@
     "dynMedRet": 5,
     "dynHighRet": 30,
     "glideRate": -1,
-    "maxConsecutiveMinWithdrawals": 3,
+    "maxConsecutiveMinWithdrawals": 2,
     "minWithdrawalPlanRecoveryYears": 2
   },
   "derived": {
@@ -47,7 +47,7 @@
       "high": 33
     },
     "spendingExtraPctOfBase": 33,
-    "targetEndingBalancePctOfStart": 30,
+    "targetEndingBalancePctOfStart": 16,
     "glideFraction": 30,
     "maxBoostDrawdownPct": 1
   }

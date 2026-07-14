@@ -160,6 +160,31 @@ describe('glide-path spend-down', () => {
     expect(on.depletionYear[0]).toBe(11); // horizon + 1 = never depleted
   });
 
+  it('never spends the balance below the glide target, even when other spending crowds it', () => {
+    // Deterministic single year with 0% return. Plan is 100k but the minimum
+    // floor forces 120k out: start 1,000k − 120k = 880k left. The glide path
+    // (required = plan 100k + target 850k = 950k) sees a 50k surplus, so an
+    // unguarded full recycle would take 50k and finish at 830k — BELOW the
+    // 850k target the lever is supposed to land on. The guard trims the glide
+    // spend to the 30k of headroom above the target instead.
+    const p = deterministicParams({
+      glideTarget: 850_000,
+      glideFraction: 1,
+      glideRate: 0,
+      withdrawalFloorSeries: [120_000],
+      spendingOverTimeSeries: spendingSeries(1, [{ changePct: 0, extra: 0 }]),
+    });
+    p.numYears = 1;
+    p.portfolio.start = 1_000_000;
+    p.portfolio.base = 100_000;
+    p.logNormal = { ...p.logNormal, cash: { mean: 0, stdDev: 0 } };
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    const b = s.path.withdrawalBreakdown[0];
+    expect(b.floorLift).toBeCloseTo(20_000, 3);
+    expect(b.glideExtra).toBeCloseTo(30_000, 3);
+    expect(s.path.balances[1]).toBeCloseTo(850_000, 3);
+  });
+
   it('a larger recycle fraction spends the surplus down harder across a volatile Monte Carlo run', () => {
     // Neutral guardrails isolate the glide lever inside the enabled section.
     const base = {

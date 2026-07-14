@@ -47,7 +47,7 @@
       "high": 25
     },
     "spendingExtraPctOfBase": 25,
-    "targetEndingBalancePctOfStart": 40,
+    "targetEndingBalancePctOfStart": 24,
     "glideFraction": 20,
     "maxBoostDrawdownPct": 0
   }
