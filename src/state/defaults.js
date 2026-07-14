@@ -182,7 +182,7 @@ export const BASE_DEFAULTS = {
   goalSeekNumSimulations: 1000,
 
   // How aggressively to use CPU cores during simulation runs.
-  // Options: 'low' (1 core), 'med' (3 cores), 'high' (up to 6 cores).
+  // Options: 'low' (1 core), 'med' (3 cores), 'high' (up to 8 cores).
   parallelCores: 'high',
 };
 

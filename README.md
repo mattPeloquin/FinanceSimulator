@@ -139,7 +139,7 @@ When you click **Run Simulation**, the scenario is validated (allocation must to
 
 The heavy math runs inside a **Web Worker** (`src/workers/simulation.worker.js`) — a background thread — so the page never freezes, and a progress bar updates as it goes. The progress bar also shows how many CPU cores are being used. Changed your mind mid-run? A **Cancel** button under the progress bar stops the simulation instantly.
 
-On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Find Best Plan benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 6 cores: 1 master + 5 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster.
+On multi-core machines, the worker can split each Monte Carlo run across several cores at once (Find Best Plan benefits too, since it runs many smaller simulations while searching). Open **Advanced simulation settings** and use **Core Usage** to choose **Low** (1 core), **Medium** (3 cores: 1 master + 2 sub-workers), or **High** (up to 8 cores: 1 master + 7 sub-workers). Lower settings leave more of your computer free for other apps; higher settings finish faster.
 
 **Uncertain end date:** next to **Years to simulate (endpoint)**, you can optionally enter **+ years** and **− years** to model a retirement horizon that might run shorter or longer. Each simulation picks its own timeline inside that range (treated as very likely bounds). Leave both at **0** for a fixed horizon.
 

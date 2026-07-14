@@ -13,15 +13,15 @@ describe('resolveNumCores', () => {
     expect(resolveNumCores('med', 2)).toBe(1); // 2 total cores - 1 master = 1 sub-worker
   });
 
-  it('uses up to 5 sub-workers for high', () => {
-    expect(resolveNumCores('high', 16)).toBe(5);
-    expect(resolveNumCores('high', 8)).toBe(5);
+  it('uses up to 7 sub-workers for high', () => {
+    expect(resolveNumCores('high', 16)).toBe(7);
+    expect(resolveNumCores('high', 8)).toBe(7); // 8 total - 1 master = 7
     expect(resolveNumCores('high', 6)).toBe(5); // 6 total - 1 master = 5
     expect(resolveNumCores('high', 4)).toBe(3); // 4 total - 1 master = 3
   });
 
   it('defaults unknown values to capped cores', () => {
-    expect(resolveNumCores('unknown', 16)).toBe(5);
+    expect(resolveNumCores('unknown', 16)).toBe(7);
     expect(resolveNumCores('unknown', 6)).toBe(5);
   });
 });

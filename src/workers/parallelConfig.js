@@ -3,7 +3,7 @@
 
 export function resolveNumCores(parallelCores, hardwareConcurrency) {
   const available = Math.max(1, hardwareConcurrency || 4);
-  const MAX_SUB_WORKERS = 5;
+  const MAX_SUB_WORKERS = 7;
   const cappedAvailable = Math.min(MAX_SUB_WORKERS, available - 1); // -1 to leave room for the master worker
 
   switch (parallelCores) {

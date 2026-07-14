@@ -9,7 +9,7 @@
 import { runMonteCarlo } from '../core/simulation.js';
 
 function splitIntoChunks(total, numWorkers) {
-  const MIN_CHUNK_SIZE = 100;
+  const MIN_CHUNK_SIZE = 150;
   const effectiveWorkers = Math.min(
     numWorkers,
     Math.max(1, Math.floor(total / MIN_CHUNK_SIZE))
