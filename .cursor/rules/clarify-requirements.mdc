@@ -1,0 +1,18 @@
+---
+description: Ask the user with options when requirements or meaningful product/UX choices are unclear.
+alwaysApply: true
+---
+# Clarify Requirements With Options
+
+Before implementing, check whether requirements and meaningful product/UX choices are already specified in the request, conversation, or existing project rules/docs.
+
+- If a choice would meaningfully change behavior, UX, scope, or architecture — **ask even when a default is inferable**. Do not silently pick and proceed.
+- Skip asking only when the answer is already present (explicit instruction, prior decision in the thread, or an existing project rule).
+- Prefer Cursor’s structured question UI (`AskQuestion` or equivalent) when available. Otherwise present a short numbered list of concrete options in the reply (e.g. `1A 2B`) so the user can answer quickly.
+- Keep questions focused: one decision per question when practical; avoid open-ended prompts when options are known.
+- After the user answers, proceed without re-asking the same choice unless new information conflicts with it.
+
+```text
+❌ BAD: Infer “use median” for a chart metric and implement without asking.
+✅ GOOD: Ask — (A) median  (B) mean  (C) P10 / P90 band — then implement.
+```

@@ -6,6 +6,8 @@ import {
   rankForOverviewColumn,
   buildDrilldownPaths,
   percentileLabelForRank,
+  sampleOverviewPaths,
+  ranksForPercentileWindow,
 } from '../../core/surfaceDrilldown.js';
 import { meetsWithdrawalTarget, median, isMedianYearlyMetric, isMeanYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
 import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
@@ -13,6 +15,8 @@ import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
 import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
+import { heatmapRowLayout, SURFACE_EMPHASIS_MAX_RATIO, yearAtDisplayCoord } from './yearEmphasis.js';
+
 
 let echartsModule = null;
 let chartInstance = null;
@@ -72,8 +76,9 @@ const BALANCE_AXIS_NAME_GAP = 28;
 let surfaceTooltipPointer = null;
 
 const OVERVIEW_TITLE = 'Explore specific paths';
-const OVERVIEW_DESCRIPTION =
-  'A 3D plot of representative paths from the 5th to 65th percentiles. Column height represents portfolio balance, color reflects the <strong>annual market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.';
+const EMPHASIS_DEFAULT = 0;
+const HEIGHT_BALANCE = 'balance';
+const HEIGHT_WITHDRAWAL = 'withdrawal';
 
 // Interaction + layout state shared with the event handlers (one chart instance).
 const surfaceState = {
@@ -83,12 +88,15 @@ const surfaceState = {
   belowPlanCols: [], // parallel to columns: true when withdrawals fall below plan (not depleted)
   barWidth: 1,
   barDepth: 1,
+  yearDepths: null, // per-year barDepth along the year axis (scene units)
+  yearLayout: null, // heatmapRowLayout bounds for axis label mapping
   zCap: 0,
   numYears: 0,
   pinnedCol: null,
   largeChartCol: null,
   columnClickHandled: false,
   eventsBound: false,
+  controlsBound: false,
   viewMode: 'overview',
   overviewPaths: [],
   simParams: null,
@@ -104,6 +112,11 @@ const surfaceState = {
   onPlanBenchmark: 0,
   withdrawalMetric: 'total',
   horizonVariable: false,
+  // View prefs (survive re-runs, like the heatmap controls)
+  heightMode: HEIGHT_BALANCE, // 'balance' | 'withdrawal'
+  emphasis: EMPHASIS_DEFAULT,
+  lowerPct: 5,
+  upperPct: 65,
 };
 
 async function loadEcharts() {
@@ -179,26 +192,40 @@ function pathStatusDisplay(series) {
   return { text: 'Funded', color: '#15803d' };
 }
 
-// Columns are sampled evenly from the 5th to the 65th percentile, so the first
-// column is P5 and the LAST column is P65 (hence numCols - 1 in the divisor).
+// Columns are sampled evenly from lowerPct to upperPct.
 function percentileLabel(col, numCols) {
   const fraction = numCols > 1 ? col / (numCols - 1) : 0;
-  return 'P' + Math.round(5 + fraction * 60);
+  const span = surfaceState.upperPct - surfaceState.lowerPct;
+  return 'P' + Math.round(surfaceState.lowerPct + fraction * span);
 }
 
-const OVERVIEW_AXIS_PERCENTILES = [5, 15, 25, 35, 45, 55, 65];
-const OVERVIEW_PERCENTILE_SPAN = OVERVIEW_AXIS_PERCENTILES.at(-1) - OVERVIEW_AXIS_PERCENTILES[0];
+function overviewAxisTickPercentiles() {
+  const ticks = [];
+  for (let p = surfaceState.lowerPct; p <= surfaceState.upperPct; p += 10) {
+    ticks.push(p);
+  }
+  if (ticks[ticks.length - 1] !== surfaceState.upperPct) ticks.push(surfaceState.upperPct);
+  return ticks;
+}
 
 function overviewAxisInterval(numCols) {
   if (numCols <= 1) return 1;
-  return ((numCols - 1) * 10) / OVERVIEW_PERCENTILE_SPAN;
+  const span = surfaceState.upperPct - surfaceState.lowerPct;
+  if (span <= 0) return numCols - 1;
+  return ((numCols - 1) * 10) / span;
 }
 
-// Overview x-axis: show P5, P15, …, P65 at evenly spaced 10-point ticks.
+// Overview x-axis: show decade ticks (and endpoints) across the active window.
 function overviewAxisTickLabel(col, numCols) {
-  if (numCols <= 1) return col === 0 ? 'P5' : '';
-  const pct = Math.round(5 + (col / (numCols - 1)) * OVERVIEW_PERCENTILE_SPAN);
-  if (pct < 5 || pct > 65 || (pct - 5) % 10 !== 0) return '';
+  if (numCols <= 1) return col === 0 ? `P${surfaceState.lowerPct}` : '';
+  const span = surfaceState.upperPct - surfaceState.lowerPct;
+  const pct = Math.round(surfaceState.lowerPct + (col / (numCols - 1)) * span);
+  const ticks = overviewAxisTickPercentiles();
+  if (!ticks.includes(pct)) return '';
+  // Avoid duplicate labels when endpoints aren't on a 10-step grid.
+  if (pct !== surfaceState.lowerPct && pct !== surfaceState.upperPct && (pct - surfaceState.lowerPct) % 10 !== 0) {
+    return '';
+  }
   return 'P' + pct;
 }
 
@@ -220,7 +247,20 @@ function sampleRunTitle(col) {
   return `${columnPercentileLabel(col, surfaceState.columns.length)} - Sample run`;
 }
 
-function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
+function heightMetricPhrase() {
+  return surfaceState.heightMode === HEIGHT_WITHDRAWAL ? 'withdrawal amount' : 'portfolio balance';
+}
+
+function overviewDescriptionHtml() {
+  return (
+    `A 3D plot of representative paths from the ${surfaceState.lowerPct}th to ${surfaceState.upperPct}th percentiles. ` +
+    `Column height represents <strong>${heightMetricPhrase()}</strong>; color reflects the <strong>annual real market return</strong> for that year (Red = crash, Green = boom). ` +
+    '<strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. ' +
+    '<strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.'
+  );
+}
+
+function updateSurfaceChrome({ mode, centerRank, lo, hi, n } = {}) {
   const titleEl = document.getElementById('surfaceChartTitle');
   const descEl = document.getElementById('surfaceChartDescription');
   if (!titleEl || !descEl) return;
@@ -232,13 +272,13 @@ function updateSurfaceChrome({ mode, centerRank, lo, hi, n }) {
     titleEl.textContent = `Explore paths near ${centerLabel}`;
     descEl.innerHTML =
       `Showing ~200 simulations with total-withdrawn ranks between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
-      'Column height represents portfolio balance; color reflects each year\'s market return. ' +
-      '<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P5–P65 overview.';
+      `Column height represents ${heightMetricPhrase()}; color reflects each year's market return. ` +
+      `<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P${surfaceState.lowerPct}–P${surfaceState.upperPct} overview.`;
     return;
   }
 
   titleEl.textContent = OVERVIEW_TITLE;
-  descEl.innerHTML = OVERVIEW_DESCRIPTION;
+  descEl.innerHTML = overviewDescriptionHtml();
 }
 
 function buildXAxisConfig(numCols) {
@@ -247,13 +287,14 @@ function buildXAxisConfig(numCols) {
   const centerLabel = isDrilldown && n != null
     ? percentileLabelForRank(surfaceState.drilldownCenterRank, n)
     : null;
+  const tickCount = overviewAxisTickPercentiles().length;
 
   return axisConfig(isDrilldown ? `Percentile (near ${centerLabel})` : 'Percentile', {
     min: 0,
     max: numCols - 1,
     ...(isDrilldown
       ? { splitNumber: 5 }
-      : { interval: overviewAxisInterval(numCols), splitNumber: OVERVIEW_AXIS_PERCENTILES.length - 1 }),
+      : { interval: overviewAxisInterval(numCols), splitNumber: Math.max(1, tickCount - 1) }),
     axisLine: { show: true, lineStyle: { width: 1 } },
     axisLabel: {
       showMinLabel: !isDrilldown,
@@ -266,8 +307,9 @@ function buildXAxisConfig(numCols) {
   });
 }
 
-function makeBarPoint(x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr) {
-  const value = [x, y, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr];
+// value layout: [x, displayY, height, ret, balance, withdrawal, total, avg, unadj, medianYr, horizon, planBenchmark, irr, yearIndex]
+function makeBarPoint(x, displayY, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, depleted, belowPlan, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr, yearIndex) {
+  const value = [x, displayY, height, ret, balance, withdrawal, totalWithdrawn, avgReturn, unadjusted, medianYearlyWithdrawal, horizonYears, planBenchmark, irr, yearIndex];
   if (depleted) {
     return { value, itemStyle: { color: colorForDepletedReturn(ret) } };
   }
@@ -281,14 +323,37 @@ function pointValue(p) {
   return Array.isArray(p) ? p : p.value;
 }
 
+function pointYearIndex(vals) {
+  if (vals.length > 13 && Number.isFinite(vals[13])) return Math.round(vals[13]);
+  return Math.round(vals[1]);
+}
+
+// When bar3D truncates the payload to x/y/z, recover the year by nearest display-Y.
+function findYearInColumn(col, displayY) {
+  const points = surfaceState.columns[col];
+  if (!points?.length) return Math.round(displayY);
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = Math.abs(pointValue(points[i])[1] - displayY);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 // bar3D hover params.value often carries only x/y/z (+ visualMap dim); look up the
 // full per-bar payload we stored when building columns.
 function surfaceBarPointValues(params) {
   const partial = pointValue(params?.value);
   if (!partial?.length) return partial ?? [];
   const col = Math.round(partial[0]);
-  const y = Math.round(partial[1]);
-  const stored = surfaceState.columns[col]?.[y];
+  const year = partial.length > 13 && Number.isFinite(partial[13])
+    ? Math.round(partial[13])
+    : findYearInColumn(col, partial[1]);
+  const stored = surfaceState.columns[col]?.[year];
   return stored ? pointValue(stored) : partial;
 }
 
@@ -329,7 +394,7 @@ function applySurfaceTheme() {
   chartInstance.setOption({
     tooltip: surfaceTooltipOptions(theme),
     xAxis3D: buildXAxisConfig(numCols),
-    yAxis3D: axisConfig('Year', { min: 0, max: surfaceState.numYears, splitNumber: 5, inverse: true }),
+    yAxis3D: buildYAxisConfig(surfaceState.numYears),
     zAxis3D: buildZAxisConfig({ min: 0, max: surfaceState.zCap }),
     grid3D: { environment: theme.sceneBg },
   });
@@ -396,10 +461,11 @@ function axisConfig(name, extra = {}) {
 }
 
 function buildZAxisConfig({ min = 0, max = surfaceState.zCap } = {}) {
+  const name = surfaceState.heightMode === HEIGHT_WITHDRAWAL ? 'Withdrawal' : 'Balance';
   return {
     min,
     max,
-    ...axisConfig('Balance', { nameGap: BALANCE_AXIS_NAME_GAP }),
+    ...axisConfig(name, { nameGap: BALANCE_AXIS_NAME_GAP }),
     axisLabel: zAxisLabel((v) => formatK(v)),
   };
 }
@@ -446,7 +512,7 @@ function withdrawalPointDetails(col, dataIndex) {
   if (!p) return null;
   const vals = pointValue(p);
   return {
-    year: vals[1],
+    year: pointYearIndex(vals),
     ret: vals[3],
     bal: vals[4],
     wd: vals[5],
@@ -544,8 +610,9 @@ function extractWithdrawalSeries(col) {
   let totalUnadjusted = 0;
   for (const p of points) {
     const vals = pointValue(p);
-    if (vals[1] === 0) continue; // skip year 0 (no withdrawal)
-    labels.push(vals[1]);
+    const year = pointYearIndex(vals);
+    if (year === 0) continue; // skip year 0 (no withdrawal)
+    labels.push(year);
     actualData.push(vals[5]);
     unadjustedData.push(vals[8]);
     balanceData.push(vals[4]);
@@ -896,7 +963,7 @@ function hideFloatPanel() {
 function tooltipFormatter(params) {
   const vals = surfaceBarPointValues(params);
   const col = Math.round(vals[0]);
-  const y = vals[1];
+  const y = pointYearIndex(vals);
   const ret = vals[3];
   const bal = vals[4];
   const wd = vals[5];
@@ -959,14 +1026,18 @@ function surfaceTooltipOptions(theme) {
 function applyFocus() {
   if (!chartInstance) return;
   const col = surfaceState.pinnedCol;
-  const { columns, zCap } = surfaceState;
+  const { columns, zCap, barWidth, barDepth } = surfaceState;
+  const nPath = pathSeriesCount();
 
   if (col == null || !columns[col]) {
     // Nothing pinned: the full field is interactive for exploration.
     hideFloatPanel();
     chartInstance.setOption({
       zAxis3D: { max: zCap },
-      series: [{ itemStyle: { opacity: 1 }, silent: false }, { data: [] }],
+      series: [
+        ...Array.from({ length: nPath }, () => ({ itemStyle: { opacity: 1 }, silent: false })),
+        { data: [], barSize: [barWidth, barDepth] },
+      ],
     });
     return;
   }
@@ -987,8 +1058,13 @@ function applyFocus() {
   chartInstance.setOption({
     zAxis3D: { max: zCap + lift },
     series: [
-      { itemStyle: { opacity: DIM_OPACITY }, silent: true },
-      { data: lifted, itemStyle: { opacity: 1 }, silent: false },
+      ...Array.from({ length: nPath }, () => ({ itemStyle: { opacity: DIM_OPACITY }, silent: true })),
+      {
+        data: lifted,
+        barSize: [barWidth, barDepth],
+        itemStyle: { opacity: 1 },
+        silent: false,
+      },
     ],
   });
 
@@ -1093,18 +1169,77 @@ function bindEvents() {
   surfaceState.eventsBound = true;
 }
 
+function yearDisplayLayout(numYears, emphasis) {
+  // numYears+1 bands cover year 0 (start) through year numYears.
+  // Each bar sits at its band midpoint with depth matching that band — early
+  // years get thicker bars (no gaps between years).
+  const numRows = numYears + 1;
+  const layout = heatmapRowLayout(numRows, emphasis, SURFACE_EMPHASIS_MAX_RATIO);
+  const displayY = new Float64Array(numRows);
+  const yearDepths = new Float64Array(numRows);
+  let minDepth = Infinity;
+  for (let y = 0; y < numRows; y++) {
+    const lo = layout[y];
+    const hi = layout[y + 1];
+    displayY[y] = ((lo + hi) / 2) * numYears;
+    // Slight shrink so adjacent year bars don't z-fight at the shared edge.
+    const depth = BOX_DEPTH * (hi - lo) * 0.96;
+    yearDepths[y] = depth;
+    if (depth < minDepth) minDepth = depth;
+  }
+  return { displayY, yearDepths, barDepth: minDepth, layout };
+}
+
+function buildYAxisConfig(numYears) {
+  const layout = surfaceState.yearLayout;
+  return axisConfig('Year', {
+    min: 0,
+    max: numYears,
+    splitNumber: 5,
+    inverse: true,
+    axisLabel: {
+      formatter: (v) => String(yearAtDisplayCoord(Number(v), layout, numYears)),
+    },
+  });
+}
+
+function maxWithdrawalInPaths(surfacePaths) {
+  let maxW = 0;
+  for (const path of surfacePaths) {
+    const wds = path.withdrawals;
+    if (!wds) continue;
+    for (let i = 0; i < wds.length; i++) {
+      if (wds[i] > maxW) maxW = wds[i];
+    }
+  }
+  return maxW;
+}
+
 function buildColumnsFromPaths(surfacePaths, numYears, {
   shortfallTolerance,
   withdrawalMetric,
+  heightMode,
+  emphasis,
 } = {}) {
   const numCols = surfacePaths.length;
   const numRows = numYears + 1;
   const startBalance = surfacePaths[0] ? surfacePaths[0].balances[0] : 0;
-  const zCap = startBalance * Z_CAP_MULTIPLE;
+  const mode = heightMode ?? surfaceState.heightMode ?? HEIGHT_BALANCE;
+  const emp = emphasis ?? surfaceState.emphasis ?? EMPHASIS_DEFAULT;
+  const { displayY, yearDepths, barDepth, layout } = yearDisplayLayout(numYears, emp);
+
+  let zCap;
+  if (mode === HEIGHT_WITHDRAWAL) {
+    const peak = maxWithdrawalInPaths(surfacePaths);
+    zCap = Math.max(peak * 1.05, 1);
+  } else {
+    zCap = startBalance * Z_CAP_MULTIPLE;
+  }
+
   const tolerance = shortfallTolerance ?? surfaceState.shortfallTolerance ?? 0.05;
   const metric = withdrawalMetric ?? surfaceState.withdrawalMetric ?? 'total';
 
-  const data3D = [];
+  const dataByYear = Array.from({ length: numRows }, () => []);
   const columns = [];
   const breakdownCols = [];
   const depletedCols = [];
@@ -1120,15 +1255,16 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
     const colPoints = [];
     for (let y = 0; y <= pathHorizon; y++) {
       const balance = Math.max(0, balances[y]);
-      const height = Math.min(balance, zCap);
-      const ret = y > 0 ? returns[y - 1] : returns[0] || 0;
       const withdrawal = y > 0 && withdrawals ? withdrawals[y - 1] : 0;
+      const heightRaw = mode === HEIGHT_WITHDRAWAL ? Math.max(0, withdrawal) : balance;
+      const height = Math.min(heightRaw, zCap);
+      const ret = y > 0 ? returns[y - 1] : returns[0] || 0;
       const unadjusted = y > 0 && unadjustedWithdrawals ? unadjustedWithdrawals[y - 1] : 0;
       const point = makeBarPoint(
-        x, y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted, belowPlan, unadjusted,
-        medianYearlyWithdrawal ?? 0, pathHorizon, planBenchmark ?? 0, irr ?? NaN,
+        x, displayY[y] ?? y, height, ret, balance, withdrawal, totalWithdrawn || 0, avgReturn || 0, depleted, belowPlan, unadjusted,
+        medianYearlyWithdrawal ?? 0, pathHorizon, planBenchmark ?? 0, irr ?? NaN, y,
       );
-      data3D.push(point);
+      dataByYear[y].push(point);
       colPoints.push(point);
     }
     columns.push(colPoints);
@@ -1136,19 +1272,90 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
   }
 
   const barWidth = BOX_WIDTH / numCols;
-  const barDepth = BOX_DEPTH / numRows;
 
-  return { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols };
+  return {
+    dataByYear,
+    columns,
+    breakdownCols,
+    depletedCols,
+    belowPlanCols,
+    zCap,
+    barWidth,
+    barDepth,
+    yearDepths,
+    layout,
+    numCols,
+    numRows,
+  };
+}
+
+function buildPathYearSeries(dataByYear, barWidth, yearDepths, {
+  opacity = 1,
+  silent = false,
+  includeType = false,
+} = {}) {
+  return dataByYear.map((data, y) => {
+    const series = {
+      name: y === 0 ? 'paths' : `paths-y${y}`,
+      data,
+      barSize: [barWidth, yearDepths[y]],
+      itemStyle: { opacity },
+      silent,
+    };
+    if (includeType) {
+      series.type = 'bar3D';
+      series.shading = 'lambert';
+      series.bevelSize = 0;
+      series.animation = false;
+      series.emphasis = { label: { show: false } };
+    }
+    return series;
+  });
+}
+
+function buildFocusSeriesShell(barWidth, barDepth, { includeType = false } = {}) {
+  const series = {
+    name: 'focus',
+    data: [],
+    barSize: [barWidth, barDepth],
+    itemStyle: { opacity: 1 },
+    silent: false,
+  };
+  if (includeType) {
+    series.type = 'bar3D';
+    series.shading = 'lambert';
+    series.bevelSize = 0;
+    series.animation = false;
+    series.emphasis = { label: { show: false } };
+  }
+  return series;
+}
+
+function pathSeriesCount() {
+  return surfaceState.yearDepths?.length ?? (surfaceState.numYears + 1);
 }
 
 function applySurfaceDataset(surfacePaths, numYears) {
   if (!chartInstance) return;
 
-  const { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
-    buildColumnsFromPaths(surfacePaths, numYears, {
-      shortfallTolerance: surfaceState.shortfallTolerance,
-      withdrawalMetric: surfaceState.withdrawalMetric,
-    });
+  const {
+    dataByYear,
+    columns,
+    breakdownCols,
+    depletedCols,
+    belowPlanCols,
+    zCap,
+    barWidth,
+    barDepth,
+    yearDepths,
+    layout,
+    numCols,
+  } = buildColumnsFromPaths(surfacePaths, numYears, {
+    shortfallTolerance: surfaceState.shortfallTolerance,
+    withdrawalMetric: surfaceState.withdrawalMetric,
+    heightMode: surfaceState.heightMode,
+    emphasis: surfaceState.emphasis,
+  });
 
   surfaceState.columns = columns;
   surfaceState.breakdownCols = breakdownCols;
@@ -1156,6 +1363,8 @@ function applySurfaceDataset(surfacePaths, numYears) {
   surfaceState.belowPlanCols = belowPlanCols;
   surfaceState.barWidth = barWidth;
   surfaceState.barDepth = barDepth;
+  surfaceState.yearDepths = yearDepths;
+  surfaceState.yearLayout = layout;
   surfaceState.zCap = zCap;
   surfaceState.numYears = numYears;
   surfaceState.pinnedCol = null;
@@ -1164,28 +1373,13 @@ function applySurfaceDataset(surfacePaths, numYears) {
 
   chartInstance.setOption({
     xAxis3D: buildXAxisConfig(numCols),
-    zAxis3D: {
-      min: 0,
-      max: zCap,
-      axisLabel: zAxisLabel((v) => formatK(v)),
-    },
+    yAxis3D: buildYAxisConfig(numYears),
+    zAxis3D: buildZAxisConfig({ min: 0, max: zCap }),
     series: [
-      {
-        name: 'paths',
-        data: data3D,
-        barSize: [barWidth, barDepth],
-        itemStyle: { opacity: 1 },
-        silent: false,
-      },
-      {
-        name: 'focus',
-        data: [],
-        barSize: [barWidth, barDepth],
-        itemStyle: { opacity: 1 },
-        silent: false,
-      },
+      ...buildPathYearSeries(dataByYear, barWidth, yearDepths, { includeType: true }),
+      buildFocusSeriesShell(barWidth, barDepth, { includeType: true }),
     ],
-  });
+  }, { replaceMerge: ['series'] });
 }
 
 function enrichDrilldownPaths(paths) {
@@ -1209,13 +1403,160 @@ function enrichDrilldownPaths(paths) {
   });
 }
 
+function activeOverviewRanks() {
+  const n = surfaceState.surfaceMeta?.numSimulations;
+  if (!n) {
+    return {
+      loRank: surfaceState.surfaceMeta?.p5Rank ?? 0,
+      hiRank: surfaceState.surfaceMeta?.p65Rank ?? 0,
+    };
+  }
+  return ranksForPercentileWindow(n, surfaceState.lowerPct, surfaceState.upperPct);
+}
+
+function syncSurfaceControlUi() {
+  const balBtn = document.getElementById('surfaceHeightBalance');
+  const wdBtn = document.getElementById('surfaceHeightWithdrawal');
+  const isBal = surfaceState.heightMode === HEIGHT_BALANCE;
+  if (balBtn) {
+    balBtn.setAttribute('aria-pressed', isBal ? 'true' : 'false');
+    balBtn.classList.toggle('bg-theme-muted', isBal);
+    balBtn.classList.toggle('text-theme-heading', isBal);
+    balBtn.classList.toggle('font-semibold', isBal);
+    balBtn.classList.toggle('text-theme-faint', !isBal);
+  }
+  if (wdBtn) {
+    wdBtn.setAttribute('aria-pressed', isBal ? 'false' : 'true');
+    wdBtn.classList.toggle('bg-theme-muted', !isBal);
+    wdBtn.classList.toggle('text-theme-heading', !isBal);
+    wdBtn.classList.toggle('font-semibold', !isBal);
+    wdBtn.classList.toggle('text-theme-faint', isBal);
+  }
+
+  const emp = document.getElementById('surfaceEmphasis');
+  if (emp) emp.value = String(surfaceState.emphasis);
+
+  const lower = document.getElementById('surfaceLower');
+  const upper = document.getElementById('surfaceUpper');
+  const lowerLabel = document.getElementById('surfaceLowerLabel');
+  const upperLabel = document.getElementById('surfaceUpperLabel');
+  if (lower) lower.value = String(surfaceState.lowerPct);
+  if (upper) upper.value = String(surfaceState.upperPct);
+  if (lowerLabel) lowerLabel.textContent = `P${surfaceState.lowerPct}`;
+  if (upperLabel) upperLabel.textContent = `P${surfaceState.upperPct}`;
+}
+
+function redrawCurrentSurface() {
+  if (surfaceState.viewMode === 'drilldown') {
+    // Rebuild from current drilldown ranks (paths aren't stored separately).
+    const center = surfaceState.drilldownCenterRank;
+    if (center == null || !surfaceState.surfaceMeta || !surfaceState.simParams) return;
+    const { paths: drillPaths, lo, hi, centerRank } = buildDrilldownPaths(
+      center,
+      surfaceState.surfaceMeta,
+      surfaceState.simParams,
+      surfaceState.seed,
+    );
+    surfaceState.drilldownLo = lo;
+    surfaceState.drilldownHi = hi;
+    surfaceState.drilldownCenterRank = centerRank;
+    applySurfaceDataset(enrichDrilldownPaths(drillPaths), surfaceState.numYears);
+    updateSurfaceChrome({
+      mode: 'drilldown',
+      centerRank,
+      lo,
+      hi,
+      n: surfaceState.surfaceMeta.numSimulations,
+    });
+    return;
+  }
+  if (!surfaceState.overviewPaths?.length) return;
+  applySurfaceDataset(surfaceState.overviewPaths, surfaceState.numYears);
+  updateSurfaceChrome({ mode: 'overview' });
+}
+
+function setHeightMode(mode) {
+  const next = mode === HEIGHT_WITHDRAWAL ? HEIGHT_WITHDRAWAL : HEIGHT_BALANCE;
+  if (surfaceState.heightMode === next) return;
+  surfaceState.heightMode = next;
+  syncSurfaceControlUi();
+  redrawCurrentSurface();
+}
+
+function setEmphasis(v) {
+  const next = Math.max(0, Math.min(100, Math.round(v) || 0));
+  if (surfaceState.emphasis === next) return;
+  surfaceState.emphasis = next;
+  syncSurfaceControlUi();
+  redrawCurrentSurface();
+}
+
+function rebuildOverviewFromWindow() {
+  if (!surfaceState.surfaceMeta || !surfaceState.simParams) return;
+  const { loRank, hiRank } = activeOverviewRanks();
+  const paths = sampleOverviewPaths(
+    loRank,
+    hiRank,
+    surfaceState.surfaceMeta,
+    surfaceState.simParams,
+    surfaceState.seed,
+  );
+  surfaceState.overviewPaths = enrichDrilldownPaths(paths);
+  surfaceState.viewMode = 'overview';
+  surfaceState.drilldownCenterRank = null;
+  surfaceState.drilldownLo = null;
+  surfaceState.drilldownHi = null;
+  applySurfaceDataset(surfaceState.overviewPaths, surfaceState.numYears);
+  updateSurfaceChrome({ mode: 'overview' });
+}
+
+function setLowerPct(v) {
+  let next = Math.round(v / 5) * 5;
+  next = Math.max(5, Math.min(30, next));
+  if (surfaceState.lowerPct === next) {
+    syncSurfaceControlUi();
+    return;
+  }
+  surfaceState.lowerPct = next;
+  syncSurfaceControlUi();
+  rebuildOverviewFromWindow();
+}
+
+function setUpperPct(v) {
+  let next = Math.round(v / 5) * 5;
+  next = Math.max(65, Math.min(90, next));
+  if (surfaceState.upperPct === next) {
+    syncSurfaceControlUi();
+    return;
+  }
+  surfaceState.upperPct = next;
+  syncSurfaceControlUi();
+  rebuildOverviewFromWindow();
+}
+
+function bindControlEvents() {
+  if (surfaceState.controlsBound) return;
+  document.getElementById('surfaceHeightBalance')
+    ?.addEventListener('click', () => setHeightMode(HEIGHT_BALANCE));
+  document.getElementById('surfaceHeightWithdrawal')
+    ?.addEventListener('click', () => setHeightMode(HEIGHT_WITHDRAWAL));
+  document.getElementById('surfaceEmphasis')
+    ?.addEventListener('input', (ev) => setEmphasis(Number(ev.target.value)));
+  document.getElementById('surfaceLower')
+    ?.addEventListener('input', (ev) => setLowerPct(Number(ev.target.value)));
+  document.getElementById('surfaceUpper')
+    ?.addEventListener('input', (ev) => setUpperPct(Number(ev.target.value)));
+  surfaceState.controlsBound = true;
+}
+
 function enterDrilldown(col) {
   if (!surfaceState.surfaceMeta || !surfaceState.simParams) {
     console.warn('3D drill-down unavailable: simulation metadata missing. Re-run the simulation.');
     return;
   }
 
-  const centerRank = rankForOverviewColumn(col, surfaceState.surfaceMeta);
+  const { loRank, hiRank } = activeOverviewRanks();
+  const centerRank = rankForOverviewColumn(col, surfaceState.surfaceMeta, loRank, hiRank);
   const { paths, lo, hi, centerRank: resolvedCenter } = buildDrilldownPaths(
     centerRank,
     surfaceState.surfaceMeta,
@@ -1292,11 +1633,39 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.numYears = numYears;
   surfaceState.lastContext = { surfacePaths, numYears, context };
 
-  const { data3D, columns, breakdownCols, depletedCols, belowPlanCols, zCap, barWidth, barDepth, numCols } =
-    buildColumnsFromPaths(surfacePaths, numYears, {
-      shortfallTolerance,
-      withdrawalMetric,
-    });
+  // If the user widened/narrowed the percentile window on a prior run, resample
+  // so the chart matches the sliders instead of the packaged P5–P65 default.
+  if (
+    surfaceMeta &&
+    params &&
+    (surfaceState.lowerPct !== 5 || surfaceState.upperPct !== 65)
+  ) {
+    const { loRank, hiRank } = activeOverviewRanks();
+    surfaceState.overviewPaths = enrichDrilldownPaths(
+      sampleOverviewPaths(loRank, hiRank, surfaceMeta, params, seed),
+    );
+  }
+
+  const pathsForDraw = surfaceState.overviewPaths;
+
+  const {
+    dataByYear,
+    columns,
+    breakdownCols,
+    depletedCols,
+    belowPlanCols,
+    zCap,
+    barWidth,
+    barDepth,
+    yearDepths,
+    layout,
+    numCols,
+  } = buildColumnsFromPaths(pathsForDraw, numYears, {
+    shortfallTolerance,
+    withdrawalMetric,
+    heightMode: surfaceState.heightMode,
+    emphasis: surfaceState.emphasis,
+  });
 
   surfaceState.columns = columns;
   surfaceState.breakdownCols = breakdownCols;
@@ -1304,10 +1673,13 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.belowPlanCols = belowPlanCols;
   surfaceState.barWidth = barWidth;
   surfaceState.barDepth = barDepth;
+  surfaceState.yearDepths = yearDepths;
+  surfaceState.yearLayout = layout;
   surfaceState.zCap = zCap;
   surfaceState.pinnedCol = null;
   surfaceState.columnClickHandled = false;
   hideFloatPanel();
+  syncSurfaceControlUi();
   updateSurfaceChrome({ mode: 'overview' });
   const theme = getChartTheme();
 
@@ -1322,7 +1694,7 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
         inRange: { color: buildReturnColorRamp() },
       },
       xAxis3D: buildXAxisConfig(numCols),
-      yAxis3D: axisConfig('Year', { min: 0, max: numYears, splitNumber: 5, inverse: true }),
+      yAxis3D: buildYAxisConfig(numYears),
       zAxis3D: buildZAxisConfig({ min: 0, max: zCap }),
       grid3D: {
         boxWidth: BOX_WIDTH,
@@ -1348,35 +1720,15 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
         axisPointer: { show: false },
       },
       series: [
-        {
-          type: 'bar3D',
-          name: 'paths',
-          data: data3D,
-          shading: 'lambert',
-          barSize: [barWidth, barDepth],
-          bevelSize: 0,
-          animation: false,
-          itemStyle: { opacity: 1 },
-          emphasis: { label: { show: false } },
-        },
-        {
-          type: 'bar3D',
-          name: 'focus',
-          data: [],
-          shading: 'lambert',
-          animation: false,
-          barSize: [barWidth, barDepth],
-          bevelSize: 0,
-          itemStyle: { opacity: 1 },
-          silent: false,
-          emphasis: { label: { show: false } },
-        },
+        ...buildPathYearSeries(dataByYear, barWidth, yearDepths, { includeType: true }),
+        buildFocusSeriesShell(barWidth, barDepth, { includeType: true }),
       ],
     },
     true
   );
 
   bindEvents();
+  bindControlEvents();
 
   window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
   window.__TEST_HOOKS__.surfaceChart = chartInstance;
@@ -1392,6 +1744,18 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     surfaceState.pinnedCol = col;
     applyFocus();
   };
+  window.__TEST_HOOKS__.surfaceState = () => ({
+    heightMode: surfaceState.heightMode,
+    emphasis: surfaceState.emphasis,
+    lowerPct: surfaceState.lowerPct,
+    upperPct: surfaceState.upperPct,
+    zCap: surfaceState.zCap,
+    viewMode: surfaceState.viewMode,
+  });
+  window.__TEST_HOOKS__.surfaceSetHeightMode = (mode) => setHeightMode(mode);
+  window.__TEST_HOOKS__.surfaceSetEmphasis = (v) => setEmphasis(v);
+  window.__TEST_HOOKS__.surfaceSetLower = (v) => setLowerPct(v);
+  window.__TEST_HOOKS__.surfaceSetUpper = (v) => setUpperPct(v);
   window.__TEST_HOOKS__.floatWithdrawalChart = () => floatChart;
   window.__TEST_HOOKS__.activateFloatWithdrawalTooltip = (index = 5) => {
     if (!floatChart) return null;

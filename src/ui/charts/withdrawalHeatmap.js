@@ -28,6 +28,9 @@ import { formatK, formatPercent } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
 import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
+import { heatmapRowLayout, EMPHASIS_DEFAULT } from './yearEmphasis.js';
+
+export { heatmapRowLayout, EMPHASIS_DEFAULT, EMPHASIS_MAX_RATIO } from './yearEmphasis.js';
 
 const MARGIN = { top: 10, right: 14, bottom: 40, left: 52 };
 
@@ -45,12 +48,6 @@ export function tickMsForSpeed(speed) {
   const t = (SPEED_STEPS - s) / (SPEED_STEPS - 1);
   return Math.round(40 + 760 * t * t);
 }
-
-// Early-year emphasis: at slider 100 the year-1 row is EMPHASIS_MAX_RATIO
-// times taller than the last row (exponentially graded in between).
-// Default slider mid-point (50) lands at roughly half that stretch.
-const EMPHASIS_MAX_RATIO = 5;
-const EMPHASIS_DEFAULT = 50;
 
 // Bright red override for a true $0 withdrawal year — the heatmap's signal
 // that the plan ran out (distinct from NaN past-horizon cells, which stay
@@ -147,27 +144,6 @@ export function cellRgb(absoluteWithdrawal, delta, domain, isDark = isDarkMode()
 export function heatmapColumnAtX(x, geom, numCols) {
   if (x < geom.plotX || x >= geom.plotX + geom.plotW) return -1;
   return Math.min(numCols - 1, Math.floor(((x - geom.plotX) / geom.plotW) * numCols));
-}
-
-// Row layout for the early-year emphasis distortion: returns cumulative
-// height fractions measured from the BOTTOM of the plot — bounds[j] is the
-// bottom edge of year j's row, bounds[numYears] === 1. Row heights decay
-// exponentially with year so that at emphasis 100 the year-1 row is
-// EMPHASIS_MAX_RATIO× the last row; emphasis 0 is a uniform grid.
-export function heatmapRowLayout(numYears, emphasis) {
-  const e = Math.max(0, Math.min(100, emphasis || 0));
-  const ratio = 1 + (e / 100) * (EMPHASIS_MAX_RATIO - 1);
-  const decay = numYears > 1 ? Math.log(ratio) / (numYears - 1) : 0;
-  const bounds = new Float64Array(numYears + 1);
-  let total = 0;
-  for (let j = 0; j < numYears; j++) total += Math.exp(-decay * j);
-  let acc = 0;
-  for (let j = 0; j < numYears; j++) {
-    acc += Math.exp(-decay * j) / total;
-    bounds[j + 1] = acc;
-  }
-  bounds[numYears] = 1;
-  return bounds;
 }
 
 // Pixel → year index (0-based, year 1 at the BOTTOM — time reads upward),

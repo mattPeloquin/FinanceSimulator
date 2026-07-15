@@ -312,10 +312,9 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   // lists are pre-fitted to maxYears in buildSimParams), so one per-year array
   // is the correct plan for every run regardless of its sampled horizon.
   const heatmapPlanByYear = Float64Array.from(plannedYearlySchedule(params.portfolio, maxYears));
-  // The heatmap's own rank window extends past the surface's P65 so the
-  // renderer's "show to" slider can widen the axis without a re-run.
-  const heatmapHiRank = percentileIndex(n, 0.9);
-  const withdrawalHeatmap = buildWithdrawalHeatmapSource(result, rankW, p5i, heatmapHiRank, heatmapPlanByYear, maxYears);
+  // Heatmap and 3D "show to" sliders can widen past P65 up to P90 without a re-run.
+  const p90i = percentileIndex(n, 0.9);
+  const withdrawalHeatmap = buildWithdrawalHeatmapSource(result, rankW, p5i, p90i, heatmapPlanByYear, maxYears);
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
   const returnSummary = summarizeReturns(result.avgReturn);
@@ -390,6 +389,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       maxYears,
       p5Rank: p5i,
       p65Rank: p65i,
+      p90Rank: p90i,
       surfaceSamples: SURFACE_SAMPLES,
       benchmarkCache: Object.fromEntries(benchmarkCache),
     },

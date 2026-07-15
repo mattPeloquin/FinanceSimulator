@@ -4,8 +4,30 @@
     <div>
         <h3 id="surfaceChartTitle" class="text-lg font-semibold text-theme-body mb-2"
         >Explore specific paths</h3>
-        <p id="surfaceChartDescription" class="text-sm text-theme-faint mb-4"
-            >A 3D plot of representative paths from the 5th to 65th percentiles. Column height represents portfolio balance, color reflects the <strong>annual real market return</strong> for that year (Red = crash, Green = boom). <strong>Drag</strong> to rotate, <strong>scroll</strong> to zoom, <strong>right-drag</strong> to pan. <strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. <strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.</p>
+        <p id="surfaceChartDescription" class="text-sm text-theme-faint mb-3"
+            ><!-- filled by surface3d updateSurfaceChrome --></p>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+            <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Column height">
+                <button id="surfaceHeightBalance" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">Balance</button>
+                <button id="surfaceHeightWithdrawal" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Withdrawal</button>
+            </div>
+            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint pl-1" title="Widen early-year bars for emphasis">
+                <span>Early years</span>
+                <input type="range" id="surfaceEmphasis" min="0" max="100" step="1" value="0" class="range-theme w-24">
+            </label>
+            <div class="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-faint ml-2 pl-1 border-theme-input">
+                <label class="inline-flex items-center gap-1" title="Lower end of the outcome-percentile axis">
+                    <span>Show from</span>
+                    <input type="range" id="surfaceLower" min="5" max="30" step="5" value="5" class="range-theme w-14">
+                    <span id="surfaceLowerLabel" class="w-7">P5</span>
+                </label>
+                <label class="inline-flex items-center gap-1" title="Upper end of the outcome-percentile axis">
+                    <span>to</span>
+                    <input type="range" id="surfaceUpper" min="65" max="90" step="5" value="65" class="range-theme w-14">
+                    <span id="surfaceUpperLabel" class="w-7">P65</span>
+                </label>
+            </div>
+        </div>
         <div id="surfaceChart" class="h-[420px] w-[90%] mx-auto rounded-lg overflow-hidden border border-theme-border bg-theme-page"></div>
     </div>
 

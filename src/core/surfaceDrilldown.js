@@ -1,14 +1,19 @@
-// Rank-window helpers for 3D surface drill-down (sample paths near a clicked rank).
+// Rank-window helpers for 3D surface overview sampling and drill-down.
 import { regeneratePath } from './simulation.js';
 import { mulberry32, deriveSeed } from './rng.js';
+import { percentileIndex } from './statistics.js';
 
 export const SURFACE_DRILLDOWN_SAMPLES = 200;
+export const SURFACE_OVERVIEW_SAMPLES = 200;
 
-// Total-withdrawn rank for an overview column index (matches simulation.worker.js).
-export function rankForOverviewColumn(col, meta) {
-  const { p5Rank, p65Rank, surfaceSamples } = meta;
-  const step = Math.max(1, Math.floor((p65Rank - p5Rank) / surfaceSamples));
-  return Math.min(p5Rank + col * step, p65Rank);
+// Evenly spaced rank for an overview column within [loRank, hiRank].
+// Defaults to meta.p5Rank / meta.p65Rank when lo/hi are omitted (legacy P5–P65).
+export function rankForOverviewColumn(col, meta, loRank, hiRank) {
+  const lo = loRank ?? meta.p5Rank;
+  const hi = hiRank ?? meta.p65Rank;
+  const samples = meta.surfaceSamples ?? SURFACE_OVERVIEW_SAMPLES;
+  const step = Math.max(1, Math.floor((hi - lo) / samples));
+  return Math.min(lo + col * step, hi);
 }
 
 // Grow [centerRank] outward until at least targetCount ranks exist or bounds are hit.
@@ -47,6 +52,36 @@ export function percentileLabelForRank(rank, n, decimals = 0) {
   return 'P' + Math.round(pct);
 }
 
+function pathEntryFromRegen(re) {
+  return {
+    balances: re.path.balances,
+    returns: re.path.returns,
+    withdrawals: re.path.withdrawals,
+    unadjustedWithdrawals: re.path.unadjustedWithdrawals,
+    withdrawalBreakdown: re.path.withdrawalBreakdown,
+    totalWithdrawn: re.totalWithdrawn,
+    medianYearlyWithdrawal: re.medianYearlyWithdrawal,
+    avgReturn: re.avgReturn,
+    irr: re.irr,
+    horizonYears: re.horizonYears,
+  };
+}
+
+// Sample ~200 paths evenly across [loRank, hiRank] for the 3D overview.
+export function sampleOverviewPaths(loRank, hiRank, meta, params, seed, count = SURFACE_OVERVIEW_SAMPLES) {
+  const { rankW } = meta;
+  const samples = meta.surfaceSamples ?? count;
+  const step = Math.max(1, Math.floor((hiRank - loRank) / samples));
+  const paths = [];
+  for (let i = 0; i < samples; i++) {
+    const rankIndex = Math.min(loRank + i * step, hiRank);
+    const simIndex = rankW[rankIndex];
+    const re = regeneratePath(params, seed, simIndex);
+    paths.push(pathEntryFromRegen(re));
+  }
+  return paths;
+}
+
 export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURFACE_DRILLDOWN_SAMPLES) {
   const { rankW, numSimulations: n } = meta;
   const { lo, hi } = expandRankWindow(centerRank, n, count);
@@ -55,19 +90,15 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
   const paths = ranks.map((rank) => {
     const simIndex = rankW[rank];
     const re = regeneratePath(params, seed, simIndex);
-    const h = re.horizonYears;
-    return {
-      balances: re.path.balances,
-      returns: re.path.returns,
-      withdrawals: re.path.withdrawals,
-      unadjustedWithdrawals: re.path.unadjustedWithdrawals,
-      withdrawalBreakdown: re.path.withdrawalBreakdown,
-      totalWithdrawn: re.totalWithdrawn,
-      medianYearlyWithdrawal: re.medianYearlyWithdrawal,
-      avgReturn: re.avgReturn,
-      irr: re.irr,
-      horizonYears: h,
-    };
+    return pathEntryFromRegen(re);
   });
   return { paths, lo, hi, centerRank };
+}
+
+// Resolve percentile slider values to rank indices using the same formula as packaging.
+export function ranksForPercentileWindow(n, lowerPct, upperPct) {
+  return {
+    loRank: percentileIndex(n, lowerPct / 100),
+    hiRank: percentileIndex(n, upperPct / 100),
+  };
 }

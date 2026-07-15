@@ -4,8 +4,11 @@ import {
   expandRankWindow,
   sampleRanks,
   percentileLabelForRank,
+  ranksForPercentileWindow,
   SURFACE_DRILLDOWN_SAMPLES,
+  SURFACE_OVERVIEW_SAMPLES,
 } from '../src/core/surfaceDrilldown.js';
+import { percentileIndex } from '../src/core/statistics.js';
 
 describe('rankForOverviewColumn', () => {
   const meta = { p5Rank: 50, p65Rank: 600, surfaceSamples: 200 };
@@ -22,6 +25,26 @@ describe('rankForOverviewColumn', () => {
     const small = { p5Rank: 5, p65Rank: 65, surfaceSamples: 200 };
     expect(rankForOverviewColumn(0, small)).toBe(5);
     expect(rankForOverviewColumn(60, small)).toBe(65);
+  });
+
+  it('samples evenly across an arbitrary rank window', () => {
+    const lo = 100;
+    const hi = 900;
+    const step = Math.max(1, Math.floor((hi - lo) / 200));
+    expect(rankForOverviewColumn(0, meta, lo, hi)).toBe(lo);
+    expect(rankForOverviewColumn(1, meta, lo, hi)).toBe(lo + step);
+    expect(rankForOverviewColumn(199, meta, lo, hi)).toBe(
+      Math.min(lo + 199 * step, hi),
+    );
+  });
+});
+
+describe('ranksForPercentileWindow', () => {
+  it('matches percentileIndex for slider endpoints', () => {
+    const n = 1000;
+    const { loRank, hiRank } = ranksForPercentileWindow(n, 5, 90);
+    expect(loRank).toBe(percentileIndex(n, 0.05));
+    expect(hiRank).toBe(percentileIndex(n, 0.9));
   });
 });
 
@@ -76,5 +99,11 @@ describe('percentileLabelForRank', () => {
   it('supports fixed decimal places for drill-down labels', () => {
     expect(percentileLabelForRank(350, 1000, 2)).toBe('P35.00');
     expect(percentileLabelForRank(351, 1000, 2)).toBe('P35.10');
+  });
+});
+
+describe('SURFACE_OVERVIEW_SAMPLES', () => {
+  it('matches the packaged overview column count', () => {
+    expect(SURFACE_OVERVIEW_SAMPLES).toBe(200);
   });
 });

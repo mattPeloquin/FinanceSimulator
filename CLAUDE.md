@@ -2,11 +2,12 @@
 
 **Read the Cursor rules in `.cursor/rules/*.mdc` before making changes** — they are the project's working agreements and apply to all agents, not just Cursor:
 
-- `testing-standards.mdc` — required tests for core math (Vitest) and UI (Playwright), and how to verify changes
+- `testing-standards.mdc` — Vitest for math/option matrices; Playwright e2e is smoke-first on core paths only
 - `single-file-architecture.mdc` — client-side only; everything builds to a single HTML file
 - `tailwind-exclusivity.mdc` — Tailwind only for styling
 - `financial-math-readability.mdc` — financial logic must be heavily commented
 - `anti-thrashing.mdc` — ask the user for guidance after repeated failures
+- `clarify-requirements.mdc` — ask with options when requirements or product/UX choices are unclear
 - `repo-hygiene.mdc`, `gitignore-maintenance.mdc`, `readme-updates.mdc` — keep root clean, .gitignore and README current
 
 ## Verifying changes
