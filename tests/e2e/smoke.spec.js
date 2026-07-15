@@ -59,13 +59,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await page.click('summary:has-text("Average Timelines")');
 
   // Wait for specific text elements to populate
+  // Success rates are whole percents only (no tenths — false precision).
   const successRate = page.locator('#successRate');
-  await expect(successRate).not.toBeEmpty();
-  await expect(successRate).toContainText('%');
+  await expect(successRate).toHaveText(/^\d+%$/);
 
   const withdrawalTargetSuccessRate = page.locator('#withdrawalTargetSuccessRate');
-  await expect(withdrawalTargetSuccessRate).not.toBeEmpty();
-  await expect(withdrawalTargetSuccessRate).toContainText('%');
+  await expect(withdrawalTargetSuccessRate).toHaveText(/^\d+%$/);
 
   const medianBalance = page.locator('#medianBalance');
   await expect(medianBalance).not.toBeEmpty();

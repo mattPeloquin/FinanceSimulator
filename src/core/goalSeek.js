@@ -36,8 +36,15 @@ const DEFAULT_PENALTY_BONUS_GRID = { minPct: 5, maxPct: 65, stepPct: 10 };
 // ramp only adds the full bonus per whole multiple ABOVE the ceiling — at 1.5x
 // the ceiling a 300% bonus is still only a 2.5x spending scale.
 const DEFAULT_CEILING_BONUS_GRID = { minPct: 25, maxPct: 150, stepPct: 25 };
+// Fixed full-depth floor max-cut grid. Risk Tolerance scales this through the
+// first 0–20% envelope (see riskEnvelopeScale) instead of capping maxPct at RT.
+const DEFAULT_FLOOR_PENALTY_GRID = { minPct: 0, maxPct: 50, stepPct: 10 };
 const FLOOR_PENALTY_STEP_PCT = 10;
 const BASE_BISECTION_MAX_ITERATIONS = 30;
+// Risk Tolerance's first 0–20% linearly opens market / balance / glide search
+// depth up to each lever's full max. Above 20%, grids stay full; RT only
+// continues to widen the lifetime shortfall bar and legacy discount.
+const RISK_ENVELOPE = 0.20;
 
 // Bonus-amount candidates, as fractions of the currently-solved base withdrawal.
 // Using a finer, lower grid prevents the final bonus from heavily cannibalizing
@@ -72,6 +79,106 @@ const DEFAULT_SHORTFALL_TOLERANCE = 0.2;
 
 function roundToThousand(value) {
   return Math.round(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
+}
+
+// Linear 0→1 scale over the first RISK_ENVELOPE of shortfall tolerance.
+// At 0% RT → 0 (mildest non-zero grids only); at ≥20% → 1 (full grids).
+export function riskEnvelopeScale(shortfallTolerance = DEFAULT_SHORTFALL_TOLERANCE) {
+  const tolerance = Number.isFinite(shortfallTolerance) ? shortfallTolerance : DEFAULT_SHORTFALL_TOLERANCE;
+  return Math.min(Math.max(tolerance, 0) / RISK_ENVELOPE, 1);
+}
+
+function envelopeScaleFromConfig(config) {
+  return riskEnvelopeScale(config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE);
+}
+
+// Scale a %-of-base or %-rate grid's deep end by `scale`, keeping step size and
+// the mild end. At scale 0, collapses to the mildest non-zero candidate.
+// - Down grids (maxPct < 0): scales minPct (deepest cut) toward 0.
+// - Up grids (minPct > 0): scales maxPct (deepest boost) toward 0.
+// - 0…positive rate grids: scales maxPct; when the scaled max sits below the
+//   step, that scaled max becomes the sole candidate (never 0%).
+export function scalePctGridByEnvelope(gridConfig, scale) {
+  const { minPct, maxPct, stepPct } = gridConfig;
+  const s = Math.min(Math.max(scale, 0), 1);
+
+  if (maxPct < 0) {
+    // Market Low: mildest is maxPct (e.g. -5), deepest is minPct (e.g. -50).
+    if (s <= 0) return { minPct: maxPct, maxPct, stepPct };
+    let scaledMin = s * minPct;
+    if (scaledMin > maxPct) scaledMin = maxPct;
+    return { minPct: scaledMin, maxPct, stepPct };
+  }
+
+  if (minPct > 0) {
+    // Market High / positive-only: mildest is minPct, deepest is maxPct.
+    if (s <= 0) return { minPct, maxPct: minPct, stepPct };
+    let scaledMax = s * maxPct;
+    if (scaledMax < minPct) scaledMax = minPct;
+    return { minPct, maxPct: scaledMax, stepPct };
+  }
+
+  // Balance cut/boost style: 0…positive maxPct.
+  if (s <= 0) {
+    const mild = Math.max(stepPct, minPct > 0 ? minPct : stepPct);
+    return { minPct: mild, maxPct: mild, stepPct };
+  }
+  let scaledMax = s * maxPct;
+  if (scaledMax > 0 && scaledMax < stepPct) {
+    return { minPct: 0, maxPct: scaledMax, stepPct };
+  }
+  return { minPct, maxPct: scaledMax, stepPct };
+}
+
+export function resolveMarketDownAdjGrid(config) {
+  return scalePctGridByEnvelope(
+    config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID,
+    envelopeScaleFromConfig(config),
+  );
+}
+
+export function resolveMarketUpAdjGrid(config) {
+  return scalePctGridByEnvelope(
+    config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID,
+    envelopeScaleFromConfig(config),
+  );
+}
+
+export function resolveFloorPenaltyGrid(config) {
+  return scalePctGridByEnvelope(
+    config.floorPenaltyGrid || DEFAULT_FLOOR_PENALTY_GRID,
+    envelopeScaleFromConfig(config),
+  );
+}
+
+export function resolveCeilingBonusGrid(config) {
+  return scalePctGridByEnvelope(
+    config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID,
+    envelopeScaleFromConfig(config),
+  );
+}
+
+// Glide surplus fractions capped at scale × full-grid max; always keep at least
+// the mildest non-zero entry when the lever is searched.
+export function resolveGlideFractions(config) {
+  const full = config.glideFractions || DEFAULT_GLIDE_FRACTIONS;
+  const mildest = full[0];
+  const scale = envelopeScaleFromConfig(config);
+  if (scale <= 0) return [mildest];
+  const maxAllowed = scale * Math.max(...full);
+  const filtered = full.filter((fraction) => fraction <= maxAllowed + 1e-12);
+  if (filtered.length === 0) return [mildest];
+  if (filtered[0] !== mildest && !filtered.includes(mildest)) {
+    return [mildest, ...filtered];
+  }
+  return filtered;
+}
+
+// Target Ending Balance discounted by Risk Tolerance so legacy slack can fund
+// higher spending (success gate + glide stop), not just be forgiven after the fact.
+export function discountedTargetEndingBalance(config) {
+  const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+  return (config.targetEndingBalance ?? 0) * (1 - shortfallTolerance);
 }
 
 // Rounds down: success rate only ever gets easier to hit as spending
@@ -267,16 +374,11 @@ export function enforceAscendingMarketAdjustments(dynConfig) {
 }
 
 // Force Low/High away from $0 after ascending enforcement (or on early
-// write-back), using the mildest non-zero points on each side's search grid.
+// write-back), using the mildest non-zero points on each side's search grid
+// (scaled by the Risk Tolerance 0–20% envelope).
 export function clampMarketAdjustments(config, dynConfig, baseWithdrawal) {
-  const maxLow = mildestMarketDownAdj(
-    baseWithdrawal,
-    config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID,
-  );
-  const minHigh = mildestMarketUpAdj(
-    baseWithdrawal,
-    config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID,
-  );
+  const maxLow = mildestMarketDownAdj(baseWithdrawal, resolveMarketDownAdjGrid(config));
+  const minHigh = mildestMarketUpAdj(baseWithdrawal, resolveMarketUpAdjGrid(config));
   // Low must be at least as negative as the mildest grid cut, and still ≤ Expected.
   dynConfig.low.adj = Math.min(dynConfig.low.adj, maxLow, dynConfig.med.adj);
   // High must be at least the mildest grid boost, and still ≥ Expected.
@@ -301,9 +403,9 @@ export function buildFractionGrid({ minPct, maxPct, stepPct } = DEFAULT_PENALTY_
   return candidates;
 }
 
-// Goal Seek balance-adjustment search excludes 0% cut/boost. When risk
-// tolerance caps max cut below the grid step, the cap itself becomes the sole
-// candidate; when tolerance is 0%, the smallest step is still used.
+// Goal Seek balance-adjustment search excludes 0% cut/boost. When the scaled
+// envelope max sits below the grid step, that max becomes the sole candidate;
+// at envelope scale 0 the smallest step is still used.
 function buildBalanceAdjustmentFractionGrid({ minPct = 0, maxPct = 0, stepPct = FLOOR_PENALTY_STEP_PCT } = {}) {
   if (maxPct <= 0) {
     return [stepPct / 100];
@@ -317,17 +419,17 @@ function minBalanceAdjustmentFraction(gridConfig) {
 }
 
 function minGlideFraction(config) {
-  return (config.glideFractions || DEFAULT_GLIDE_FRACTIONS)[0];
+  return resolveGlideFractions(config)[0];
 }
 
 function clampBalanceAdjustmentRates(config, portfolio) {
   portfolio.floorPenalty = Math.max(
     portfolio.floorPenalty,
-    minBalanceAdjustmentFraction(buildFloorPenaltyGridConfig(config)),
+    minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config)),
   );
   portfolio.ceilingBonus = Math.max(
     portfolio.ceilingBonus,
-    minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID),
+    minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config)),
   );
 }
 
@@ -395,11 +497,6 @@ function perCandidateCost(config) {
   return config.pinBaseWithdrawal ? PINNED_PER_CANDIDATE_COST : PER_CANDIDATE_COST;
 }
 
-function buildFloorPenaltyGridConfig(config) {
-  const maxPenalty = Math.round((config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE) * 100);
-  return config.floorPenaltyGrid || { minPct: 0, maxPct: maxPenalty, stepPct: FLOOR_PENALTY_STEP_PCT };
-}
-
 // Balance-override search pins the widest guardrail band (lowest floor, highest
 // ceiling) and tunes only max cut / boost rate — off (0× / Infinity) is excluded.
 function balanceOverrideFloorMultiples(config) {
@@ -422,12 +519,12 @@ function pinnedBalanceOverrideCeiling(start, config) {
 
 function estimateEvalBudget(params, config) {
   const ceilingMultiplesLen = (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).length;
-  const marketDownAdjLen = gridLength(config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID);
-  const marketUpAdjLen = gridLength(config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID);
-  const floorPenaltyGridLen = buildBalanceAdjustmentFractionGrid(buildFloorPenaltyGridConfig(config)).length;
-  const ceilingBonusGridLen = buildBalanceAdjustmentFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID).length;
+  const marketDownAdjLen = gridLength(resolveMarketDownAdjGrid(config));
+  const marketUpAdjLen = gridLength(resolveMarketUpAdjGrid(config));
+  const floorPenaltyGridLen = buildBalanceAdjustmentFractionGrid(resolveFloorPenaltyGrid(config)).length;
+  const ceilingBonusGridLen = buildBalanceAdjustmentFractionGrid(resolveCeilingBonusGrid(config)).length;
   const bonusGridLen = (config.goGoBonusFractions || DEFAULT_GOGO_BONUS_FRACTIONS).length;
-  const glideFractionsLen = (config.glideFractions || DEFAULT_GLIDE_FRACTIONS).length;
+  const glideFractionsLen = resolveGlideFractions(config).length;
   const candidateCost = perCandidateCost(config);
 
   const perRoundLeverCost =
@@ -459,16 +556,19 @@ function estimateEvalBudget(params, config) {
 // ---- The search orchestrator -------------------------------------------------
 
 // `config` shape (see state/scenario.js buildGoalSeekConfig):
-//   targetEndingBalance      dollars
+//   targetEndingBalance      dollars — success/glide use RT-discounted value
 //   desiredSuccessRate       fraction 0..1
-//   shortfallTolerance       fraction 0..1 — max lifetime spending shortfall vs plan
+//   shortfallTolerance       fraction 0..1 — max lifetime spending shortfall vs plan;
+//                            also scales market/balance/glide depth over the first
+//                            0–20% and discounts targetEndingBalance
 //   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/HighAdj AND dynNoCutBal;
 //                              dynMedAdj is never searched (fixed as typed)
 //   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
 //   includeGlidePath           bool — covers glideFraction; the glide target is
-//                              pinned to targetEndingBalance and glideRate stays as typed
+//                              pinned to the RT-discounted targetEndingBalance and
+//                              glideRate stays as typed
 //   glideFractions             optional array of surplus-recycle fractions (0..1)
 //   searchNumSimulations       optional override of the reduced sim count
 //   marketDownAdjGrid          optional { minPct, maxPct, stepPct } for dynLowAdj
@@ -476,7 +576,7 @@ function estimateEvalBudget(params, config) {
 //   floorMultiples             optional array of starting-balance multiples for the floor threshold
 //   ceilingMultiples           optional array of starting-balance multiples for the
 //                              ceiling threshold and the dynNoCutBal grid
-//   floorPenaltyGrid           optional { minPct, maxPct, stepPct } — defaults maxPct to shortfallTolerance
+//   floorPenaltyGrid           optional { minPct, maxPct, stepPct } — full max before envelope scale
 //   ceilingBonusGrid           optional { minPct, maxPct, stepPct }
 export async function runGoalSeek(params, config, simulateAsync, { onProgress } = {}) {
   const notify = typeof onProgress === 'function' ? onProgress : () => {};
@@ -547,15 +647,11 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     );
     const actualWithdrawn = perRunWithdrawalMetric(result, config.withdrawalMetric);
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
-    // While the glide-path lever is part of the search, its target is pinned
-    // to the Goal Seek target and it deliberately spends the portfolio down
-    // TO that number — so successful runs cluster right at the target, and a
-    // strict `ending >= target` test would fail many of them on noise alone.
-    // Accept endings within the risk-tolerance band below the target instead
-    // (the same slack the lifetime-spending check already allows).
-    const effectiveTargetEndingBalance = config.includeGlidePath
-      ? config.targetEndingBalance * (1 - shortfallTolerance)
-      : config.targetEndingBalance;
+    // Discount Target Ending Balance by Risk Tolerance so legacy slack can fund
+    // higher spending. Success uses this discounted gate whenever a target is
+    // set (not only when Glide is searched); Glide's stop is pinned to the same
+    // number so the discounted slice is actually spendable.
+    const effectiveTargetEndingBalance = discountedTargetEndingBalance(config);
     const successRateAchieved = goalSuccessRate(
       result.finalBalance,
       result.depletionYear,
@@ -602,17 +698,18 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   if (config.includeBalanceOverrides) {
     working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
     working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
-    working.portfolio.floorPenalty = minBalanceAdjustmentFraction(buildFloorPenaltyGridConfig(config));
-    working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
+    working.portfolio.floorPenalty = minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config));
+    working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config));
   }
   if (config.includeGlidePath) {
-    // The glide target is pinned to the Goal Seek target; only the recycle
-    // fraction is tuned later. Phase 1 (feasibility + base bisection) runs
-    // with glide OFF — success is judged at the P5/P10 tail, and an active
-    // glide lever compresses the median toward the target and can falsely
-    // fail the initial check before the search even starts. Tuning rounds
-    // re-introduce glide candidates and let the sequences decide.
-    working.portfolio.glideTarget = config.targetEndingBalance;
+    // Glide target is the Risk-Tolerance-discounted Goal Seek target so legacy
+    // slack is spendable; only the recycle fraction is tuned later. Phase 1
+    // (feasibility + base bisection) runs with glide OFF — success is judged
+    // at the P5/P10 tail, and an active glide lever compresses the median
+    // toward the target and can falsely fail the initial check before the
+    // search even starts. Tuning rounds re-introduce glide candidates and let
+    // the sequences decide.
+    working.portfolio.glideTarget = discountedTargetEndingBalance(config);
     working.portfolio.glideFraction = 0;
   }
 
@@ -871,8 +968,8 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       // anchor so the search never invents an inverted Low/Expected/High
       // dollar ladder (users can still type one by hand).
       const medAdj = working.dynConfig.med.adj;
-      const downGridConfig = config.marketDownAdjGrid || DEFAULT_MARKET_DOWN_ADJ_GRID;
-      const upGridConfig = config.marketUpAdjGrid || DEFAULT_MARKET_UP_ADJ_GRID;
+      const downGridConfig = resolveMarketDownAdjGrid(config);
+      const upGridConfig = resolveMarketUpAdjGrid(config);
       const mildLow = mildestMarketDownAdj(solvedBase, downGridConfig);
       const mildHigh = mildestMarketUpAdj(solvedBase, upGridConfig);
 
@@ -930,7 +1027,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
       working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
 
-      const penaltyGrid = buildBalanceAdjustmentFractionGrid(buildFloorPenaltyGridConfig(config));
+      const penaltyGrid = buildBalanceAdjustmentFractionGrid(resolveFloorPenaltyGrid(config));
       await pickBestCandidateWithResolve(
         penaltyGrid,
         (value) => {
@@ -940,7 +1037,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         working.portfolio.floorPenalty,
       );
 
-      const bonusRateGrid = buildBalanceAdjustmentFractionGrid(config.ceilingBonusGrid || DEFAULT_CEILING_BONUS_GRID);
+      const bonusRateGrid = buildBalanceAdjustmentFractionGrid(resolveCeilingBonusGrid(config));
       await pickBestCandidateWithResolve(
         bonusRateGrid,
         (value) => {
@@ -954,9 +1051,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
 
     // Tuned last: the glide fraction recycles whatever surplus the levers
-    // above leave behind, so it should react to their settled values.
+    // above leave behind, so it should react to their settled values. Depth
+    // scales with the Risk Tolerance 0–20% envelope.
     if (config.includeGlidePath) {
-      const glideGrid = config.glideFractions || DEFAULT_GLIDE_FRACTIONS;
+      const glideGrid = resolveGlideFractions(config);
       await pickBestCandidateWithResolve(
         glideGrid,
         (value) => {

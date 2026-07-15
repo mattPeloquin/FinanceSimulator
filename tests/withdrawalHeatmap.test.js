@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   belowArmEnd,
+  cellRgb,
+  DEPLETION_RGB,
   divergingColor,
+  divergingRgb,
   heatmapColumnAtX,
   heatmapYearAtY,
   heatmapRowLayout,
@@ -77,6 +80,21 @@ describe('divergingColor (asymmetric PuOr transfer)', () => {
 
   it('degrades to the midpoint when a domain side is zero', () => {
     expect(divergingColor(5_000, { lo: 1, hi: 0 }, false)).toBe(divergingColor(0, dom, false));
+  });
+});
+
+describe('cellRgb depletion override', () => {
+  const dom = { lo: 33_000, hi: 169_000 };
+
+  it('paints bright red for an exact $0 withdrawal regardless of delta', () => {
+    expect(cellRgb(0, -50_000, dom, false)).toEqual(DEPLETION_RGB);
+    expect(cellRgb(0, 0, dom, true)).toEqual(DEPLETION_RGB);
+    expect(DEPLETION_RGB).toEqual([220, 38, 38]);
+  });
+
+  it('keeps the diverging spectrum for any positive withdrawal, including tiny ones', () => {
+    expect(cellRgb(1, -50_000, dom, false)).toEqual(divergingRgb(-50_000, dom, false));
+    expect(cellRgb(50_000, 0, dom, false)).toEqual(divergingRgb(0, dom, false));
   });
 });
 

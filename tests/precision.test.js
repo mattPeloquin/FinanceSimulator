@@ -36,6 +36,12 @@ describe('formatPercent', () => {
     expect(formatPercent(0.10)).toBe('10%');
   });
 
+  it('rounds success rates to whole percents', () => {
+    expect(formatPercent(0.853, 0)).toBe('85%');
+    expect(formatPercent(0.855, 0)).toBe('86%');
+    expect(formatPercent(1, 0)).toBe('100%');
+  });
+
   it('supports explicit digit override', () => {
     expect(formatPercent(0.0734, 2)).toBe('7.34%');
   });

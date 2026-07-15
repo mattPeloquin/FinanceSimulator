@@ -189,10 +189,11 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
 
   applyMetricLabels(metric, result.horizonVariable);
 
-  setText('successRate', formatPercent(result.successRate));
+  // Whole percents only: a tenth of a percent of runs is Monte Carlo noise, not signal.
+  setText('successRate', formatPercent(result.successRate, 0));
   setText(
     'withdrawalTargetSuccessRate',
-    result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate),
+    result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 0),
   );
   setText('medianBalance', formatK(result.medianBalance));
   setText('medianReturn', formatPercent(result.returnSummary.median));

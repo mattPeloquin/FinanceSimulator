@@ -17,6 +17,9 @@ export function formatK(val) {
 
 export function formatPercent(val, digits = 1) {
   if (val == null || Number.isNaN(val)) return '';
-  if (digits === 1) return `${formatPct1(val * 100)}%`;
-  return (val * 100).toFixed(digits) + '%';
+  const pct = val * 100;
+  // Whole percents (digits === 0): use for success rates — tenths imply false precision.
+  if (digits === 0) return `${Math.round(pct)}%`;
+  if (digits === 1) return `${formatPct1(pct)}%`;
+  return pct.toFixed(digits) + '%';
 }

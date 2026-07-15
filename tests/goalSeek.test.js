@@ -19,6 +19,14 @@ import {
   plannedScheduleMedianYearly,
   plannedScheduleMeanYearly,
   buildPerRunPlanBenchmarks,
+  riskEnvelopeScale,
+  scalePctGridByEnvelope,
+  resolveMarketDownAdjGrid,
+  resolveMarketUpAdjGrid,
+  resolveFloorPenaltyGrid,
+  resolveCeilingBonusGrid,
+  resolveGlideFractions,
+  discountedTargetEndingBalance,
   runGoalSeek,
 } from '../src/core/goalSeek.js';
 import { buildSpendingOverTimeSeries } from '../src/core/withdrawal.js';
@@ -120,6 +128,67 @@ describe('clampMarketAdjustments', () => {
     expect(dynConfig.low.adj).toBe(-5000);
     expect(dynConfig.med.adj).toBe(0);
     expect(dynConfig.high.adj).toBe(10000);
+  });
+});
+
+describe('riskEnvelopeScale / scalePctGridByEnvelope', () => {
+  it('maps 0 / 10% / 20% / 35% Risk Tolerance onto 0 / 0.5 / 1 / 1', () => {
+    expect(riskEnvelopeScale(0)).toBe(0);
+    expect(riskEnvelopeScale(0.1)).toBeCloseTo(0.5, 9);
+    expect(riskEnvelopeScale(0.2)).toBe(1);
+    expect(riskEnvelopeScale(0.35)).toBe(1);
+  });
+
+  it('scales market Low/High deep ends over the 0–20% envelope', () => {
+    const down = { minPct: -50, maxPct: -5, stepPct: 5 };
+    const up = { minPct: 10, maxPct: 100, stepPct: 10 };
+    expect(scalePctGridByEnvelope(down, 0)).toEqual({ minPct: -5, maxPct: -5, stepPct: 5 });
+    expect(scalePctGridByEnvelope(down, 0.5).minPct).toBeCloseTo(-25, 9);
+    expect(scalePctGridByEnvelope(down, 1).minPct).toBe(-50);
+    expect(scalePctGridByEnvelope(up, 0)).toEqual({ minPct: 10, maxPct: 10, stepPct: 10 });
+    expect(scalePctGridByEnvelope(up, 0.5).maxPct).toBeCloseTo(50, 9);
+    expect(scalePctGridByEnvelope(up, 1).maxPct).toBe(100);
+  });
+
+  it('scales floor max cut to 25% at 10% RT and 50% at ≥20% (not equal to RT)', () => {
+    const floorFull = { minPct: 0, maxPct: 50, stepPct: 10 };
+    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.1 }).maxPct).toBeCloseTo(25, 9);
+    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.2 }).maxPct).toBe(50);
+    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.35 }).maxPct).toBe(50);
+    expect(scalePctGridByEnvelope(floorFull, 0)).toEqual({ minPct: 10, maxPct: 10, stepPct: 10 });
+  });
+
+  it('scales ceiling boost and glide surplus the same way', () => {
+    expect(resolveCeilingBonusGrid({ shortfallTolerance: 0.1 }).maxPct).toBeCloseTo(75, 9);
+    expect(resolveCeilingBonusGrid({ shortfallTolerance: 0.2 }).maxPct).toBe(150);
+    expect(resolveGlideFractions({ shortfallTolerance: 0.1 })).toEqual([0.1, 0.2]);
+    expect(resolveGlideFractions({ shortfallTolerance: 0.2 })).toEqual([0.1, 0.2, 0.4, 0.6]);
+    expect(resolveGlideFractions({ shortfallTolerance: 0 })).toEqual([0.1]);
+  });
+
+  it('discounts Target Ending Balance by Risk Tolerance', () => {
+    expect(discountedTargetEndingBalance({
+      targetEndingBalance: 1_000_000,
+      shortfallTolerance: 0.2,
+    })).toBe(800_000);
+    expect(discountedTargetEndingBalance({
+      targetEndingBalance: 500_000,
+      shortfallTolerance: 0,
+    })).toBe(500_000);
+  });
+
+  it('scales market Low candidate extrema at 10% Risk Tolerance', () => {
+    const grid = resolveMarketDownAdjGrid({ shortfallTolerance: 0.1 });
+    expect(grid.minPct).toBeCloseTo(-25, 9);
+    expect(grid.maxPct).toBe(-5);
+    const dollars = buildAdjustmentGrid(100_000, grid);
+    expect(Math.min(...dollars)).toBe(-25_000);
+    expect(Math.max(...dollars)).toBe(-5_000);
+
+    const up = resolveMarketUpAdjGrid({ shortfallTolerance: 0.1 });
+    expect(up.maxPct).toBeCloseTo(50, 9);
+    const upDollars = buildAdjustmentGrid(100_000, up);
+    expect(Math.max(...upDollars)).toBe(50_000);
   });
 });
 
@@ -548,7 +617,8 @@ describe('runGoalSeek', () => {
     expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000); // 2.0 × start
     expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
     expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
-    expect(summary.glideSpendDown.target).toBe(50_000_000);
+    // Glide target is the RT-discounted Goal Seek target (default 20% → 40M).
+    expect(summary.glideSpendDown.target).toBe(40_000_000);
     expect(summary.glideSpendDown.fraction).toBeGreaterThan(0);
   });
 
@@ -806,7 +876,10 @@ describe('runGoalSeek', () => {
     });
 
     expect(summary.feasible).toBe(true);
-    expect(summary.balanceAdjustment.floorPenalty).toBe(0.05);
+    // 5% RT → envelope scale 0.25 → floor max 12.5%; step is 10%, so the
+    // mildest (and here only) candidate is 10% — not capped at RT itself.
+    expect(summary.balanceAdjustment.floorPenalty).toBe(0.1);
+    expect(summary.balanceAdjustment.floorPenalty).toBeLessThanOrEqual(0.125);
     expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
   });
 
@@ -1189,13 +1262,14 @@ describe('runGoalSeek', () => {
     expect(summary.plannedScheduleTotal).toBe(70_000 * numYears);
   });
 
-  it('pins the glide target to the goal-seek target and tunes the recycle fraction', async () => {
+  it('pins the glide target to the Risk-Tolerance-discounted goal-seek target and tunes the recycle fraction', async () => {
     const params = makeParams({
       numSimulations: 500,
       portfolio: {
         ...makeParams().portfolio,
         // Pre-existing glide values: the search must override the target with
-        // its own, re-tune the fraction, and leave the typed rate alone.
+        // the discounted Goal Seek target, re-tune the fraction, and leave the
+        // typed rate alone.
         glideTarget: 123_000,
         glideFraction: 0.33,
         glideRate: -0.02,
@@ -1204,6 +1278,7 @@ describe('runGoalSeek', () => {
     const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 500_000,
       desiredSuccessRate: 0.75,
+      shortfallTolerance: 0.2,
       searchNumSimulations: 500,
       maxRounds: 1,
       includeGlidePath: true,
@@ -1212,13 +1287,14 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(true);
     expect(summary.glideSpendDown).toBeDefined();
-    expect(summary.glideSpendDown.target).toBe(500_000);
+    // 500k × (1 − 0.2) = 400k — legacy slack is spendable via the discounted stop.
+    expect(summary.glideSpendDown.target).toBe(400_000);
     expect(summary.glideSpendDown.rate).toBeCloseTo(-0.02, 9);
     expect([0, 0.25, 0.5]).toContain(summary.glideSpendDown.fraction);
     // Recycling surplus raises median lifetime spending in this setup (large
     // start, modest target), so the search should not leave the lever at 0.
     expect(summary.glideSpendDown.fraction).toBeGreaterThan(0);
-    expect(finalParams.portfolio.glideTarget).toBe(500_000);
+    expect(finalParams.portfolio.glideTarget).toBe(400_000);
     expect(finalParams.portfolio.glideFraction).toBe(summary.glideSpendDown.fraction);
   });
 
@@ -1247,12 +1323,10 @@ describe('runGoalSeek', () => {
 });
 
 describe('runGoalSeek glide-target tolerance band', () => {
-  // Fake engine: every run ends at exactly 90% of the target with generous
-  // spending and no depletion. The glide lever deliberately lands runs right
-  // AT the target, so while it is part of the search the ending test must
-  // accept endings within the shortfall-tolerance band below the target —
-  // otherwise near-misses on noise alone would fail every candidate and the
-  // search would exit "infeasible" with base = the minimum withdrawal.
+  // Fake engine: every run ends at exactly 90% of the typed target with generous
+  // spending and no depletion. Risk Tolerance discounts the ending gate (and
+  // glide stop) to typed × (1 − RT), so near-misses on the typed target still
+  // count as successes — with or without the glide lever.
   const TARGET = 1_000_000;
 
   function fakeResult(numSimulations, numYears, endingBalance = TARGET * 0.9) {
@@ -1280,29 +1354,42 @@ describe('runGoalSeek glide-target tolerance band', () => {
     glideFractions: [0.1],
   };
 
-  it('accepts endings within the tolerance band while the glide lever is searched', async () => {
+  it('accepts endings within the discounted target while the glide lever is searched', async () => {
     const { summary } = await runGoalSeek(
       makeParams(),
       { ...bandConfig, includeGlidePath: true },
       fakeSimulate,
     );
-    // 900k ending ≥ 1M × (1 − 0.2) = 800k → every run passes the banded test.
+    // 900k ending ≥ 1M × (1 − 0.2) = 800k → every run passes the discounted gate.
     expect(summary.feasible).toBe(true);
+    expect(summary.glideSpendDown.target).toBe(800_000);
   });
 
-  it('keeps the strict ending test when the glide lever is not searched', async () => {
+  it('accepts endings within the discounted target even when the glide lever is not searched', async () => {
     const { summary } = await runGoalSeek(
       makeParams(),
       { ...bandConfig, includeGlidePath: false },
       fakeSimulate,
     );
-    // 900k ending < 1M strict target → infeasible even at the minimum base.
+    // Same 900k ≥ 800k discounted gate — legacy discount is not glide-only.
+    expect(summary.feasible).toBe(true);
+  });
+
+  it('rejects endings below the discounted target', async () => {
+    const tooLowSimulate = (p) =>
+      Promise.resolve(fakeResult(p.numSimulations, p.numYears, TARGET * 0.7));
+    const { summary } = await runGoalSeek(
+      makeParams(),
+      { ...bandConfig, includeGlidePath: false },
+      tooLowSimulate,
+    );
+    // 700k < 800k discounted gate → infeasible even at the minimum base.
     expect(summary.feasible).toBe(false);
   });
 
   it('runs Phase 1 with glide off so feasibility is not blocked by an active lever', async () => {
     // Endings pass only while glideFraction is 0 (Phase 1 + base bisection).
-    // Any positive recycle rate fails the banded ending test — if Phase 1
+    // Any positive recycle rate fails the discounted ending test — if Phase 1
     // still turned glide on, the search would exit infeasible immediately.
     const glideSensitiveSimulate = (p) => {
       const glideOn = (p.portfolio.glideFraction ?? 0) > 0;

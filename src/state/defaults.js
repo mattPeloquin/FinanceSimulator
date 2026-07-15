@@ -22,7 +22,7 @@ import { computeDerivedPresetValues, DEFAULT_PRESET_LEVEL } from './presets/inde
 export const BASE_DEFAULTS = {
 
   // Years to simulate (endpoint / target horizon). Valid range: 1–100.
-  numYears: 25,
+  numYears: 30,
 
   // Optional Monte Carlo range: years above/below the endpoint treated as
   // 2-sigma bounds (0 = fixed horizon). Each run draws a whole-year horizon

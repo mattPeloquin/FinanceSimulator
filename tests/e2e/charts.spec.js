@@ -343,8 +343,9 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   await expect(page.locator('#withdrawalHeatmapFrameWrap')).toBeHidden();
   await expect(page.locator('#withdrawalHeatmapSpeedWrap')).toBeHidden();
 
-  // Legend describes the plan-anchored spectrum by default.
+  // Legend describes the plan-anchored spectrum by default, plus $0 depletion.
   await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('on plan');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('$0 = depleted');
   await expect(page.locator('#withdrawalHeatmapModeDelta')).toHaveAttribute('aria-pressed', 'true');
 
   // Moving the from/to window changes the visible columns; snap back afterward.
@@ -365,7 +366,8 @@ test('Withdrawal heatmap renders, toggles encoding, and drills into a column', a
   await page.click('#withdrawalHeatmapModeAbs');
   expect(await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap().encoding)).toBe('abs');
   await expect(page.locator('#withdrawalHeatmapModeAbs')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('mid of shown range');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('median of shown range');
+  await expect(page.locator('#withdrawalHeatmapLegend')).toContainText('$0 = depleted');
   await expect(page.locator('#withdrawalHeatmapLegend')).not.toContainText('mean withdrawal');
   const atAbs = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
   expect(atAbs.absLo).toBeLessThan(atAbs.absHi);

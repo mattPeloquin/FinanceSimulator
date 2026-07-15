@@ -8,9 +8,11 @@
 // taller for emphasis. Cell color is a diverging orange↔teal spectrum
 // around a per-year anchor — the planned schedule (default), that year's
 // median, or absolute withdrawal dollars over the from/to window — switched
-// by a segmented toggle. Values
-// are smoothed and interpolated along years so each column reads as a
-// continuous vertical gradient.
+// by a segmented toggle. Exact $0 withdrawals (plan depletion within the
+// run's horizon) override that spectrum with bright red so ran-out years
+// stay unmistakable against ordinary cuts. Values are smoothed and
+// interpolated along years so each column reads as a continuous vertical
+// gradient.
 //
 // Rendered straight to a canvas: cells are painted into an offscreen canvas
 // (one pixel column per data column, VSS sub-pixels per year), then blitted
@@ -49,6 +51,11 @@ export function tickMsForSpeed(speed) {
 // Default slider mid-point (50) lands at roughly half that stretch.
 const EMPHASIS_MAX_RATIO = 5;
 const EMPHASIS_DEFAULT = 50;
+
+// Bright red override for a true $0 withdrawal year — the heatmap's signal
+// that the plan ran out (distinct from NaN past-horizon cells, which stay
+// transparent, and from ordinary below-anchor cuts, which stay burnt orange).
+export const DEPLETION_RGB = [220, 38, 38]; // #dc2626 — bright but a shade off pure red
 
 // One diverging spectrum for every encoding, anchored per cell: burnt orange
 // = below the anchor (bad), an indigo-tinted gray midpoint on the anchor, teal
@@ -125,6 +132,15 @@ export function divergingRgb(delta, domain, isDark = isDarkMode()) {
 export function divergingColor(delta, domain, isDark = isDarkMode()) {
   const [r, g, b] = divergingRgb(delta, domain, isDark);
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Final cell RGB for one sample. Absolute withdrawal of exactly $0 means the
+// portfolio had nothing left to spend that year — paint bright red instead of
+// the diverging cut color so depletion does not blend in with ordinary cuts.
+// NaN (past horizon) is handled by the painter before calling this.
+export function cellRgb(absoluteWithdrawal, delta, domain, isDark = isDarkMode()) {
+  if (absoluteWithdrawal === 0) return DEPLETION_RGB;
+  return divergingRgb(delta, domain, isDark);
 }
 
 // Pixel → column index within the plot rect, or -1 outside it.
@@ -524,9 +540,15 @@ function buildOffscreen() {
   const data = img.data;
   const series = new Float64Array(hm.numYears);
 
+  // Absolute withdrawal per year (pre-smoothing) so $0 depletion years can
+  // override the diverging spectrum even when delta-mode smoothing would
+  // otherwise turn a zero into a large negative cut.
+  const absSeries = new Float64Array(hm.numYears);
+
   for (let c = 0; c < hm.numCols; c++) {
     for (let j = 0; j < hm.numYears; j++) {
       const v = cellValue(c, j);
+      absSeries[j] = v;
       if (info.mode === 'abs') {
         series[j] = v;
       } else {
@@ -536,15 +558,17 @@ function buildOffscreen() {
     const sub = smoothColumnSeries(series, VSS);
     for (let s = 0; s < rows; s++) {
       // Sub-sample s counts up from year 1 at the bottom; ImageData rows count
-      // down from the top.
+      // down from the top. Year ownership is by VSS strip so a $0 year paints
+      // solid bright red even where vertical smoothing blended its neighbors.
       const p = ((rows - 1 - s) * count + c) * 4;
       const sample = sub[s];
       if (Number.isNaN(sample)) {
         data[p + 3] = 0;
         continue;
       }
+      const year = Math.min(hm.numYears - 1, Math.floor(s / VSS));
       const d = info.mode === 'abs' ? sample - info.mid : sample;
-      const rgb = divergingRgb(d, info.domain, isDark);
+      const rgb = cellRgb(absSeries[year], d, info.domain, isDark);
       data[p] = rgb[0];
       data[p + 1] = rgb[1];
       data[p + 2] = rgb[2];
@@ -715,6 +739,8 @@ function renderLegend() {
   const item = (html) => `<span class="inline-flex items-center gap-1.5 text-sm text-theme-faint">${html}</span>`;
   const midWord = 'gray';
 
+  const depletionSwatch =
+    `<span class="inline-block w-3 h-3 rounded-sm shrink-0 border border-theme-border" style="background:rgb(${DEPLETION_RGB.join(',')})"></span>`;
   const items = [];
   if (info.mode === 'abs') {
     items.push(item(`<span>${formatK(info.abs.lo)} low</span>${swatch}<span>${formatK(info.abs.hi)} high</span>`));
@@ -728,6 +754,7 @@ function renderLegend() {
     items.push(item(`<span>−${formatK(info.domain.lo)} ${loLabel}</span>${swatch}<span>+${formatK(info.domain.hi)} ${hiLabel}</span>`));
     items.push(item(`<span>${midWord} = ${anchorWord}</span>`));
   }
+  items.push(item(`${depletionSwatch}<span>$0 = depleted</span>`));
   el.innerHTML = items.join('');
 
   const noteEl = document.getElementById('withdrawalHeatmapColumnNote');
