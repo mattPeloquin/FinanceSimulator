@@ -10,6 +10,9 @@ async function disableGoalSeek(page) {
 }
 
 test('Core simulation flow runs and populates results', async ({ page }) => {
+  // Dual Monte Carlo (plan + classic 4% comparison) needs more wall time.
+  test.slow();
+
   // Go to the home page
   await page.goto('/');
   await disableGoalSeek(page);
@@ -54,11 +57,22 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await page.fill('#startBalance', '3000');
   await page.press('#startBalance', 'Enter');
 
+  // Keep the dual run (plan + classic 4%) snappy for smoke.
+  await page.locator('#section-advanced').evaluate((el) => { el.open = true; });
+  await page.fill('#numSimulations', '400');
+
   // Click the Run Simulation button
   await page.click('#runButton');
 
   // Wait for the results to appear
-  await expect(resultsSection).toBeVisible();
+  await expect(resultsSection).toBeVisible({ timeout: 60_000 });
+
+  // Dual-run classic 4% comparison note under the summary cards.
+  const fourPercentVerdict = page.locator('#fourPercentVerdict');
+  await expect(fourPercentVerdict).toBeVisible();
+  await expect(fourPercentVerdict).toContainText(/Vs classic 4% rule/i);
+  await expect(page.locator('#fourPercentVerdictHeadline')).toContainText(/Total Withdrawal/);
+  await expect(page.locator('#fourPercentVerdictBody')).toContainText(/Delta unspent/);
 
   // The charts inside <details> blocks render with 0 height until opened
   // Let's open the details block containing the charts

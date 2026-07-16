@@ -145,6 +145,14 @@ describe('buildRunResult withdrawalHeatmap', () => {
     expect(Array.from(src.planByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
   });
 
+  it('exposes a flat classic 4% of start schedule for the vs 4% encoding', () => {
+    const expected = p.portfolio.start * 0.04;
+    expect(src.classicByYear).toHaveLength(p.numYears);
+    expect(Array.from(src.classicByYear).every((v) => v === expected)).toBe(true);
+    const banded = bandWithdrawalHeatmap(src, p5, p90, span);
+    expect(Array.from(banded.classicByYear)).toEqual(Array.from(src.classicByYear));
+  });
+
   it('bands the full source 1:1 when maxCols exceeds the span', () => {
     const hm = bandWithdrawalHeatmap(src, p5, p90, span);
     expect(hm.numCols).toBe(span);

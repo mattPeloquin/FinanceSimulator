@@ -103,4 +103,10 @@ test('Withdrawal heatmap renders after a run', async ({ page }) => {
   expect(shape.numYears).toBeGreaterThanOrEqual(30);
   expect(shape.encoding).toBe('plan');
   expect(shape.numCols).toBeGreaterThan(0);
+
+  // vs 4% is a delta-of-amount mode against the flat classic schedule.
+  await expect(page.locator('#withdrawalHeatmapModeClassic')).toBeVisible();
+  await page.click('#withdrawalHeatmapModeClassic');
+  const classicShape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
+  expect(classicShape.encoding).toBe('classic');
 });

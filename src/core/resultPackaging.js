@@ -26,6 +26,7 @@ import {
   plannedYearlySchedule,
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
+import { CLASSIC_FOUR_PERCENT_RATE } from './fourPercentComparison.js';
 
 const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65];
 const SURFACE_SAMPLES = 200;
@@ -47,10 +48,26 @@ export function heatmapFrameMember(frame, bandSize, numFrames) {
 // renderer rebands the active Show from/to window to fill the plot width.
 const HEATMAP_MAX_PERCENTILE = 90;
 
+/** Flat real classic 4% schedule: start × 0.04 every year (today's dollars). */
+export function buildClassicFourPercentByYear(startBalance, maxYears) {
+  const classicByYear = new Float64Array(Math.max(0, maxYears));
+  const amount = (startBalance ?? 0) * CLASSIC_FOUR_PERCENT_RATE;
+  classicByYear.fill(amount);
+  return classicByYear;
+}
+
 // Compact per-run source for ranks P5..P90: one row per rank in the built
 // window. The renderer rebands this to fill the plot pixel width whenever
 // from/to or chart size changes — no worker round-trip.
-export function buildWithdrawalHeatmapSource(result, rankW, p5Rank, hiRank, planByYear, maxYears) {
+export function buildWithdrawalHeatmapSource(
+  result,
+  rankW,
+  p5Rank,
+  hiRank,
+  planByYear,
+  maxYears,
+  classicByYear = null,
+) {
   const matrix = result.allYearsWithdrawals;
   const span = Math.max(1, hiRank - p5Rank + 1);
   const sourceValues = new Float32Array(span * maxYears);
@@ -78,6 +95,8 @@ export function buildWithdrawalHeatmapSource(result, rankW, p5Rank, hiRank, plan
     sourceValues,
     sourceSimIndex,
     planByYear,
+    // Anchor for the "vs 4%" delta encoding (flat start × 4% schedule).
+    classicByYear: classicByYear ?? buildClassicFourPercentByYear(0, maxYears),
   };
 }
 
@@ -85,7 +104,16 @@ export function buildWithdrawalHeatmapSource(result, rankW, p5Rank, hiRank, plan
 // one run or a narrow band of adjacent ranks; animation frames carry raw
 // per-run snapshots when bands hold more than one run.
 export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
-  const { p5Rank, numYears, planByYear, sourceValues, sourceSimIndex, numSimulations, hiPercentile } = source;
+  const {
+    p5Rank,
+    numYears,
+    planByYear,
+    classicByYear,
+    sourceValues,
+    sourceSimIndex,
+    numSimulations,
+    hiPercentile,
+  } = source;
   const span = Math.max(1, hiRank - loRank + 1);
   const numCols = Math.min(Math.max(1, maxCols), span);
 
@@ -157,6 +185,7 @@ export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
     colSimIndex,
     colRunCount,
     planByYear,
+    classicByYear,
     numFrames,
     frameValues,
     frameSimIndex,
@@ -164,8 +193,16 @@ export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
 }
 
 // Legacy alias kept for tests that call the old name directly.
-export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, planByYear, maxYears) {
-  const source = buildWithdrawalHeatmapSource(result, rankW, p5Rank, hiRank, planByYear, maxYears);
+export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, planByYear, maxYears, classicByYear) {
+  const source = buildWithdrawalHeatmapSource(
+    result,
+    rankW,
+    p5Rank,
+    hiRank,
+    planByYear,
+    maxYears,
+    classicByYear,
+  );
   return bandWithdrawalHeatmap(source, p5Rank, hiRank, source.sourceSpan);
 }
 
@@ -312,9 +349,19 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   // lists are pre-fitted to maxYears in buildSimParams), so one per-year array
   // is the correct plan for every run regardless of its sampled horizon.
   const heatmapPlanByYear = Float64Array.from(plannedYearlySchedule(params.portfolio, maxYears));
+  // Flat classic 4% of start — second baseline for the "vs 4%" delta encoding.
+  const heatmapClassicByYear = buildClassicFourPercentByYear(params.portfolio?.start, maxYears);
   // Heatmap and 3D "show to" sliders can widen past P65 up to P90 without a re-run.
   const p90i = percentileIndex(n, 0.9);
-  const withdrawalHeatmap = buildWithdrawalHeatmapSource(result, rankW, p5i, p90i, heatmapPlanByYear, maxYears);
+  const withdrawalHeatmap = buildWithdrawalHeatmapSource(
+    result,
+    rankW,
+    p5i,
+    p90i,
+    heatmapPlanByYear,
+    maxYears,
+    heatmapClassicByYear,
+  );
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
   const returnSummary = summarizeReturns(result.avgReturn);

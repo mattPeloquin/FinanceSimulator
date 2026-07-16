@@ -148,8 +148,83 @@ function setGoalSeekWarning(message) {
   }
 }
 
-export function renderResults(result, params, { goalSeekWarning } = {}) {
+function formatRatePct(rate) {
+  if (rate == null || Number.isNaN(rate)) return '—';
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+/** Dollar amounts for the 4% note ($000s scale, with a leading $). */
+function formatDollarK(val) {
+  const display = formatK(val);
+  if (display === '' || display === '0') return '$0';
+  return `$${display}`;
+}
+
+/** Signed $000s delta for prose (e.g. +$800 / −$120). */
+function formatSignedDollarK(val) {
+  const abs = formatDollarK(Math.abs(val));
+  if (abs === '$0') return '$0';
+  return val > 0 ? `+${abs}` : `−${abs}`;
+}
+
+/** Fill the classic 4% note under the summary cards from dual-run metrics. */
+function setFourPercentVerdict(comparison) {
+  const banner = document.getElementById('fourPercentVerdict');
+  const headline = document.getElementById('fourPercentVerdictHeadline');
+  const body = document.getElementById('fourPercentVerdictBody');
+  if (!banner || !headline || !body) return;
+
+  if (!comparison) {
+    headline.textContent = '';
+    body.textContent = '';
+    banner.classList.add('hidden');
+    return;
+  }
+
+  banner.classList.remove('hidden');
+
+  const classicSuccess = formatPercent(comparison.classicSuccessRate, 0);
+  headline.textContent =
+    `Total Withdrawal ${formatDollarK(comparison.classicMedianWithdrawn)}  ·  ` +
+    `Mean ${formatDollarK(comparison.classicMeanYearlyWithdrawn)}/yr  ·  ` +
+    `Success ${classicSuccess || '—'}  ·  ` +
+    `Median balance ${formatDollarK(comparison.classicLeftover)}`;
+
+  if (comparison.equivalent) {
+    body.textContent =
+      'Delta unspent $0 vs your plan — you are already on this flat 4% schedule ' +
+      '(no market cuts or boosts). See the dashed path on Average Timelines.';
+    return;
+  }
+
+  const unspentDelta = comparison.leftoverDelta;
+  const unspentFact =
+    unspentDelta > 0
+      ? `Delta unspent ${formatSignedDollarK(unspentDelta)} more left behind than your plan.`
+      : unspentDelta < 0
+        ? `Delta unspent ${formatSignedDollarK(unspentDelta)} — your plan left more behind than the 4% rule.`
+        : 'Delta unspent $0 vs your plan.';
+
+  const totalDelta = comparison.totalWithdrawnDelta ?? comparison.withdrawnDelta;
+  const meanDelta = comparison.meanYearlyDelta ?? 0;
+  const spendFact =
+    totalDelta === 0 && meanDelta === 0
+      ? 'Spending matched the rule.'
+      : `Spending delta ${formatSignedDollarK(totalDelta)} total ` +
+        `(${formatSignedDollarK(meanDelta)}/yr mean) for your plan vs the rule.`;
+
+  const userSuccess = formatPercent(comparison.userSuccessRate, 0);
+  const userRate = formatRatePct(comparison.userYear1Rate);
+
+  body.textContent =
+    `${unspentFact} ${spendFact} ` +
+    `Survival: your plan ${userSuccess} vs 4% ${classicSuccess}. ` +
+    `Your plan starts at ${userRate}; the rule always uses 4.0%.`;
+}
+
+export function renderResults(result, params, { goalSeekWarning, fourPercentComparison, classicResult } = {}) {
   setGoalSeekWarning(goalSeekWarning ?? null);
+  setFourPercentVerdict(fourPercentComparison ?? null);
   const metric = result.withdrawalMetric;
   const useMedianYearly = isMedianYearlyMetric(metric);
   const useMeanYearly = isMeanYearlyMetric(metric);
@@ -227,7 +302,8 @@ export function renderResults(result, params, { goalSeekWarning } = {}) {
     setText(`${key}Irr`, `IRR ${formatPercent(p.irr) || '—'}`);
   }
 
-  drawTimelineCharts(result.percentiles, chartYears);
+  const classicMedianPath = classicResult?.percentiles?.p50?.path ?? null;
+  drawTimelineCharts(result.percentiles, chartYears, { classicMedianPath });
 
   const rs = result.returnSummary;
   setText('returnMean', formatPercent(rs.mean));

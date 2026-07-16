@@ -225,11 +225,13 @@ export function smoothColumnSeries(values, vss) {
 }
 
 // Tooltip content as plain data so it is unit-testable without a DOM.
-export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, median, runCount }) {
+export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, classic, median, runCount }) {
   const signed = (delta) => `${delta >= 0 ? '+' : '−'}${formatK(Math.abs(delta))}`;
+  const classicAmt = classic ?? 0;
   const rows = [
     `Withdrawal ${formatK(value)}`,
     `${signed(value - plan)} vs plan (${formatK(plan)})`,
+    `${signed(value - classicAmt)} vs 4% (${formatK(classicAmt)})`,
     `${signed(value - median)} vs year median (${formatK(median)})`,
   ];
   if (runCount > 1) rows.push(`avg of ${runCount} runs`);
@@ -246,7 +248,7 @@ const state = {
   params: null,
   seed: null,
   outcome: null, // per-sim outcome tags from returnScatter (0 met / 1 below / 2 ran out)
-  encoding: 'plan', // 'plan' | 'median' (per-year delta) | 'abs' (absolute $ over from/to)
+  encoding: 'plan', // 'plan' | 'classic' | 'median' (per-year delta) | 'abs' (absolute $)
   frame: 0, // scrubber: 0 = averaged view, k ≥ 1 = pre-sliced composite k
   speed: 0, // 0 = off; > 0 = random replay at tickMsForSpeed(speed)
   randomAssign: null, // Int32Array(numCols): per-column random frame while replaying
@@ -451,7 +453,15 @@ function anchorInfo() {
   }
 
   const anchors = windowAnchors();
-  const anchor = state.encoding === 'plan' ? hm.planByYear : anchors.median;
+  let anchor;
+  if (state.encoding === 'plan') {
+    anchor = hm.planByYear;
+  } else if (state.encoding === 'classic') {
+    // Flat start × 4% schedule packaged next to planByYear.
+    anchor = hm.classicByYear;
+  } else {
+    anchor = anchors.median;
+  }
   if (!state.windowDomain || state.windowDomainKey !== key) {
     state.windowDomain = windowDeltaDomain(hm.values, anchor, hm.numYears, start, end);
     state.windowDomainKey = key;
@@ -722,11 +732,14 @@ function renderLegend() {
     items.push(item(`<span>${formatK(info.abs.lo)} low</span>${swatch}<span>${formatK(info.abs.hi)} high</span>`));
     items.push(item(`<span>${midWord} = median of shown range</span>`));
   } else {
+    const scheduleDelta = state.encoding === 'plan' || state.encoding === 'classic';
     const anchorWord = state.encoding === 'plan'
       ? 'on plan'
-      : 'that year’s median withdrawal';
-    const loLabel = state.encoding === 'plan' ? 'cut' : 'below';
-    const hiLabel = state.encoding === 'plan' ? 'boost' : 'above';
+      : state.encoding === 'classic'
+        ? 'on classic 4%'
+        : 'that year’s median withdrawal';
+    const loLabel = scheduleDelta ? 'cut' : 'below';
+    const hiLabel = scheduleDelta ? 'boost' : 'above';
     items.push(item(`<span>−${formatK(info.domain.lo)} ${loLabel}</span>${swatch}<span>+${formatK(info.domain.hi)} ${hiLabel}</span>`));
     items.push(item(`<span>${midWord} = ${anchorWord}</span>`));
   }
@@ -760,6 +773,7 @@ const TOGGLE_INACTIVE = ['text-theme-faint'];
 function syncToggleUi() {
   const buttons = [
     [document.getElementById('withdrawalHeatmapModeDelta'), 'plan'],
+    [document.getElementById('withdrawalHeatmapModeClassic'), 'classic'],
     [document.getElementById('withdrawalHeatmapModeMedian'), 'median'],
     [document.getElementById('withdrawalHeatmapModeAbs'), 'abs'],
   ];
@@ -773,7 +787,7 @@ function syncToggleUi() {
 }
 
 function setEncoding(mode) {
-  if (mode !== 'abs' && mode !== 'median' && mode !== 'plan') return;
+  if (mode !== 'abs' && mode !== 'median' && mode !== 'plan' && mode !== 'classic') return;
   if (state.encoding === mode) return;
   state.encoding = mode;
   state.windowDomain = null;
@@ -947,6 +961,7 @@ function showTooltip(ev, cell) {
     simIndex: displayedSimIndex(cell.col),
     value: cellValue(cell.col, cell.year),
     plan: hm.planByYear[cell.year],
+    classic: hm.classicByYear?.[cell.year] ?? 0,
     median: anchors.median[cell.year],
     // While showing individual runs each cell is exactly one real run, so the
     // tooltip names it instead of reporting the band average.
@@ -1107,6 +1122,8 @@ function bindEvents(canvas) {
     ?.addEventListener('click', () => setEncoding('abs'));
   document.getElementById('withdrawalHeatmapModeMedian')
     ?.addEventListener('click', () => setEncoding('median'));
+  document.getElementById('withdrawalHeatmapModeClassic')
+    ?.addEventListener('click', () => setEncoding('classic'));
   document.getElementById('withdrawalHeatmapModeDelta')
     ?.addEventListener('click', () => setEncoding('plan'));
   document.getElementById('withdrawalHeatmapFrame')

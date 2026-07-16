@@ -35,11 +35,12 @@
     <div>
         <h3 class="text-lg font-semibold text-theme-body mb-2">Withdrawal Heatmap</h3>
         <p class="text-sm text-theme-faint mb-4">
-            View withdrawal patterns across time for all simulations. You can analyze static snapshots or animate the display to see patterns in withdrawals. There are 3 variations comparing withdrawals vs. plan, vs. the median for each year, or showing absolute withdrawal amounts. There is also control to visually emphasize the early years.
+            View withdrawal patterns across time for all simulations. You can analyze static snapshots or animate the display to see patterns in withdrawals. Color modes compare withdrawals vs. your plan, vs. the classic flat 4% rule, vs. the median for each year, or show absolute withdrawal amounts. There is also control to visually emphasize the early years.
         </p>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
             <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color anchor">
                 <button id="withdrawalHeatmapModeDelta" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">vs Plan</button>
+                <button id="withdrawalHeatmapModeClassic" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs 4%</button>
                 <button id="withdrawalHeatmapModeMedian" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs Median</button>
                 <button id="withdrawalHeatmapModeAbs" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Amount</button>
             </div>

@@ -229,11 +229,14 @@ function runSimulation() {
   currentWorker.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === 'progress') {
-      updateProgress(msg.fraction);
+      updateProgress(msg.fraction, msg.stage);
     } else if (msg.type === 'done') {
       setLoading(false);
       document.getElementById('resultsSection').classList.remove('hidden');
-      renderResults(msg.result, params);
+      renderResults(msg.result, params, {
+        fourPercentComparison: msg.fourPercentComparison,
+        classicResult: msg.classicResult,
+      });
       terminateWorkers();
     } else if (msg.type === 'error') {
       setLoading(false);
@@ -334,7 +337,11 @@ function runGoalSeekSearch() {
       const goalSeekWarning = msg.goalSeekSummary.feasible
         ? null
         : msg.goalSeekSummary.reason || 'Find Best Plan could not find a plan meeting your target.';
-      renderResults(msg.result, msg.finalParams ?? params, { goalSeekWarning });
+      renderResults(msg.result, msg.finalParams ?? params, {
+        goalSeekWarning,
+        fourPercentComparison: msg.fourPercentComparison,
+        classicResult: msg.classicResult,
+      });
     } else if (msg.type === 'error') {
       setLoading(false);
       showAlert(`Find Best Plan error: ${msg.message}`);

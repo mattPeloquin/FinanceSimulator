@@ -318,20 +318,22 @@ describe('windowAbsoluteDomain', () => {
 });
 
 describe('formatHeatmapTooltip', () => {
-  it('names the single run and shows signed deltas vs plan and median', () => {
+  it('names the single run and shows signed deltas vs plan, 4%, and median', () => {
     const tip = formatHeatmapTooltip({
       year: 12,
       pctLabel: 'P37',
       simIndex: 41,
       value: 58_000,
       plan: 55_000,
+      classic: 40_000,
       median: 52_000,
       runCount: 1,
     });
     expect(tip.title).toBe('Year 12 · P37 · Simulation #42');
     expect(tip.rows[0]).toBe('Withdrawal 58');
     expect(tip.rows[1]).toBe('+3 vs plan (55)');
-    expect(tip.rows[2]).toBe('+6 vs year median (52)');
+    expect(tip.rows[2]).toBe('+18 vs 4% (40)');
+    expect(tip.rows[3]).toBe('+6 vs year median (52)');
     expect(tip.footer).toBe('Click to see this path');
   });
 
@@ -342,6 +344,7 @@ describe('formatHeatmapTooltip', () => {
       simIndex: 7,
       value: 40_000,
       plan: 55_000,
+      classic: 40_000,
       median: 52_000,
       runCount: 13,
     });
@@ -349,5 +352,6 @@ describe('formatHeatmapTooltip', () => {
     expect(tip.rows).toContain('avg of 13 runs');
     expect(tip.rows.find((r) => r.includes('vs year median')).startsWith('−')).toBe(true);
     expect(tip.rows.find((r) => r.includes('vs plan')).startsWith('−')).toBe(true);
+    expect(tip.rows.find((r) => r.includes('vs 4%'))).toBe('+0 vs 4% (40)');
   });
 });

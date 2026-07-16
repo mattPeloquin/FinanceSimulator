@@ -8,7 +8,37 @@
 import { runMonteCarlo } from '../core/simulation.js';
 import { buildRunResult } from '../core/resultPackaging.js';
 import { runGoalSeek } from '../core/goalSeek.js';
+import {
+  buildClassicFourPercentParams,
+  buildFourPercentComparison,
+} from '../core/fourPercentComparison.js';
 import { ParallelPool } from './parallelPool.js';
+
+/** After the user's run, re-simulate a flat real 4% rule on the same paths. */
+async function packageWithFourPercentComparison(pool, params, userRaw, {
+  shortfallTolerance,
+  userProgressScale = 0.5,
+} = {}) {
+  const userResult = shortfallTolerance == null
+    ? buildRunResult(params, userRaw)
+    : buildRunResult(params, userRaw, { shortfallTolerance });
+
+  const classicParams = buildClassicFourPercentParams(params);
+  const classicRaw = await pool.run(classicParams, {
+    onProgress: (fraction) =>
+      self.postMessage({
+        type: 'progress',
+        stage: 'Comparing to the classic 4% rule',
+        // First half of the bar was the user plan; map this pass into the second half.
+        fraction: userProgressScale + fraction * (1 - userProgressScale),
+      }),
+  });
+  const classicResult = shortfallTolerance == null
+    ? buildRunResult(classicParams, classicRaw)
+    : buildRunResult(classicParams, classicRaw, { shortfallTolerance });
+  const fourPercentComparison = buildFourPercentComparison(userResult, classicResult, params);
+  return { userResult, classicResult, fourPercentComparison };
+}
 
 function postChunkResult(target, startIndex, numSimulations, result) {
   target.postMessage(
@@ -80,10 +110,23 @@ self.onmessage = async (e) => {
 
   if (type === 'run') {
     try {
-      const result = await pool.run(params, {
-        onProgress: (fraction) => self.postMessage({ type: 'progress', fraction }),
+      const userRaw = await pool.run(params, {
+        onProgress: (fraction) =>
+          self.postMessage({
+            type: 'progress',
+            stage: 'Running your plan',
+            // Reserve the second half of the bar for the classic 4% comparison.
+            fraction: fraction * 0.5,
+          }),
       });
-      self.postMessage({ type: 'done', result: buildRunResult(params, result) });
+      const { userResult, classicResult, fourPercentComparison } =
+        await packageWithFourPercentComparison(pool, params, userRaw);
+      self.postMessage({
+        type: 'done',
+        result: userResult,
+        classicResult,
+        fourPercentComparison,
+      });
     } catch (err) {
       self.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });
     } finally {
@@ -98,15 +141,26 @@ self.onmessage = async (e) => {
         onProgress: (stage, fraction) => self.postMessage({ type: 'progress', stage, fraction }),
       });
 
+      // Confirmation + classic comparison share the final progress window:
+      // 0–50% confirming the found plan, 50–100% classic 4% benchmark.
       const confirmation = await pool.run(finalParams, {
         onProgress: (fraction) =>
-          self.postMessage({ type: 'progress', stage: 'Confirming final plan', fraction }),
+          self.postMessage({
+            type: 'progress',
+            stage: 'Confirming final plan',
+            fraction: fraction * 0.5,
+          }),
       });
+      const shortfallTolerance = goalSeekConfig.shortfallTolerance ?? 0.05;
+      const { userResult, classicResult, fourPercentComparison } =
+        await packageWithFourPercentComparison(pool, finalParams, confirmation, {
+          shortfallTolerance,
+        });
       self.postMessage({
         type: 'done',
-        result: buildRunResult(finalParams, confirmation, {
-          shortfallTolerance: goalSeekConfig.shortfallTolerance ?? 0.05,
-        }),
+        result: userResult,
+        classicResult,
+        fourPercentComparison,
         goalSeekSummary: summary,
         finalParams,
       });

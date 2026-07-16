@@ -21,6 +21,9 @@ let balanceChart = null;
 let withdrawalChart = null;
 let lastPercentiles = null;
 let lastNumYears = 0;
+let lastClassicMedianPath = null;
+
+const CLASSIC_SERIES_LABEL = 'Classic 4%';
 
 function pathDataset(label, pathObj, color, values, returnOffset) {
   const returnAt = (dataIndex) => {
@@ -33,7 +36,7 @@ function pathDataset(label, pathObj, color, values, returnOffset) {
     _pathObj: pathObj,
     borderColor: color,
     backgroundColor: color + '10',
-    borderWidth: 2,
+    borderWidth: 1,
     tension: 0.1,
     fill: false,
     pointBackgroundColor: color + '4D',
@@ -128,7 +131,8 @@ function buildWithdrawalOptions(theme) {
         callbacks: {
           label: (ctx) => {
             const ds = ctx.dataset;
-            const ret = ds._pathObj.returns[ctx.dataIndex];
+            const ret = ds._pathObj?.returns?.[ctx.dataIndex];
+            if (ret == null) return `${ds.label}: ${formatK(ctx.raw)}`;
             return `${ds.label}: ${formatK(ctx.raw)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
           },
         },
@@ -137,9 +141,21 @@ function buildWithdrawalOptions(theme) {
   };
 }
 
-export function drawTimelineCharts(percentiles, numYears) {
+function classicOverlayDataset(path, color, values, returnOffset) {
+  return {
+    ...pathDataset(CLASSIC_SERIES_LABEL, path, color, values, returnOffset),
+    borderDash: [6, 4],
+    borderWidth: 1,
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    order: 0,
+  };
+}
+
+export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = null } = {}) {
   lastPercentiles = percentiles;
   lastNumYears = numYears;
+  lastClassicMedianPath = classicMedianPath;
 
   const balanceLabels = Array.from({ length: numYears + 1 }, (_, i) => `Year ${i}`);
   const withdrawalLabels = Array.from({ length: numYears }, (_, i) => `Year ${i + 1}`);
@@ -148,6 +164,22 @@ export function drawTimelineCharts(percentiles, numYears) {
   const logFloor = Math.max(1000, startBalance / 100);
   const theme = getChartTheme();
   const COLORS = getColors();
+  const classicColor = theme.planLine;
+
+  const balanceDatasets = SERIES.map((s) => {
+    const path = percentiles[s.key].path;
+    return pathDataset(s.label, path, COLORS[s.key], path.balances.map((b) => Math.max(logFloor, b)), -1);
+  });
+  if (classicMedianPath?.balances) {
+    balanceDatasets.push(
+      classicOverlayDataset(
+        classicMedianPath,
+        classicColor,
+        classicMedianPath.balances.map((b) => Math.max(logFloor, b)),
+        -1,
+      ),
+    );
+  }
 
   const balanceCtx = document.getElementById('balanceChart').getContext('2d');
   if (balanceChart) balanceChart.destroy();
@@ -155,13 +187,25 @@ export function drawTimelineCharts(percentiles, numYears) {
     type: 'line',
     data: {
       labels: balanceLabels,
-      datasets: SERIES.map((s) => {
-        const path = percentiles[s.key].path;
-        return pathDataset(s.label, path, COLORS[s.key], path.balances.map((b) => Math.max(logFloor, b)), -1);
-      }),
+      datasets: balanceDatasets,
     },
     options: buildBalanceOptions(logFloor, theme),
   });
+
+  const withdrawalDatasets = SERIES.map((s) => {
+    const path = percentiles[s.key].path;
+    return pathDataset(s.label, path, COLORS[s.key], path.withdrawals, 0);
+  });
+  if (classicMedianPath?.withdrawals) {
+    withdrawalDatasets.push(
+      classicOverlayDataset(
+        classicMedianPath,
+        classicColor,
+        classicMedianPath.withdrawals,
+        0,
+      ),
+    );
+  }
 
   const withdrawalCtx = document.getElementById('withdrawalChart').getContext('2d');
   if (withdrawalChart) withdrawalChart.destroy();
@@ -169,10 +213,7 @@ export function drawTimelineCharts(percentiles, numYears) {
     type: 'line',
     data: {
       labels: withdrawalLabels,
-      datasets: SERIES.map((s) => {
-        const path = percentiles[s.key].path;
-        return pathDataset(s.label, path, COLORS[s.key], path.withdrawals, 0);
-      }),
+      datasets: withdrawalDatasets,
     },
     options: buildWithdrawalOptions(theme),
   });
@@ -184,5 +225,9 @@ export function drawTimelineCharts(percentiles, numYears) {
 }
 
 onThemeChange(() => {
-  if (lastPercentiles) drawTimelineCharts(lastPercentiles, lastNumYears);
+  if (lastPercentiles) {
+    drawTimelineCharts(lastPercentiles, lastNumYears, {
+      classicMedianPath: lastClassicMedianPath,
+    });
+  }
 });
