@@ -257,3 +257,52 @@ test('Unsaved session persists when switching away and back', async ({ page }) =
   await page.click('#deleteSessionButton');
   await page.click('#confirmDeleteSession');
 });
+
+test('Link sits between New and Export and copies a share URL', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await waitForInit(page);
+
+  const order = await page.evaluate(() => {
+    const row = document.querySelector('#newSessionButton')?.parentElement;
+    if (!row) return [];
+    return [...row.querySelectorAll('button')].map((b) => b.id);
+  });
+  expect(order.indexOf('newSessionButton')).toBeLessThan(order.indexOf('linkCopyButton'));
+  expect(order.indexOf('linkCopyButton')).toBeLessThan(order.indexOf('exportSessionButton'));
+  await expect(page.locator('#linkCopyButton')).toBeVisible();
+
+  await page.fill('#startBalance', '3,000');
+  await page.click('#linkCopyButton');
+  await expect(page.locator('#linkCopyButton')).toHaveText('Copied!', { timeout: 2000 });
+
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard).toMatch(/[?&]s=/);
+  const url = new URL(clipboard);
+  expect(url.searchParams.get('s')).toBeTruthy();
+});
+
+test('Opening a share link loads inputs and starts a run', async ({ page, context }) => {
+  test.slow();
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await waitForInit(page);
+
+  // Goal Seek is on by default; use a plain short sim for a snappy share-load run.
+  await page.click('label:has(#goalSeekMode)');
+  await expect(page.locator('#runButton')).toHaveText('Run Simulation');
+  await page.fill('#startBalance', '3,000');
+  await page.locator('#section-advanced').evaluate((el) => { el.open = true; });
+  await page.fill('#numSimulations', '400');
+
+  await page.click('#linkCopyButton');
+  await expect(page.locator('#linkCopyButton')).toHaveText('Copied!', { timeout: 2000 });
+  const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
+
+  await page.goto(shareUrl);
+  await waitForInit(page);
+
+  await expect(page.locator('#startBalance')).toHaveValue('3,000');
+  await expect(page).not.toHaveURL(/[?&]s=/);
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
+});

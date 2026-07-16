@@ -28,6 +28,15 @@
     </div>
 </dialog>
 
+<dialog id="confirmLoadSharedDialog" class="p-6 rounded-xl shadow-2xl border border-theme-border bg-theme-surface backdrop:bg-theme-page/50 min-w-[320px] max-w-md">
+    <h3 class="text-lg font-bold text-theme-heading mb-2">Load shared scenario?</h3>
+    <p class="text-sm text-theme-muted mb-6">A shared link will replace your current named session's workbench view with the shared inputs (as an unsaved session) and start a run.</p>
+    <div class="flex justify-end gap-3">
+        <button id="cancelLoadShared" class="px-4 py-2 bg-theme-surface border border-theme-input text-theme-body rounded-lg hover:bg-theme-muted text-sm font-medium transition-colors">Cancel</button>
+        <button id="confirmLoadShared" class="px-4 py-2 bg-theme-accent text-theme-on-accent rounded-lg hover:bg-theme-accent-hover text-sm font-medium shadow-sm transition-colors">Load</button>
+    </div>
+</dialog>
+
 <dialog id="withdrawalChartDialog" class="p-6 rounded-xl shadow-2xl border border-theme-border bg-theme-surface backdrop:bg-theme-page/50 w-[90vw] max-w-4xl h-[80vh] max-h-[800px]">
     <div class="flex flex-col h-full">
         <div class="flex justify-between items-start mb-4">

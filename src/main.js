@@ -28,6 +28,10 @@ import {
   listSessions,
   exportScenario,
   importScenarioFromFile,
+  buildShareUrl,
+  decodeScenarioFromShareParam,
+  peekShareParamFromUrl,
+  stripShareParamFromUrl,
 } from './state/persistence.js';
 import {
   getSampleYears,
@@ -655,26 +659,106 @@ function handleExportSession() {
   );
 }
 
+async function handleLinkCopy() {
+  const btn = document.getElementById('linkCopyButton');
+  const url = buildShareUrl(readScenarioFromDom(), {
+    name: currentSessionName || '',
+    description: currentSessionDescription || '',
+  });
+  try {
+    await navigator.clipboard.writeText(url);
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.textContent = prev;
+      }, 1500);
+    }
+  } catch {
+    showAlert(url, 'Copy this share link');
+  }
+}
+
+/** Apply an imported/shared scenario as an unsaved workbench, then auto-run. */
+async function applyImportedScenario({ scenario, name = '', description = '' }, { statusMessage } = {}) {
+  currentSessionName = '';
+  currentSessionDescription = description || '';
+  applyScenario(scenario);
+  saveUnsavedStash(scenario);
+  updateSessionNoteDisplay();
+  updateSessionActionButtons();
+  const msg =
+    statusMessage ||
+    (name ? `Imported "${name}".` : null);
+  if (msg) document.getElementById('historical-range-msg').textContent = msg;
+  await refreshSessionList('');
+  lastSessionSelectValue = '';
+  flushAutosave();
+  handleRunClick();
+}
+
+function stripShareParamFromHistory() {
+  const next = stripShareParamFromUrl(window.location.href);
+  history.replaceState(null, '', next);
+}
+
 async function handleImportFile(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   try {
-    const { scenario, name, description } = await importScenarioFromFile(file);
-    currentSessionName = '';
-    currentSessionDescription = description || '';
-    applyScenario(scenario);
-    saveUnsavedStash(scenario);
-    updateSessionNoteDisplay();
-    updateSessionActionButtons();
-    if (name) document.getElementById('historical-range-msg').textContent = `Imported "${name}".`;
-    await refreshSessionList('');
-    lastSessionSelectValue = '';
-    flushAutosave();
+    const loaded = await importScenarioFromFile(file);
+    await applyImportedScenario(loaded);
   } catch (err) {
     showAlert(`Could not import file: ${err.message}`);
   } finally {
     e.target.value = '';
   }
+}
+
+/**
+ * If the URL carries a share param, load it (confirm when a named session is open).
+ * Strips the param and auto-runs only after a successful load.
+ */
+async function maybeLoadSharedScenarioFromUrl() {
+  const param = peekShareParamFromUrl();
+  if (!param) return;
+
+  let loaded;
+  try {
+    loaded = decodeScenarioFromShareParam(param);
+  } catch (err) {
+    showAlert(err.message || 'Not a valid simulator scenario link.');
+    return;
+  }
+
+  const applyShared = async () => {
+    stripShareParamFromHistory();
+    await applyImportedScenario(loaded, {
+      statusMessage: loaded.name ? `Loaded shared "${loaded.name}".` : 'Loaded shared scenario.',
+    });
+  };
+
+  if (!currentSessionName) {
+    await applyShared();
+    return;
+  }
+
+  const dialog = document.getElementById('confirmLoadSharedDialog');
+  openDialog(dialog, [
+    {
+      el: document.getElementById('confirmLoadShared'),
+      event: 'click',
+      fn: () => {
+        dialog.close();
+        applyShared();
+      },
+    },
+    {
+      el: document.getElementById('cancelLoadShared'),
+      event: 'click',
+      fn: () => dialog.close(),
+    },
+  ]);
 }
 
 // Apply a full scenario to the DOM and refresh dependent views.
@@ -773,6 +857,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
     document.getElementById('resetSessionButton').addEventListener('click', handleResetSession);
     document.getElementById('copySessionButton').addEventListener('click', handleCopySession);
     document.getElementById('deleteSessionButton').addEventListener('click', handleDeleteSession);
+    document.getElementById('linkCopyButton').addEventListener('click', handleLinkCopy);
     document.getElementById('exportSessionButton').addEventListener('click', handleExportSession);
     document.getElementById('importSessionButton').addEventListener('click', () =>
       document.getElementById('importFileInput').click()
@@ -801,6 +886,10 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
   updateSessionNoteDisplay();
 
   flushAutosave();
+
+  // Share links apply after first paint / history samples are ready so auto-run
+  // matches a user click on Run / Find Best Plan.
+  await maybeLoadSharedScenarioFromUrl();
 
   if (import.meta.env.DEV) {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};

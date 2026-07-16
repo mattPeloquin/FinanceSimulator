@@ -204,7 +204,97 @@ export async function listSessions() {
   }
 }
 
-// ---- Export / Import (JSON file) --------------------------------------------
+// ---- Export / Import (JSON file) + share-link encoding -----------------------
+
+const SHARE_PARAM = 's';
+
+/** Validate a parsed export/share envelope and migrate its scenario. */
+export function parseScenarioPayload(parsed) {
+  if (!parsed || parsed.type !== EXPORT_TYPE || !parsed.scenario) {
+    throw new Error('Not a valid simulator scenario file.');
+  }
+  return {
+    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
+    name: parsed.name || '',
+    description: parsed.description || '',
+  };
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(param) {
+  const padded = param.replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (padded.length % 4)) % 4;
+  const binary = atob(padded + '='.repeat(padLen));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function utf8Encode(str) {
+  return new TextEncoder().encode(str);
+}
+
+function utf8Decode(bytes) {
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Compact JSON envelope → base64url (no padding) for the `s` query param.
+ * Omits exportedAt; includes name/description only when non-empty.
+ */
+export function encodeScenarioToShareParam(scenario, { name = '', description = '' } = {}) {
+  const payload = {
+    type: EXPORT_TYPE,
+    schemaVersion: SCHEMA_VERSION,
+    scenario,
+  };
+  if (name) payload.name = name;
+  if (description) payload.description = description;
+  return bytesToBase64Url(utf8Encode(JSON.stringify(payload)));
+}
+
+export function decodeScenarioFromShareParam(param) {
+  if (!param || typeof param !== 'string') {
+    throw new Error('Not a valid simulator scenario link.');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(utf8Decode(base64UrlToBytes(param)));
+  } catch {
+    throw new Error('Not a valid simulator scenario link.');
+  }
+  try {
+    return parseScenarioPayload(parsed);
+  } catch {
+    throw new Error('Not a valid simulator scenario link.');
+  }
+}
+
+/** Build a shareable URL with the scenario in query param `s`. */
+export function buildShareUrl(scenario, meta = {}, baseUrl = typeof location !== 'undefined' ? location.href : '') {
+  const url = new URL(baseUrl);
+  url.searchParams.set(SHARE_PARAM, encodeScenarioToShareParam(scenario, meta));
+  return url.toString();
+}
+
+/** Read and remove `s` from the current location (does not change history). */
+export function peekShareParamFromUrl(href = typeof location !== 'undefined' ? location.href : '') {
+  const url = new URL(href);
+  const param = url.searchParams.get(SHARE_PARAM);
+  return param || null;
+}
+
+/** Return href with the share param stripped (for history.replaceState). */
+export function stripShareParamFromUrl(href = typeof location !== 'undefined' ? location.href : '') {
+  const url = new URL(href);
+  url.searchParams.delete(SHARE_PARAM);
+  return url.pathname + url.search + url.hash;
+}
 
 export function exportScenario(scenario, name = 'scenario', description = '') {
   const payload = {
@@ -230,12 +320,5 @@ export function exportScenario(scenario, name = 'scenario', description = '') {
 export async function importScenarioFromFile(file) {
   const text = await file.text();
   const parsed = JSON.parse(text);
-  if (!parsed || parsed.type !== EXPORT_TYPE || !parsed.scenario) {
-    throw new Error('Not a valid simulator scenario file.');
-  }
-  return {
-    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
-    name: parsed.name || '',
-    description: parsed.description || '',
-  };
+  return parseScenarioPayload(parsed);
 }
