@@ -18,7 +18,11 @@ Each file has two sections:
     horizon as % of start; annual floor = that × start ÷ years. Higher on
     Conservative (steadier cash flow), lower on Aggressive (willing to cut)
   - `gifting.amountPctOfStart` / `.balanceMultipleOfStart` — first gifting tier
-  - `spending.changePct` — annual real change % on the first two spending tiers
+  - `spending.changePct` — annual real change % on the first spending tier
+    (scales tier-0 extra when that extra is non-zero; otherwise compounds the base)
+  - `spending.remainingChangePct` — annual real change % on the second tier
+    (remaining years after the first tier; typically extra is 0 so this
+    compounds the base)
   - `spending.firstTierYearsFractionOfHorizon` — first tier years = fraction × horizon
   - `noCutBalanceMultipleOfStart` — "no cut while ahead" threshold = multiple × start;
     market-driven cuts are skipped while the balance is above it

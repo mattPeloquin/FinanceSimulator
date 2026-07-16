@@ -3,8 +3,8 @@
   "description": "Bolder tilt — stock-heavy mix, front-loaded spending, spends most of the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
-    "goalSeekDesiredSuccessPct": 85,
-    "goalSeekRiskTolerancePct": 25,
+    "goalSeekDesiredSuccessPct": 90,
+    "goalSeekRiskTolerancePct": 20,
     "goalSeekIncludeBaseWithdrawal": true,
     "goalSeekIncludeSpendingOverTime": true,
     "goalSeekIncludeMarketAdjustments": true,
@@ -15,8 +15,8 @@
     "usLgValueAllocation": 25,
     "usSmMidAllocation": 10,
     "exUsAllocation": 20,
-    "bondAllocation": 0,
-    "cashAllocation": 15,
+    "bondAllocation": 5,
+    "cashAllocation": 10,
     "dynLowRet": -18,
     "dynMedRet": 5,
     "dynHighRet": 25,
@@ -33,6 +33,7 @@
     },
     "spending": {
       "changePct": -2.5,
+      "remainingChangePct": -2,
       "firstTierYearsFractionOfHorizon": 0.45
     },
     "noCutBalanceMultipleOfStart": 1,

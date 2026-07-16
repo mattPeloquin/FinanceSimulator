@@ -186,9 +186,11 @@ export function buildWithdrawalFloorPctSeries(tiers, numYears) {
 }
 
 // Build a per-year spending-over-time schedule from staged tiers.
-// Each entry carries the annual real change rate (decimal) and a flat extra
-// withdrawal (dollars) added on top of the compounding base. Intermediate
-// tiers run for their year count; the final tier fills the horizon.
+// Each entry carries the annual real change rate (decimal) and an optional
+// extra withdrawal (dollars). When extra ≠ 0, buildBaseWithdrawalSchedule
+// applies the change % to that extra only; when extra is 0, it compounds the
+// base. Intermediate tiers run for their year count; the final tier fills
+// the horizon.
 export function buildSpendingOverTimeSeries(tiers, numYears, toDollarsFn) {
   if (numYears <= 0) return [];
   const emptyEntry = { changeRate: 0, extra: 0 };
@@ -216,24 +218,54 @@ export function buildSpendingOverTimeSeries(tiers, numYears, toDollarsFn) {
   return series;
 }
 
-// Walk the spending-over-time series to produce each year's unadjusted base
-// withdrawal: year 0 is unscaled; each later year multiplies the running
-// growth factor by (1 + that year's tier rate), then adds the tier's flat
-// extra. Clamped to 0 when the base amount is non-negative.
+// Walk the spending-over-time series to produce each year's unadjusted plan
+// withdrawal.
+//
+// Year 0 is always unscaled. For later years the annual real change % is
+// applied to whichever piece is "active":
+//   • extra ≠ 0 — the core base stays put; the % compounds the extra only
+//     (go-go / front-load fade). A new extra amount resets that fade so each
+//     staged bonus starts from its full value.
+//   • extra = 0 — the % compounds the core base, same as a plain declining
+//     (or rising) withdrawal schedule.
+//
+// Clamped to 0 when the base amount is non-negative.
 export function buildBaseWithdrawalSchedule(base, spendingSeries, numYears) {
   if (numYears <= 0) return [];
   const series = spendingSeries || [];
   const amounts = new Array(numYears);
-  let growthFactor = 1;
+  // Separate growth trackers: the change % never moves both pieces at once.
+  let baseGrowthFactor = 1;
+  let extraGrowthFactor = 1;
+  let previousExtra = null;
 
   for (let j = 0; j < numYears; j++) {
     const entry = series[j] ?? { changeRate: 0, extra: 0 };
-    if (j > 0) {
-      growthFactor *= 1 + entry.changeRate;
+    const extra = entry.extra || 0;
+    const hasExtra = extra !== 0;
+
+    // Starting a different extra amount (including 0 → bonus or bonus → other
+    // bonus) begins a fresh fade/growth schedule for that extra.
+    if (previousExtra !== null && extra !== previousExtra) {
+      extraGrowthFactor = 1;
     }
-    let amount = base * growthFactor + entry.extra;
+
+    if (j > 0) {
+      if (hasExtra) {
+        // Percent change applies only to the extra; core spending is unchanged.
+        extraGrowthFactor *= 1 + entry.changeRate;
+      } else {
+        // No extra this year: percent change compounds the core base.
+        baseGrowthFactor *= 1 + entry.changeRate;
+      }
+    }
+
+    let amount = hasExtra
+      ? base * baseGrowthFactor + extra * extraGrowthFactor
+      : base * baseGrowthFactor;
     if (base >= 0 && amount < 0) amount = 0;
     amounts[j] = amount;
+    previousExtra = extra;
   }
   return amounts;
 }

@@ -3,8 +3,8 @@
   "description": "Highest spending — nearly all stocks, strongly front-loaded, tries to deplete the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
-    "goalSeekDesiredSuccessPct": 80,
-    "goalSeekRiskTolerancePct": 30,
+    "goalSeekDesiredSuccessPct": 90,
+    "goalSeekRiskTolerancePct": 25,
     "goalSeekIncludeBaseWithdrawal": true,
     "goalSeekIncludeSpendingOverTime": true,
     "goalSeekIncludeMarketAdjustments": true,
@@ -33,6 +33,7 @@
     },
     "spending": {
       "changePct": -3,
+      "remainingChangePct": -2,
       "firstTierYearsFractionOfHorizon": 0.5
     },
     "noCutBalanceMultipleOfStart": 1,

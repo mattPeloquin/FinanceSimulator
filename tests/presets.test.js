@@ -159,7 +159,7 @@ describe('computeDerivedPresetValues', () => {
     expect(out.glideTarget).toBe(out.goalSeekTargetEndingBalance);
     expect(out.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 50, years: 15 },
-      { changePct: -2, extra: 0 },
+      { changePct: -1, extra: 0 },
     ]);
     expect(out.giftingTiers).toEqual([{ amount: 30, balance: 2700 }]);
   });
@@ -263,7 +263,7 @@ describe('computeDerivedPresetValues', () => {
     ]);
     expect(out.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 77, years: 15 },
-      { changePct: -2, extra: 0, years: 6 },
+      { changePct: -1, extra: 0, years: 6 },
       { changePct: 1, extra: 55 },
     ]);
   });
@@ -281,13 +281,26 @@ describe('computeDerivedPresetValues', () => {
     expect(out.spendingOverTimeTiers[0].extra).toBe(33);
   });
 
-  it('only sets changePct when the spending list has a single tier', () => {
+  it('only sets first-tier changePct when the spending list has a single tier', () => {
     const out = computeDerivedPresetValues(balanced, {
       startThousands: 3000,
       numYears: 35,
       spendingOverTimeTiers: [{ changePct: 1, extra: 20 }],
     });
     expect(out.spendingOverTimeTiers).toEqual([{ changePct: -2, extra: 20 }]);
+  });
+
+  it('sets remaining-years changePct independently of the first tier', () => {
+    const out = computeDerivedPresetValues(balanced, {
+      startThousands: 3000,
+      numYears: 35,
+      spendingOverTimeTiers: [
+        { changePct: 0, extra: 0, years: 1 },
+        { changePct: 0, extra: 0 },
+      ],
+    });
+    expect(out.spendingOverTimeTiers[0].changePct).toBe(-2);
+    expect(out.spendingOverTimeTiers[1].changePct).toBe(-1);
   });
 
   it('writes percentage minimum floors for Specific List, not dollar floors', () => {
@@ -394,7 +407,7 @@ describe('defaults composition', () => {
     expect(SCENARIO_DEFAULTS.glideRate).toBe(-1);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 0, years: 13 },
-      { changePct: -2, extra: 0 },
+      { changePct: -1, extra: 0 },
     ]);
   });
 

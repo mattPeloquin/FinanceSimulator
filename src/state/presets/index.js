@@ -222,19 +222,19 @@ export function computeDerivedPresetValues(preset, {
     out.giftingTiers = gifts;
   }
 
-  // --- Spending over time: the level's annual real change % applies to the
-  // first two tiers; the first tier spans a fraction of the horizon (the
-  // "active years"); the second tier's extra withdrawal is pinned to 0.
+  // --- Spending over time: first-tier and remaining-years annual real change %
+  // are set independently (changePct / remainingChangePct); the first tier
+  // spans a fraction of the horizon (the "active years"); the second tier's
+  // extra withdrawal is pinned to 0.
   // Tier-0 extra is set below when includePlanFields; otherwise Goal Seek owns it.
   // Skipped under Specific List — the engine ignores spending-over-time tiers.
   if (d.spending && !isSpecific) {
     const tiers = spendingOverTimeTiers.map((t) => ({ ...t }));
     const changePct = d.spending.changePct;
+    const remainingChangePct = d.spending.remainingChangePct;
     if (tiers.length >= 2) {
-      if (Number.isFinite(changePct)) {
-        tiers[0].changePct = changePct;
-        tiers[1].changePct = changePct;
-      }
+      if (Number.isFinite(changePct)) tiers[0].changePct = changePct;
+      if (Number.isFinite(remainingChangePct)) tiers[1].changePct = remainingChangePct;
       if (hasYears && isPositiveFinite(d.spending.firstTierYearsFractionOfHorizon)) {
         tiers[0].years = Math.max(1, Math.round(numYears * d.spending.firstTierYearsFractionOfHorizon));
       }
@@ -242,7 +242,7 @@ export function computeDerivedPresetValues(preset, {
       out.spendingOverTimeTiers = tiers;
     } else if (tiers.length === 1) {
       // A single tier has no year span (it covers all remaining years), so
-      // only the change % applies.
+      // only the first-tier change % applies.
       if (Number.isFinite(changePct)) {
         tiers[0].changePct = changePct;
         out.spendingOverTimeTiers = tiers;

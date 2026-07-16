@@ -1,6 +1,6 @@
 {
   "name": "Conservative",
-  "description": "Safest path — bond-heavy mix, reacts early to weak markets, keeps most of the portfolio.",
+  "description": "Safest path — bond-heavy mix, reacts early to weak markets, keeps much of the portfolio.",
   "scenario": {
     "distMethod": "scaledHistorical",
     "goalSeekDesiredSuccessPct": 95,
@@ -15,8 +15,8 @@
     "usLgValueAllocation": 25,
     "usSmMidAllocation": 5,
     "exUsAllocation": 10,
-    "bondAllocation": 20,
-    "cashAllocation": 20,
+    "bondAllocation": 30,
+    "cashAllocation": 10,
     "dynLowRet": -10,
     "dynMedRet": 5,
     "dynHighRet": 30,
@@ -33,6 +33,7 @@
     },
     "spending": {
       "changePct": -1,
+      "remainingChangePct": -1,
       "firstTierYearsFractionOfHorizon": 0.35
     },
     "noCutBalanceMultipleOfStart": 1,

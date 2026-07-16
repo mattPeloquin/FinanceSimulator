@@ -3,8 +3,8 @@
   "description": "Middle path — diversified mix, gradual spending decline, draws the portfolio down.",
   "scenario": {
     "distMethod": "scaledHistorical",
-    "goalSeekDesiredSuccessPct": 90,
-    "goalSeekRiskTolerancePct": 20,
+    "goalSeekDesiredSuccessPct": 95,
+    "goalSeekRiskTolerancePct": 15,
     "goalSeekIncludeBaseWithdrawal": true,
     "goalSeekIncludeSpendingOverTime": true,
     "goalSeekIncludeMarketAdjustments": true,
@@ -15,8 +15,8 @@
     "usLgValueAllocation": 25,
     "usSmMidAllocation": 10,
     "exUsAllocation": 15,
-    "bondAllocation": 5,
-    "cashAllocation": 20,
+    "bondAllocation": 15,
+    "cashAllocation": 10,
     "dynLowRet": -15,
     "dynMedRet": 5,
     "dynHighRet": 30,
@@ -33,6 +33,7 @@
     },
     "spending": {
       "changePct": -2,
+      "remainingChangePct": -1,
       "firstTierYearsFractionOfHorizon": 0.43
     },
     "noCutBalanceMultipleOfStart": 1,

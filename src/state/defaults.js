@@ -18,7 +18,8 @@ import { computeDerivedPresetValues, DEFAULT_PRESET_LEVEL } from './presets/inde
 // PRESET_DERIVED_SCALAR_KEYS) must not appear here — they come from balanced.json
 // via the SCENARIO_DEFAULTS composition below. spendingOverTimeTiers is the one
 // exception: the list shape and first-tier "extra" are Goal Seek seeds; the
-// preset overwrites changePct / years (and pins the second tier's extra to 0).
+// preset overwrites each tier's changePct / years (and pins the second tier's
+// extra to 0).
 export const BASE_DEFAULTS = {
 
   // Years to simulate (endpoint / target horizon). Valid range: 1–100.

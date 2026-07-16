@@ -226,6 +226,49 @@ describe('buildBaseWithdrawalSchedule', () => {
     expect(amounts[3]).toBeCloseTo(99_970.2, 1);
   });
 
+  it('applies the change % only to extra when extra is non-zero', () => {
+    const series = [
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.1, extra: 50_000 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 3);
+    // Core base stays flat; extra fades: 50k, 45k, 40.5k.
+    expect(amounts[0]).toBeCloseTo(150_000, 3);
+    expect(amounts[1]).toBeCloseTo(145_000, 3);
+    expect(amounts[2]).toBeCloseTo(140_500, 3);
+  });
+
+  it('leaves the base untouched during go-go years, then compounds it when extra hits 0', () => {
+    const series = [
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.01, extra: 0 },
+      { changeRate: -0.01, extra: 0 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 4);
+    expect(amounts[0]).toBeCloseTo(150_000, 3);
+    expect(amounts[1]).toBeCloseTo(145_000, 3);
+    // Base was never reduced during go-go; first zero-extra year starts the fade.
+    expect(amounts[2]).toBeCloseTo(99_000, 3);
+    expect(amounts[3]).toBeCloseTo(98_010, 3);
+  });
+
+  it('resets the extra fade when the extra amount changes', () => {
+    const series = [
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.1, extra: 50_000 },
+      { changeRate: -0.1, extra: 20_000 },
+      { changeRate: -0.1, extra: 20_000 },
+    ];
+    const amounts = buildBaseWithdrawalSchedule(100_000, series, 4);
+    expect(amounts[0]).toBeCloseTo(150_000, 3);
+    expect(amounts[1]).toBeCloseTo(145_000, 3);
+    // New extra starts fresh, then takes one step of its tier's rate (j > 0).
+    expect(amounts[2]).toBeCloseTo(118_000, 3);
+    expect(amounts[3]).toBeCloseTo(116_200, 3);
+  });
+
   it('clamps negative amounts to zero when base is non-negative', () => {
     const series = [{ changeRate: 0, extra: -50_000 }];
     expect(buildBaseWithdrawalSchedule(10_000, series, 1)[0]).toBe(0);
