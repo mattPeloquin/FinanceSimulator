@@ -8,11 +8,12 @@
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries, buildMajorEventsSeries } from '../core/withdrawal.js';
+import { buildAllocationOverTimeSeries } from '../core/allocation.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -122,6 +123,26 @@ export const ALLOCATION_KEYS = [
   'bondAllocation',
   'cashAllocation',
 ];
+
+/** Short UI labels for each allocation category (tier rows + preview legend). */
+export const ALLOCATION_LABELS = {
+  usLgGrowthAllocation: 'US Lg Growth',
+  usLgValueAllocation: 'US Lg Value',
+  usSmMidAllocation: 'US Sm/Mid',
+  exUsAllocation: 'ex-US',
+  bondAllocation: 'Bonds',
+  cashAllocation: 'Cash',
+};
+
+/** History / chart color key for each scenario allocation field. */
+export const ALLOCATION_CHART_KEYS = {
+  usLgGrowthAllocation: 'us_lg_growth',
+  usLgValueAllocation: 'us_lg_value',
+  usSmMidAllocation: 'us_sm_mid',
+  exUsAllocation: 'ex_us',
+  bondAllocation: 'bond',
+  cashAllocation: 'cash',
+};
 
 export function parseCurrency(val) {
   if (typeof val === 'number') return val;
@@ -237,6 +258,13 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     delete migrated.dynLowBal;
     delete migrated.dynMedBal;
     delete migrated.dynHighBal;
+  }
+
+  if (schemaVersion < 7) {
+    // Optional allocation glide schedule; empty = fixed static mix every year.
+    if (migrated.allocationOverTimeTiers == null) {
+      migrated.allocationOverTimeTiers = [];
+    }
   }
 
   return migrated;
@@ -624,6 +652,163 @@ export function writeSpendingOverTimeTiersToDom(tiers, doc = document) {
   });
 }
 
+/** Read the static Asset Allocation % fields from the form (seed for new tiers). */
+export function readStaticAllocationFromDom(doc = document) {
+  const mix = {};
+  for (const key of ALLOCATION_KEYS) {
+    const el = doc.getElementById(key);
+    const pct = parseFloat(el?.value);
+    mix[key] = Number.isFinite(pct) ? pct : 0;
+  }
+  return mix;
+}
+
+/** Build a single remaining-years tier from a mix of allocation % fields. */
+function allocationTierFromMix(source) {
+  const mix = {};
+  for (const key of ALLOCATION_KEYS) {
+    const pct = typeof source?.[key] === 'number' ? source[key] : parseFloat(source?.[key]);
+    mix[key] = Number.isFinite(pct) ? pct : 0;
+  }
+  return mix;
+}
+
+/**
+ * Normalize allocation-over-time tiers. Always at least one remaining-years
+ * tier. Empty/missing lists become one tier copied from `fallbackMix` (usually
+ * the static Asset Allocation) so the schedule stays flat until edited.
+ */
+export function normalizeAllocationOverTimeTiers(tiers, fallbackMix = null) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [allocationTierFromMix(fallbackMix ?? SCENARIO_DEFAULTS.allocationOverTimeTiers[0])];
+  }
+  return tiers.map((tier, index, arr) => {
+    const mix = allocationTierFromMix(tier);
+    const isLast = index === arr.length - 1;
+    if (isLast) return mix;
+    const years = parseInt(tier?.years, 10);
+    return { ...mix, years: Number.isFinite(years) && years >= 0 ? years : 0 };
+  });
+}
+
+export function readAllocationOverTimeTiersFromDom(doc = document) {
+  const list = doc.getElementById('allocationOverTimeTiersList');
+  const fallback = readStaticAllocationFromDom(doc);
+  if (!list) return normalizeAllocationOverTimeTiers(SCENARIO_DEFAULTS.allocationOverTimeTiers, fallback);
+
+  const rows = list.querySelectorAll('[data-allocation-tier-row]');
+  if (rows.length === 0) return normalizeAllocationOverTimeTiers([], fallback);
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const mix = {};
+    for (const key of ALLOCATION_KEYS) {
+      const input = row.querySelector(`[data-allocation-key="${key}"]`);
+      const pct = parseFloat(input?.value);
+      mix[key] = Number.isFinite(pct) ? pct : 0;
+    }
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push(mix);
+    } else {
+      const yearsInput = row.querySelector('[data-allocation-years]');
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({ ...mix, years: Number.isFinite(years) ? years : null });
+    }
+  });
+  return tiers;
+}
+
+function updateAllocationTierTotalDisplay(row) {
+  const totalEl = row.querySelector('[data-allocation-tier-total]');
+  if (!totalEl) return;
+  let total = 0;
+  row.querySelectorAll('[data-allocation-key]').forEach((input) => {
+    total += parseFloat(input.value) || 0;
+  });
+  totalEl.textContent = `${total.toFixed(1).replace(/\.0$/, '')}%`;
+  if (Math.abs(total - 100) > 0.01) {
+    totalEl.classList.add('text-theme-danger');
+    totalEl.classList.remove('text-theme-success');
+  } else {
+    totalEl.classList.remove('text-theme-danger');
+    totalEl.classList.add('text-theme-success');
+  }
+}
+
+export function writeAllocationOverTimeTiersToDom(tiers, doc = document) {
+  const list = doc.getElementById('allocationOverTimeTiersList');
+  if (!list) return;
+
+  const fallback = readStaticAllocationFromDom(doc);
+  const normalized = normalizeAllocationOverTimeTiers(tiers, fallback);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'border border-theme-border rounded-md p-3 space-y-2';
+    row.dataset.allocationTierRow = String(index);
+
+    const grid = doc.createElement('div');
+    grid.className = 'grid grid-cols-3 sm:grid-cols-6 gap-2';
+    for (const key of ALLOCATION_KEYS) {
+      const cell = doc.createElement('div');
+      const label = ALLOCATION_LABELS[key] || key;
+      cell.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold leading-tight">${label}</label>
+        <div class="input-adorned has-suffix mt-1">
+          <input type="number" data-allocation-key="${key}" step="1" class="allocation-tier-input w-full rounded input-theme p-1 text-xs text-center" value="${tier[key] ?? 0}">
+          <span class="input-adorn-suffix">%</span>
+        </div>`;
+      grid.appendChild(cell);
+    }
+    row.appendChild(grid);
+
+    const footer = doc.createElement('div');
+    footer.className = 'flex flex-wrap items-end gap-2';
+
+    const totalWrap = doc.createElement('div');
+    totalWrap.className = 'text-[10px] font-semibold text-theme-body pb-1';
+    totalWrap.innerHTML = `Total: <span data-allocation-tier-total>100%</span>`;
+    footer.appendChild(totalWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-allocation-years min="0" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 0}">`;
+      footer.appendChild(yearsWrap);
+    } else {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      footer.appendChild(labelWrap);
+    }
+
+    // Always keep at least one tier (mirrors Spending Over Time).
+    if (normalized.length > 1) {
+      const removeBtn = doc.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-allocation-over-time-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5 ml-auto';
+      removeBtn.textContent = 'Remove';
+      footer.appendChild(removeBtn);
+    }
+
+    row.appendChild(footer);
+    list.appendChild(row);
+    updateAllocationTierTotalDisplay(row);
+  });
+}
+
+/** Refresh per-tier total badges after the user edits a % field. */
+export function refreshAllocationOverTimeTierTotals(doc = document) {
+  doc.querySelectorAll('[data-allocation-tier-row]').forEach((row) => {
+    updateAllocationTierTotalDisplay(row);
+  });
+}
+
 /** Normalize major-event rows; missing or empty list means no events. */
 export function normalizeMajorEvents(events) {
   if (!Array.isArray(events) || events.length === 0) return [];
@@ -774,6 +959,7 @@ export function readScenarioFromDom(doc = document) {
   scenario.specificWithdrawalFloors = readSpecificWithdrawalFloorsFromDom(doc);
   scenario.giftingTiers = readGiftingTiersFromDom(doc);
   scenario.spendingOverTimeTiers = readSpendingOverTimeTiersFromDom(doc);
+  scenario.allocationOverTimeTiers = readAllocationOverTimeTiersFromDom(doc);
   scenario.majorEvents = readMajorEventsFromDom(doc);
 
   return scenario;
@@ -800,6 +986,7 @@ const TIER_WRITERS = {
   specificWithdrawalFloors: writeSpecificWithdrawalFloorsToDom,
   giftingTiers: writeGiftingTiersToDom,
   spendingOverTimeTiers: writeSpendingOverTimeTiersToDom,
+  allocationOverTimeTiers: writeAllocationOverTimeTiersToDom,
   majorEvents: writeMajorEventsToDom,
 };
 
@@ -977,6 +1164,27 @@ export function buildSimParams(scenario, samples) {
       bond: (scenario.bondAllocation || 0) / 100,
       cash: (scenario.cashAllocation || 0) / 100,
     },
+    // Per-year mixes: glide from the static Asset Allocation (year 0) toward
+    // each allocation-over-time tier. A single tier matching the static mix
+    // stays flat for the whole horizon.
+    allocationSeries: (() => {
+      const startAllocation = {
+        usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
+        usLgValue: (scenario.usLgValueAllocation || 0) / 100,
+        usSmMid: (scenario.usSmMidAllocation || 0) / 100,
+        exUs: (scenario.exUsAllocation || 0) / 100,
+        bond: (scenario.bondAllocation || 0) / 100,
+        cash: (scenario.cashAllocation || 0) / 100,
+      };
+      const fallbackMix = {};
+      for (const key of ALLOCATION_KEYS) fallbackMix[key] = scenario[key] || 0;
+      return buildAllocationOverTimeSeries(
+        normalizeAllocationOverTimeTiers(scenario.allocationOverTimeTiers, fallbackMix),
+        maxYears,
+        startAllocation,
+        ALLOCATION_KEYS,
+      );
+    })(),
     portfolio: {
       strategy: scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy,
       specificWithdrawals: fitSpecificWithdrawalsToHorizon(
@@ -1231,6 +1439,29 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   const total = ALLOCATION_KEYS.reduce((sum, k) => sum + (scenario[k] || 0), 0);
   if (Math.abs(total - 100) > 0.01) {
     errors.push(`Total asset allocation must equal 100%. Current total: ${total.toFixed(2)}%`);
+  }
+
+  const allocationFallback = {};
+  for (const key of ALLOCATION_KEYS) allocationFallback[key] = scenario[key] || 0;
+  const allocationTiers = normalizeAllocationOverTimeTiers(
+    scenario.allocationOverTimeTiers,
+    allocationFallback,
+  );
+  for (let i = 0; i < allocationTiers.length; i++) {
+    const tierTotal = ALLOCATION_KEYS.reduce((sum, k) => sum + (allocationTiers[i][k] || 0), 0);
+    if (Math.abs(tierTotal - 100) > 0.01) {
+      errors.push(`Allocation-over-time tier ${i + 1} must equal 100%. Current total: ${tierTotal.toFixed(2)}%`);
+      break;
+    }
+  }
+  if (allocationTiers.length > 1) {
+    for (let i = 0; i < allocationTiers.length - 1; i++) {
+      const years = allocationTiers[i].years;
+      if (!Number.isFinite(years) || years < 0) {
+        errors.push('Each allocation-over-time tier (except the last) must have a zero or positive year count.');
+        break;
+      }
+    }
   }
 
   if (scenario.distMethod === 'lognormal' || scenario.distMethod === 'scaledHistorical') {

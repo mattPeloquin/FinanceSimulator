@@ -126,6 +126,20 @@ export const BASE_DEFAULTS = {
     { changePct: 0, extra: 0 },
   ],
 
+  // Later target mixes for Adjust allocation over time. Always at least one
+  // tier (the last covers remaining years). Seeded to match the Balanced
+  // static mix so a fresh plan starts flat until the user edits a target.
+  allocationOverTimeTiers: [
+    {
+      usLgGrowthAllocation: 25,
+      usLgValueAllocation: 25,
+      usSmMidAllocation: 10,
+      exUsAllocation: 15,
+      bondAllocation: 5,
+      cashAllocation: 20,
+    },
+  ],
+
   // One-time or recurring major cash events (Base strategy only). Each entry:
   // signed amount ($000s), 1-based start year, optional consecutive years
   // (blank = one-time). Positive = inflow; negative = extra payment out.

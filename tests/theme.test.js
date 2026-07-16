@@ -65,7 +65,7 @@ describe('theme', () => {
     expect(themeHex('meta', 'dark')).toBe('#1e293b');
     expect(themeHex('chrome.accent', 'light')).toBe('#4f46e5');
     expect(themeHex('percentile.p10', 'dark')).toBe('#f87171');
-    expect(themeHex('chartAssets.bond', 'light')).toBe('#16a34a');
+    expect(themeHex('chartAssets.bond', 'light')).toBe('#4f9438');
   });
 
   it('themeRgba resolves token paths to rgba strings', () => {

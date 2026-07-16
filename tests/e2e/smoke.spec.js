@@ -24,6 +24,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Two peer master sections: Investment Planning and Withdrawal Strategy
   await expect(page.locator('#section-investment > summary')).toContainText('Investment Planning');
   await expect(page.locator('#section-withdrawal > summary')).toContainText('Withdrawal Strategy');
+  // Optional allocation glide lives under Investment Planning
+  await page.locator('#section-investment').evaluate((el) => { el.open = true; });
+  await expect(page.locator('#details-allocation-over-time > summary')).toContainText('Adjust allocation over time');
+  await page.locator('#details-allocation-over-time').evaluate((el) => { el.open = true; });
+  await expect(page.locator('#allocationOverTimePreviewChart')).toBeAttached();
+  await expect(page.locator('#addAllocationOverTimeTier')).toBeVisible();
   // Find Best Plan sits above Investment Planning in the primary inputs column
   await expect(page.locator('#goalSeekMode')).toBeVisible();
   const goalSeekBeforeInvestment = await page.locator('#goalSeekMode').evaluate((el) => {

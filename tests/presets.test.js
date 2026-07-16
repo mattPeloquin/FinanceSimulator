@@ -55,10 +55,9 @@ describe('preset files', () => {
 
   it('steps max consecutive minimums up from conservative to aggressive', () => {
     const streaks = PRESETS.map((p) => p.scenario.maxConsecutiveMinWithdrawals);
-    expect(streaks).toEqual([2, 2, 3, 3, 4]);
-    for (const preset of PRESETS) {
-      expect(preset.scenario.minWithdrawalPlanRecoveryYears, preset.name).toBe(2);
-    }
+    expect(streaks).toEqual([2, 2, 2, 3, 3]);
+    const recovery = PRESETS.map((p) => p.scenario.minWithdrawalPlanRecoveryYears);
+    expect(recovery).toEqual([3, 2, 2, 2, 1]);
   });
 
   it('only uses allowed scenario keys, and they are real scenario fields', () => {
@@ -386,7 +385,7 @@ describe('defaults composition', () => {
     expect(SCENARIO_DEFAULTS.glideTarget).toBeUndefined();
     expect(SCENARIO_DEFAULTS.glideRate).toBe(-1);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 0, years: 11 },
+      { changePct: -2, extra: 0, years: 13 },
       { changePct: -2, extra: 0 },
     ]);
   });

@@ -46,13 +46,15 @@ export const themeTokens = {
     p65: { light: '13 148 136', dark: '45 212 191' },
   },
 
+  // Cohesive blue→teal→green family — deeper/richer (not chalky), similar
+  // chroma so neighbors don't clash. Shared by sparklines and the preview.
   chartAssets: {
-    us_lg_growth: '#4338ca',
-    us_lg_value: '#be123c',
-    us_sm_mid: '#0f766e',
-    ex_us: '#c2410c',
-    bond: '#16a34a',
-    cash: '#64748b',
+    us_lg_growth: '#2a6f9c',
+    us_lg_value: '#2a8490',
+    us_sm_mid: '#268a72',
+    ex_us: '#3f8a4a',
+    bond: '#4f9438',
+    cash: '#3d5f78',
   },
 };
 

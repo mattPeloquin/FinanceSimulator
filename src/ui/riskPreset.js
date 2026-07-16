@@ -43,6 +43,7 @@ import {
 import { syncBaseWithdrawalPreview } from './charts/basePreview.js';
 import { syncWithdrawalPreviewFromForm } from './charts/withdrawalPreview.js';
 import { syncGlidePreview } from './charts/glidePreview.js';
+import { syncAllocationPreview } from './charts/allocationPreview.js';
 
 // Guards the detach listeners while our own writes are in flight (belt and
 // suspenders — programmatic value writes don't fire events anyway, but tier
@@ -115,6 +116,7 @@ function refreshDependentUi(patch) {
   syncBaseWithdrawalPreview();
   syncWithdrawalPreviewFromForm();
   syncGlidePreview();
+  syncAllocationPreview();
 }
 
 function buildPresetPatch(level) {

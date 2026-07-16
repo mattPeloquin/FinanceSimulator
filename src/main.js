@@ -48,6 +48,7 @@ import {
 } from './ui/inputs.js';
 import { setupRiskPresetControl, syncRiskPresetUi } from './ui/riskPreset.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
+import { syncAllocationPreview } from './ui/charts/allocationPreview.js';
 import { renderResults } from './ui/results.js';
 import { openDialog, showAlert } from './ui/dialogs.js';
 
@@ -690,6 +691,7 @@ function applyScenario(scenario) {
   toggleGoalSeekMode(merged.goalSeekMode ?? false);
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
+  syncAllocationPreview();
   // Reflect the loaded scenario's slider state only — never re-apply the
   // preset patch here; the saved values are the truth.
   syncRiskPresetUi(merged);

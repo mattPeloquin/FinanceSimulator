@@ -183,6 +183,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     horizonRange,
     distMethod,
     allocation,
+    allocationSeries,
     blockSize,
     portfolio,
     dynConfig,
@@ -268,21 +269,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
   // Log-normal setup (only used when distMethod === 'lognormal').
   // Assets/inflation ordered to match the correlation Cholesky factor.
+  // Allocation weights are NOT cached here: Adjust allocation over time can
+  // glide the mix each year, so weights are read inside the year loop.
   let lnMuSigma = null;
   let lnChol = null;
-  let lnAlloc = null;
   let lnPhi = 0;
   let lnPrevZ = null;
   if (distMethod === 'lognormal') {
     lnMuSigma = getLogNormalMuSigmas(logNormal, LOGNORMAL_ASSET_ORDER);
-    lnAlloc = [
-      allocation.usLgGrowth,
-      allocation.usLgValue,
-      allocation.usSmMid,
-      allocation.exUs,
-      allocation.bond,
-      allocation.cash,
-    ];
     lnChol = logNormal.chol || null;
     // Block size drives year-to-year smoothing via an AR(1) on the standard
     // normals: φ = 1 − 1/blockSize (blockSize 1 ⇒ φ=0 ⇒ independent years).
@@ -291,7 +285,6 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
   // Smoothed Historical setup: target mean/stdDev per asset (same fields as log-normal).
   let shTargets = null;
-  let shAlloc = null;
   if (distMethod === 'scaledHistorical') {
     shTargets = [
       logNormal.usLgGrowth,
@@ -302,19 +295,24 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       logNormal.cash,
       logNormal.inflation,
     ];
-    shAlloc = [
-      allocation.usLgGrowth,
-      allocation.usLgValue,
-      allocation.usSmMid,
-      allocation.exUs,
-      allocation.bond,
-      allocation.cash,
-    ];
   }
 
   for (let j = 0; j < horizonYears; j++) {
     let portfolioReturn;
     let inflation;
+
+    // This year's portfolio mix: either the fixed Asset Allocation, or the
+    // interpolated weight from Adjust allocation over time (same series the
+    // preview chart uses).
+    const yearAlloc = allocationSeries?.[j] ?? allocation;
+    const yearAllocWeights = [
+      yearAlloc.usLgGrowth,
+      yearAlloc.usLgValue,
+      yearAlloc.usSmMid,
+      yearAlloc.exUs,
+      yearAlloc.bond,
+      yearAlloc.cash,
+    ];
 
     if (distMethod === 'lognormal') {
       // Fresh independent standard normals, then correlate across assets.
@@ -336,7 +334,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
       portfolioReturn = 0;
       for (let k = 0; k < 6; k++) {
-        portfolioReturn += applyLogNormalMuSigma(lnMuSigma[k].mu, lnMuSigma[k].sigma, z[k]) * lnAlloc[k];
+        portfolioReturn += applyLogNormalMuSigma(lnMuSigma[k].mu, lnMuSigma[k].sigma, z[k]) * yearAllocWeights[k];
       }
       inflation = applyLogNormalMuSigma(lnMuSigma[6].mu, lnMuSigma[6].sigma, z[6]);
     } else if (distMethod === 'scaledHistorical') {
@@ -351,7 +349,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       for (let k = 0; k < 6; k++) {
         const { mean, stdDev } = shTargets[k];
         const jitter = smoothing > 0 ? rng.normal() * smoothing * stdDev : 0;
-        portfolioReturn += (mean + z[k] * stdDev + jitter) * shAlloc[k];
+        portfolioReturn += (mean + z[k] * stdDev + jitter) * yearAllocWeights[k];
       }
       const inf = shTargets[6];
       const infJitter = smoothing > 0 ? rng.normal() * smoothing * inf.stdDev : 0;
@@ -376,12 +374,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       inflation = yearData.inflation / 100;
 
       portfolioReturn =
-        usLgGrowthReturn * allocation.usLgGrowth +
-        usLgValueReturn * allocation.usLgValue +
-        usSmMidReturn * allocation.usSmMid +
-        exUsReturn * allocation.exUs +
-        bondReturn * allocation.bond +
-        cashReturn * allocation.cash;
+        usLgGrowthReturn * yearAlloc.usLgGrowth +
+        usLgValueReturn * yearAlloc.usLgValue +
+        usSmMidReturn * yearAlloc.usSmMid +
+        exUsReturn * yearAlloc.exUs +
+        bondReturn * yearAlloc.bond +
+        cashReturn * yearAlloc.cash;
     }
 
     const startOfYearBalance = balance;

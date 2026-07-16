@@ -88,15 +88,32 @@ describe('migrateScenario', () => {
       ...s,
       presetActive: false,
       presetLevel: SCENARIO_DEFAULTS.presetLevel,
+      allocationOverTimeTiers: [],
     });
   });
-  it('leaves v5 scenarios untouched', () => {
+  it('adds an empty allocation-over-time schedule when migrating pre-v7 saves', () => {
     const s = {
       startBalance: 4000,
       presetActive: true,
       presetLevel: 4,
     };
-    expect(migrateScenario(s, 5)).toEqual(s);
+    expect(migrateScenario(s, 5)).toEqual({
+      ...s,
+      allocationOverTimeTiers: [],
+    });
+    expect(migrateScenario(s, 6)).toEqual({
+      ...s,
+      allocationOverTimeTiers: [],
+    });
+  });
+  it('leaves v7 scenarios untouched', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 4,
+      allocationOverTimeTiers: [],
+    };
+    expect(migrateScenario(s, 7)).toEqual(s);
   });
   it('detaches any schema version that omits Easy Mode', () => {
     expect(migrateScenario({ startBalance: 1000 }, 6)).toMatchObject({
@@ -130,6 +147,36 @@ describe('buildSimParams', () => {
     expect(p.portfolio.start).toBe(s.startBalance * MONEY_SCALE);
     expect(p.portfolio.floorPenalty).toBeCloseTo(0.5, 6);
     expect(p.dynConfig.high.adj).toBe(s.dynHighAdj * MONEY_SCALE);
+    // Default one tier matches the static mix → flat series every year.
+    expect(p.allocationSeries).toHaveLength(p.maxYears);
+    expect(p.allocationSeries[0].usLgGrowth).toBeCloseTo(p.allocation.usLgGrowth);
+    expect(p.allocationSeries[p.allocationSeries.length - 1].usLgGrowth).toBeCloseTo(
+      p.allocation.usLgGrowth,
+    );
+  });
+
+  it('builds an interpolated allocationSeries when over-time tiers are set', () => {
+    const s = simScenario();
+    s.numYears = 10;
+    s.usLgGrowthAllocation = 100;
+    s.usLgValueAllocation = 0;
+    s.usSmMidAllocation = 0;
+    s.exUsAllocation = 0;
+    s.bondAllocation = 0;
+    s.cashAllocation = 0;
+    s.allocationOverTimeTiers = [{
+      usLgGrowthAllocation: 0,
+      usLgValueAllocation: 0,
+      usSmMidAllocation: 0,
+      exUsAllocation: 0,
+      bondAllocation: 100,
+      cashAllocation: 0,
+    }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.allocationSeries[0].usLgGrowth).toBeCloseTo(1);
+    expect(p.allocationSeries[0].bond).toBeCloseTo(0);
+    expect(p.allocationSeries[5].bond).toBeCloseTo(0.5, 5);
+    expect(p.allocationSeries[9].bond).toBeCloseTo(0.9, 5);
   });
 
   it('maps a blank glide target to null (lever off) and a typed value to dollars', () => {

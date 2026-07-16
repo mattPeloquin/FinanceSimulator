@@ -258,6 +258,24 @@
         <div class="text-left">
             <p class="text-xs font-semibold">Total: <span id="totalAllocation">100</span>%</p>
         </div>
+
+        <!-- Optional glide from the mix above toward later target mixes -->
+        <div class="mt-6 pt-4 border-theme-border">
+            <details id="details-allocation-over-time" class="group border rounded-lg border-theme-border bg-theme-surface shadow-sm">
+                <summary class="cursor-pointer select-none px-4 py-3 text-xs font-semibold text-theme-body flex items-center justify-between">
+                    <span>Adjust allocation over time</span>
+                    <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-4 pb-4 pt-1 border-t border-theme-border space-y-3">
+                    <p class="text-[10px] text-theme-faint mt-2">Asset Allocation above is year 0. Each tier below is a later target mix — the plan glides linearly between them. Intermediate <strong>Years</strong> is how long the glide to that tier takes; the last tier covers remaining years. Keep one tier that matches your starting mix for a flat allocation. Each tier’s categories must sum to 100%.</p>
+                    <div id="allocationOverTimeTiersList" class="space-y-2"></div>
+                    <button type="button" id="addAllocationOverTimeTier" class="text-xs font-medium text-theme-accent hover:underline">Add tier</button>
+                    <div id="allocation-over-time-preview" class="relative h-40 bg-theme-surface rounded-md border border-theme-border">
+                        <canvas id="allocationOverTimePreviewChart" class="absolute inset-0 w-full h-full p-1"></canvas>
+                    </div>
+                </div>
+            </details>
+        </div>
     </div>
 
 

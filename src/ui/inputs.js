@@ -1,6 +1,23 @@
 // DOM wiring for the input form. Keeps the form's interactive behaviours in one
 // place; the canonical values still live in the scenario state model.
-import { ALLOCATION_KEYS, parseCurrency, readWithdrawalFloorsFromDom, writeWithdrawalFloorsToDom, readSpecificWithdrawalFloorsFromDom, writeSpecificWithdrawalFloorsToDom, readGiftingTiersFromDom, writeGiftingTiersToDom, readSpendingOverTimeTiersFromDom, writeSpendingOverTimeTiersToDom, readMajorEventsFromDom, writeMajorEventsToDom } from '../state/scenario.js';
+import {
+  ALLOCATION_KEYS,
+  parseCurrency,
+  readWithdrawalFloorsFromDom,
+  writeWithdrawalFloorsToDom,
+  readSpecificWithdrawalFloorsFromDom,
+  writeSpecificWithdrawalFloorsToDom,
+  readGiftingTiersFromDom,
+  writeGiftingTiersToDom,
+  readSpendingOverTimeTiersFromDom,
+  writeSpendingOverTimeTiersToDom,
+  readMajorEventsFromDom,
+  writeMajorEventsToDom,
+  readAllocationOverTimeTiersFromDom,
+  writeAllocationOverTimeTiersToDom,
+  readStaticAllocationFromDom,
+  refreshAllocationOverTimeTierTotals,
+} from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
@@ -9,6 +26,7 @@ import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
 import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
+import { syncAllocationPreview } from './charts/allocationPreview.js';
 import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
@@ -36,6 +54,9 @@ export function setupAccordionResize() {
       if (details.id === 'section-withdrawal') {
         syncBaseWithdrawalPreview();
         syncWithdrawalPreviewFromForm();
+      }
+      if (details.id === 'section-investment' || details.id === 'details-allocation-over-time') {
+        syncAllocationPreview();
       }
     });
   });
@@ -405,6 +426,43 @@ export function setupSpendingOverTimeTierList({ onChange }) {
   }, true);
 }
 
+export function setupAllocationOverTimeTierList({ onChange }) {
+  const list = document.getElementById('allocationOverTimeTiersList');
+  const addBtn = document.getElementById('addAllocationOverTimeTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readAllocationOverTimeTiersFromDom();
+    const last = tiers.pop() || readStaticAllocationFromDom();
+    const lastMix = {};
+    for (const key of ALLOCATION_KEYS) lastMix[key] = last[key] ?? 0;
+    tiers.push({ ...lastMix, years: 1 });
+    tiers.push(lastMix);
+    writeAllocationOverTimeTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-allocation-over-time-tier');
+    if (!btn) return;
+    const tiers = readAllocationOverTimeTiersFromDom();
+    if (tiers.length <= 1) return;
+    tiers.splice(Number(btn.closest('[data-allocation-tier-row]')?.dataset.allocationTierRow), 1);
+    writeAllocationOverTimeTiersToDom(tiers);
+    notify();
+  });
+
+  list.addEventListener('input', (e) => {
+    if (e.target.matches('[data-allocation-key]')) {
+      refreshAllocationOverTimeTierTotals();
+    }
+    notify();
+  });
+  list.addEventListener('change', notify);
+}
+
 export function setupGiftingTierList({ onChange }) {
   const list = document.getElementById('giftingTiersList');
   const addBtn = document.getElementById('addGiftingTier');
@@ -528,6 +586,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   document.querySelectorAll('.allocation-input').forEach((input) => {
     input.addEventListener('input', () => {
       updateAllocationTotal();
+      syncAllocationPreview();
       notify();
     });
   });
@@ -723,8 +782,20 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   setupWithdrawalFloorList({ onChange: notify });
   setupSpecificWithdrawalFloorList({ onChange: notify });
   setupSpendingOverTimeTierList({ onChange: notify });
+  setupAllocationOverTimeTierList({
+    onChange: () => {
+      syncAllocationPreview();
+      notify();
+    },
+  });
   setupGiftingTierList({ onChange: notify });
   setupMajorEventsList({ onChange: notify });
+
+  const numYearsEl = document.getElementById('numYears');
+  if (numYearsEl) {
+    numYearsEl.addEventListener('change', syncAllocationPreview);
+    numYearsEl.addEventListener('input', syncAllocationPreview);
+  }
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever
   // a tier is typed into, added, or removed. Registered after
