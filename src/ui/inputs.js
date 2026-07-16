@@ -194,16 +194,16 @@ export function toggleWithdrawalStrategy(strategy) {
 }
 
 // Maps each "include in search" checkbox id to the input field(s) it takes
-// over while Goal Seek mode is on. Each checkbox covers every spending lever
-// that's actually inside its own <details> section: Market adjustment
-// includes the Low/High $ adjustments AND the no-cut balance threshold —
-// but NOT the Expected adjustment, which stays user-editable and fixed
-// (on plan at the expected return means adjustment 0); Balance adjustment
-// includes the floor/ceiling balance thresholds AND their cut/boost rates.
+// over while Goal Seek mode is on. Each checkbox covers the levers Goal Seek
+// actually chooses: Market adjustment includes the Low/High $ adjustments AND
+// the no-cut balance threshold — but NOT the Expected adjustment, which stays
+// user-editable and fixed (on plan at the expected return means adjustment 0);
+// Balance adjustment tunes Max Cut / Boost Rate only — Floor/Ceiling dollars
+// stay Easy Mode / user-editable.
 const GOAL_SEEK_LEVER_FIELDS = {
   goalSeekIncludeBaseWithdrawal: ['baseWithdrawal'],
   goalSeekIncludeMarketAdjustments: ['dynLowAdj', 'dynHighAdj', 'dynNoCutBal'],
-  goalSeekIncludeBalanceOverrides: ['floorBalance', 'ceilingBalance', 'floorPenalty', 'ceilingBonus'],
+  goalSeekIncludeBalanceOverrides: ['floorPenalty', 'ceilingBonus'],
   // The search pins the glide target to Goal Seek's Target Ending Balance and
   // tunes the spend rate; the assumed return stays user-editable.
   goalSeekIncludeGlidePath: ['glideTarget', 'glideFraction'],

@@ -284,11 +284,10 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
     setCurrencyField('dynNoCutBal', summary.marketNoCutBalance);
   }
 
+  // Floor/Ceiling dollars stay Easy Mode / user-owned — Find Best Plan only
+  // tunes Max Cut / Boost Rate against those fixed thresholds.
   if (summary.balanceAdjustment) {
-    const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
-    setCurrencyField('floorBalance', floorBalance);
-    setCurrencyField('ceilingBalance', ceilingBalance);
-
+    const { floorPenalty, ceilingBonus } = summary.balanceAdjustment;
     const floorPenaltyEl = document.getElementById('floorPenalty');
     if (floorPenaltyEl) floorPenaltyEl.value = Math.round(floorPenalty * 100);
     const ceilingBonusEl = document.getElementById('ceilingBonus');

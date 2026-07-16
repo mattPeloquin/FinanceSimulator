@@ -328,9 +328,11 @@ function makeParams(overrides = {}) {
       strategy: 'base',
       start: 2_000_000,
       base: 80_000,
-      floorBalance: 0,
+      // Easy Mode–style active bands (0.8× / 1.2× start) so Balance rate
+      // search has thresholds to tune against by default.
+      floorBalance: 1_600_000,
       floorPenalty: 0,
-      ceilingBalance: Infinity,
+      ceilingBalance: 2_400_000,
       ceilingBonus: 0,
       withdrawalFloorSeries: new Array(25).fill(0),
       spendingOverTimeSeries: spendingSeries(25, [
@@ -579,9 +581,8 @@ describe('runGoalSeek', () => {
 
   it('on early infeasible exit, still returns neutralized guardrail levers for the form', async () => {
     // High minimum floor + unreachable ending target → fails the min-base
-    // feasibility check before any lever search. The summary must still carry
-    // the pinned/neutralized balance-adjustment band so the UI can clear a
-    // previous run's guardrails instead of leaving them stale.
+    // feasibility check before any lever search. Thresholds stay as provided;
+    // rates are clamped to the mildest grid mins for write-back.
     const minWithdrawal = 80_000;
     const params = makeParams({
       portfolio: {
@@ -613,8 +614,8 @@ describe('runGoalSeek', () => {
     // write-back (same "never stay at $0" rule as a successful search).
     expect(summary.marketAdjustments).toEqual({ low: -4000, med: 0, high: 8000 });
     expect(summary.marketNoCutBalance).toBeUndefined();
-    expect(summary.balanceAdjustment.floorBalance).toBe(100_000); // 0.1 × start
-    expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000); // 2.0 × start
+    expect(summary.balanceAdjustment.floorBalance).toBe(999_000);
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000);
     expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
     expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
     // Glide target is the RT-discounted Goal Seek target (default 20% → 40M).
@@ -666,11 +667,11 @@ describe('runGoalSeek', () => {
       expect(value % 1000 === 0).toBe(true);
     }
     expect(summary.marketNoCutBalance === null || summary.marketNoCutBalance % 1000 === 0).toBe(true);
-    expect(summary.balanceAdjustment.floorBalance % 1000 === 0).toBe(true);
-    expect(summary.balanceAdjustment.floorBalance).toBeGreaterThan(0);
-    expect(summary.balanceAdjustment.ceilingBalance % 1000 === 0).toBe(true);
-    expect(Number.isFinite(summary.balanceAdjustment.ceilingBalance)).toBe(true);
-    expect(summary.balanceAdjustment.ceilingBalance).toBeGreaterThan(0);
+    // Thresholds are echoed unchanged (not searched); rates are tuned.
+    expect(summary.balanceAdjustment.floorBalance).toBe(params.portfolio.floorBalance);
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(params.portfolio.ceilingBalance);
+    expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
   });
 
   it('optionally tunes early-years bonus alongside the base withdrawal', async () => {
@@ -775,9 +776,17 @@ describe('runGoalSeek', () => {
     expect(high).toBeGreaterThanOrEqual(med);
   });
 
-  it('tunes floor/ceiling balance and their cut/boost rates together', async () => {
-    const params = makeParams();
-    const { summary } = await seek(params, {
+  it('preserves Floor/Ceiling dollars and tunes cut/boost rates only', async () => {
+    const params = makeParams({
+      portfolio: {
+        ...makeParams().portfolio,
+        floorBalance: 1_200_000,
+        ceilingBalance: 2_800_000,
+        floorPenalty: 0.4,
+        ceilingBonus: 0.4,
+      },
+    });
+    const { summary, params: finalParams } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeSpendingOverTime: false,
@@ -789,22 +798,29 @@ describe('runGoalSeek', () => {
     });
     expect(summary.feasible).toBe(true);
     const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
-    expect(floorBalance).toBeGreaterThan(0);
-    expect(Number.isFinite(ceilingBalance)).toBe(true);
-    // Ceiling pins to the highest default multiple (2.0x of the 2M start).
-    expect(ceilingBalance).toBe(4_000_000);
-    expect(floorBalance).toBe(200_000);
+    expect(floorBalance).toBe(1_200_000);
+    expect(ceilingBalance).toBe(2_800_000);
+    expect(finalParams.portfolio.floorBalance).toBe(1_200_000);
+    expect(finalParams.portfolio.ceilingBalance).toBe(2_800_000);
     expect(floorPenalty).toBeGreaterThan(0);
     expect(floorPenalty).toBeLessThanOrEqual(1);
     expect(ceilingBonus).toBeGreaterThan(0);
     expect(ceilingBonus).toBeLessThanOrEqual(1);
   });
 
-  it('pins floor to the lowest balance band and ceiling to the highest, then tunes cut/boost rates', async () => {
+  it('keeps custom Floor/Ceiling fixed across re-solve rate scoring', async () => {
     const params = makeParams({
-      portfolio: { ...makeParams().portfolio, start: 1_500_000 },
+      numYears: 30,
+      numSimulations: 600,
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_500_000,
+        floorBalance: 900_000,
+        ceilingBalance: 1_800_000,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+      },
     });
-    const { params: finalParams, summary } = await seek(params, {
+    const { summary, params: finalParams } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
       includeSpendingOverTime: false,
@@ -812,57 +828,57 @@ describe('runGoalSeek', () => {
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
       maxRounds: 2,
-      floorMultiples: [0, 0.5, 1],
-      ceilingMultiples: [0, 0.5, 1, 2],
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
     });
 
     expect(summary.feasible).toBe(true);
-    expect(summary.balanceAdjustment.floorBalance).toBe(750_000);
-    expect(summary.balanceAdjustment.ceilingBalance).toBe(3_000_000);
-    expect(finalParams.portfolio.floorBalance).toBe(750_000);
-    expect(finalParams.portfolio.ceilingBalance).toBe(3_000_000);
+    expect(summary.balanceAdjustment.floorBalance).toBe(900_000);
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(1_800_000);
+    expect(finalParams.portfolio.floorBalance).toBe(900_000);
+    expect(finalParams.portfolio.ceilingBalance).toBe(1_800_000);
     expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
     expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
   });
 
-  // Regression: balance thresholds stay pinned to the widest band and max
-  // cut / boost rate are scored with the base re-solved (not stuck at 0% because
-  // the partner threshold was searched independently).
-  it('pins guardrail thresholds and searches cut/boost rates with re-solve scoring', async () => {
+  it('skips rate search when Floor/Ceiling thresholds are off', async () => {
     const params = makeParams({
-      numYears: 30,
-      numSimulations: 600,
       portfolio: {
         ...makeParams().portfolio,
-        start: 1_500_000,
-        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+        floorBalance: 0,
+        floorPenalty: 0.55,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0.55,
       },
     });
-    const { summary } = await seek(params, {
+    const { summary, params: finalParams } = await seek(params, {
       targetEndingBalance: 0,
-      desiredSuccessRate: 0.75,
+      desiredSuccessRate: 0.8,
       includeSpendingOverTime: false,
       includeMarketAdjustments: false,
       includeBalanceOverrides: true,
-      searchNumSimulations: 600,
-      maxRounds: 3,
-      floorMultiples: [0, 0.5, 1],
-      ceilingMultiples: [0, 1, 2],
-      penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 25 },
+      searchNumSimulations: 300,
+      maxRounds: 1,
+      ...FAST_LEVER_GRIDS,
     });
 
     expect(summary.feasible).toBe(true);
-    const { floorBalance, ceilingBalance, floorPenalty, ceilingBonus } = summary.balanceAdjustment;
-    expect(floorBalance).toBe(750_000);
-    expect(ceilingBalance).toBe(3_000_000);
-    expect(floorPenalty).toBeGreaterThan(0);
-    expect(ceilingBonus).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.floorBalance).toBe(0);
+    expect(summary.balanceAdjustment.ceilingBalance).toBeNull();
+    // Off thresholds: rates are not reset or searched — input values kept.
+    expect(summary.balanceAdjustment.floorPenalty).toBe(0.55);
+    expect(summary.balanceAdjustment.ceilingBonus).toBe(0.55);
+    expect(finalParams.portfolio.floorBalance).toBe(0);
+    expect(finalParams.portfolio.ceilingBalance).toBe(Infinity);
   });
 
   it('never returns 0% max cut when risk tolerance is below the grid step', async () => {
     const params = makeParams({
-      portfolio: { ...makeParams().portfolio, start: 1_500_000 },
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_500_000,
+        floorBalance: 1_200_000,
+        ceilingBalance: 1_800_000,
+      },
     });
     const { summary } = await seek(params, {
       targetEndingBalance: 0,
@@ -881,6 +897,8 @@ describe('runGoalSeek', () => {
     expect(summary.balanceAdjustment.floorPenalty).toBe(0.1);
     expect(summary.balanceAdjustment.floorPenalty).toBeLessThanOrEqual(0.125);
     expect(summary.balanceAdjustment.ceilingBonus).toBeGreaterThan(0);
+    expect(summary.balanceAdjustment.floorBalance).toBe(1_200_000);
+    expect(summary.balanceAdjustment.ceilingBalance).toBe(1_800_000);
   });
 
   // Regression test for the fixed-base scoring bug: since a spending cut only
@@ -896,7 +914,13 @@ describe('runGoalSeek', () => {
     const baseParams = makeParams({
       numYears: 30,
       numSimulations: 600,
-      portfolio: { ...makeParams().portfolio, start: 1_500_000, spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]) },
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_500_000,
+        floorBalance: 1_200_000,
+        ceilingBalance: 1_800_000,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+      },
     });
     const sharedConfig = {
       targetEndingBalance: 0,
@@ -1082,7 +1106,7 @@ describe('runGoalSeek', () => {
     expect(resultA.summary.spendingOverTimeBonus).toBe(resultB.summary.spendingOverTimeBonus);
   });
 
-  it('finds the same base withdrawal regardless of pre-existing market/balance settings', async () => {
+  it('finds the same base withdrawal regardless of pre-existing market/balance rate settings', async () => {
     const config = {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
@@ -1095,8 +1119,8 @@ describe('runGoalSeek', () => {
     };
 
     const paramsA = makeParams();
-    // Only fields the search neutralizes may differ: the Expected (med)
-    // adjustment is the user's fixed anchor, so it stays identical in both.
+    // Thresholds stay fixed (same in both). Only neutralized rate / market
+    // fields may differ; Expected (med) stays the user's fixed anchor.
     const paramsB = makeParams({
       dynConfig: {
         enabled: true,
@@ -1105,7 +1129,11 @@ describe('runGoalSeek', () => {
         high: { ret: 20, adj: 90_000 },
         noCutBal: 4_000_000,
       },
-      portfolio: { ...makeParams().portfolio, floorBalance: 3_000_000, floorPenalty: 0.9, ceilingBalance: 3_500_000, ceilingBonus: 0.9 },
+      portfolio: {
+        ...makeParams().portfolio,
+        floorPenalty: 0.9,
+        ceilingBonus: 0.9,
+      },
     });
 
     const resultA = await seek(paramsA, config);
@@ -1120,7 +1148,13 @@ describe('runGoalSeek', () => {
     const params = makeParams({
       numYears: 30,
       numSimulations: 600,
-      portfolio: { ...makeParams().portfolio, start: 1_500_000, spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]) },
+      portfolio: {
+        ...makeParams().portfolio,
+        start: 1_500_000,
+        floorBalance: 1_200_000,
+        ceilingBalance: 1_800_000,
+        spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+      },
     });
     const shared = {
       targetEndingBalance: 0,
@@ -1130,7 +1164,6 @@ describe('runGoalSeek', () => {
       includeBalanceOverrides: true,
       searchNumSimulations: 600,
       maxRounds: 2,
-      balanceMultiples: [0, 0.5, 1],
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
     };
 

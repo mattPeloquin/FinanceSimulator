@@ -29,6 +29,10 @@ Each file has two sections:
   - `targetEndingBalancePctOfStart` — Find Best Plan target ending balance = % of start;
     also writes `glideTarget` to the same value so the Glide-path Target field
     tracks Easy Mode before a search runs
+  - `floorBalanceMultipleOfStart` / `ceilingBalanceMultipleOfStart` — Balance
+    adjustment Floor/Ceiling dollars = multiple × start. Always applied under
+    Easy Mode (Find Best Plan on or off); Find Best Plan keeps these fixed and
+    only tunes Max Cut / Boost Rate when that lever is included
   - `glideRate` (in `scenario`) — glide-path spend timing (-2 = later … 0 = sooner);
     Conservative is one tick later, Aggressive one tick sooner, the middle three at -1
   - `maxConsecutiveMinWithdrawals` / `minWithdrawalPlanRecoveryYears` (in
@@ -37,8 +41,7 @@ Each file has two sections:
     Aggressive (4 / 2) — higher risk levels tolerate longer belt-tightening;
     either 0 turns the feature off
   - **Spending plan (Easy Mode + Find Best Plan off):** `baseWithdrawalPctOfStart`
-    (4.0–6.0% in 0.5 steps), `floorBalanceMultipleOfStart` /
-    `ceilingBalanceMultipleOfStart`, `floorPenalty`, `ceilingBonus`,
+    (4.0–6.0% in 0.5 steps), `floorPenalty`, `ceilingBonus`,
     `dynAdjPctOfBase.low/med/high` (% of base withdrawal), `spendingExtraPctOfBase`
     (tier-0 go-go extra as % of base), `glideFraction`
   - `specificMinPctOfPlan` — Specific List Easy Mode minimum: tier-0
@@ -48,6 +51,8 @@ Each file has two sections:
 
 When **Use easy mode** is on and **Find Best Plan** is off, the slider fills the full
 spending plan from those derived keys (Base strategy) or the shared guardrail/
-adjustment fields only (Specific List). With Find Best Plan on, the slider configures
-the search (success target, levers, allocations, triggers) and the search finds
-the plan when you click **Find Best Plan** — Easy Mode never toggles that mode on or off.
+adjustment fields only (Specific List). With Find Best Plan on, the slider still
+sets Floor/Ceiling thresholds (and configures the search: success target, levers,
+allocations, triggers); the search finds the plan — including Max Cut / Boost Rate
+when Balance adjustment is included — when you click **Find Best Plan**. Easy Mode
+never toggles that mode on or off.

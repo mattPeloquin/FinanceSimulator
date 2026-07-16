@@ -422,15 +422,29 @@ function minGlideFraction(config) {
   return resolveGlideFractions(config)[0];
 }
 
+function isFloorThresholdActive(portfolio) {
+  return Number.isFinite(portfolio.floorBalance) && portfolio.floorBalance > 0;
+}
+
+function isCeilingThresholdActive(portfolio) {
+  return Number.isFinite(portfolio.ceilingBalance) && portfolio.ceilingBalance > 0;
+}
+
+// Only clamp rates whose matching Floor/Ceiling threshold is active — off
+// thresholds are left alone so Include-in-search never invents guardrails.
 function clampBalanceAdjustmentRates(config, portfolio) {
-  portfolio.floorPenalty = Math.max(
-    portfolio.floorPenalty,
-    minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config)),
-  );
-  portfolio.ceilingBonus = Math.max(
-    portfolio.ceilingBonus,
-    minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config)),
-  );
+  if (isFloorThresholdActive(portfolio)) {
+    portfolio.floorPenalty = Math.max(
+      portfolio.floorPenalty,
+      minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config)),
+    );
+  }
+  if (isCeilingThresholdActive(portfolio)) {
+    portfolio.ceilingBonus = Math.max(
+      portfolio.ceilingBonus,
+      minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config)),
+    );
+  }
 }
 
 function clampGlideFraction(config, portfolio) {
@@ -497,26 +511,6 @@ function perCandidateCost(config) {
   return config.pinBaseWithdrawal ? PINNED_PER_CANDIDATE_COST : PER_CANDIDATE_COST;
 }
 
-// Balance-override search pins the widest guardrail band (lowest floor, highest
-// ceiling) and tunes only max cut / boost rate — off (0× / Infinity) is excluded.
-function balanceOverrideFloorMultiples(config) {
-  return (config.floorMultiples || DEFAULT_FLOOR_MULTIPLES).filter((m) => m > 0);
-}
-
-function balanceOverrideCeilingMultiples(config) {
-  return (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).filter((m) => m > 0);
-}
-
-function pinnedBalanceOverrideFloor(start, config) {
-  const multiples = balanceOverrideFloorMultiples(config);
-  return roundToThousand(start * Math.min(...multiples));
-}
-
-function pinnedBalanceOverrideCeiling(start, config) {
-  const multiples = balanceOverrideCeilingMultiples(config);
-  return roundToThousand(start * Math.max(...multiples));
-}
-
 function estimateEvalBudget(params, config) {
   const ceilingMultiplesLen = (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).length;
   const marketDownAdjLen = gridLength(resolveMarketDownAdjGrid(config));
@@ -565,7 +559,9 @@ function estimateEvalBudget(params, config) {
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/HighAdj AND dynNoCutBal;
 //                              dynMedAdj is never searched (fixed as typed)
-//   includeBalanceOverrides    bool — covers floorBalance/ceilingBalance/floorPenalty/ceilingBonus
+//   includeBalanceOverrides    bool — keeps Floor/Ceiling dollars fixed (Easy Mode
+//                              or user-typed); tunes floorPenalty/ceilingBonus only
+//                              when the matching threshold is active
 //   includeGlidePath           bool — covers glideFraction; the glide target is
 //                              pinned to the RT-discounted targetEndingBalance and
 //                              glideRate stays as typed
@@ -573,9 +569,8 @@ function estimateEvalBudget(params, config) {
 //   searchNumSimulations       optional override of the reduced sim count
 //   marketDownAdjGrid          optional { minPct, maxPct, stepPct } for dynLowAdj
 //   marketUpAdjGrid            optional { minPct, maxPct, stepPct } for dynHighAdj
-//   floorMultiples             optional array of starting-balance multiples for the floor threshold
 //   ceilingMultiples           optional array of starting-balance multiples for the
-//                              ceiling threshold and the dynNoCutBal grid
+//                              dynNoCutBal grid (market lever)
 //   floorPenaltyGrid           optional { minPct, maxPct, stepPct } — full max before envelope scale
 //   ceilingBonusGrid           optional { minPct, maxPct, stepPct }
 export async function runGoalSeek(params, config, simulateAsync, { onProgress } = {}) {
@@ -696,10 +691,15 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     working.dynConfig.noCutBal = null;
   }
   if (config.includeBalanceOverrides) {
-    working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
-    working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
-    working.portfolio.floorPenalty = minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config));
-    working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config));
+    // Floor/Ceiling dollars stay as provided (Easy Mode or user). Only the
+    // cut/boost rates for active thresholds are reset to the mildest grid min
+    // before Phase 1 / tuning rounds.
+    if (isFloorThresholdActive(working.portfolio)) {
+      working.portfolio.floorPenalty = minBalanceAdjustmentFraction(resolveFloorPenaltyGrid(config));
+    }
+    if (isCeilingThresholdActive(working.portfolio)) {
+      working.portfolio.ceilingBonus = minBalanceAdjustmentFraction(resolveCeilingBonusGrid(config));
+    }
   }
   if (config.includeGlidePath) {
     // Glide target is the Risk-Tolerance-discounted Goal Seek target so legacy
@@ -735,13 +735,16 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   const feasibleAtMinBase = await meetsTarget('Checking feasibility');
 
   if (!feasibleAtMinBase) {
-    // Still write back the neutralized / pinned lever state so the form does
-    // not keep showing a previous run's guardrails and adjustments after this
-    // early exit. The no-cut balance threshold is omitted on purpose: it was
-    // cleared to null for the search, and blanking it would wipe the
-    // preset-derived dynNoCutBal value the user just loaded.
+    // Still write back the neutralized lever state so the form does not keep
+    // showing a previous run's adjustments after this early exit. The no-cut
+    // balance threshold is omitted on purpose: it was cleared to null for the
+    // search, and blanking it would wipe the preset-derived dynNoCutBal value
+    // the user just loaded. Floor/Ceiling dollars are never rewritten.
     if (config.includeMarketAdjustments) {
       clampMarketAdjustments(config, working.dynConfig, baseLowerBound);
+    }
+    if (config.includeBalanceOverrides) {
+      clampBalanceAdjustmentRates(config, working.portfolio);
     }
     if (config.includeGlidePath) {
       clampGlideFraction(config, working.portfolio);
@@ -1024,28 +1027,30 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
 
     if (config.includeBalanceOverrides) {
-      working.portfolio.floorBalance = pinnedBalanceOverrideFloor(params.portfolio.start, config);
-      working.portfolio.ceilingBalance = pinnedBalanceOverrideCeiling(params.portfolio.start, config);
+      // Thresholds stay fixed; search only the rate for each active band.
+      if (isFloorThresholdActive(working.portfolio)) {
+        const penaltyGrid = buildBalanceAdjustmentFractionGrid(resolveFloorPenaltyGrid(config));
+        await pickBestCandidateWithResolve(
+          penaltyGrid,
+          (value) => {
+            working.portfolio.floorPenalty = value;
+          },
+          'Tuning floor max cut',
+          working.portfolio.floorPenalty,
+        );
+      }
 
-      const penaltyGrid = buildBalanceAdjustmentFractionGrid(resolveFloorPenaltyGrid(config));
-      await pickBestCandidateWithResolve(
-        penaltyGrid,
-        (value) => {
-          working.portfolio.floorPenalty = value;
-        },
-        'Tuning floor max cut',
-        working.portfolio.floorPenalty,
-      );
-
-      const bonusRateGrid = buildBalanceAdjustmentFractionGrid(resolveCeilingBonusGrid(config));
-      await pickBestCandidateWithResolve(
-        bonusRateGrid,
-        (value) => {
-          working.portfolio.ceilingBonus = value;
-        },
-        'Tuning ceiling boost rate',
-        working.portfolio.ceilingBonus,
-      );
+      if (isCeilingThresholdActive(working.portfolio)) {
+        const bonusRateGrid = buildBalanceAdjustmentFractionGrid(resolveCeilingBonusGrid(config));
+        await pickBestCandidateWithResolve(
+          bonusRateGrid,
+          (value) => {
+            working.portfolio.ceilingBonus = value;
+          },
+          'Tuning ceiling boost rate',
+          working.portfolio.ceilingBonus,
+        );
+      }
 
       clampBalanceAdjustmentRates(config, working.portfolio);
     }

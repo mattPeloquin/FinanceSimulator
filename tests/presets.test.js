@@ -186,15 +186,19 @@ describe('computeDerivedPresetValues', () => {
     expect(out.spendingOverTimeTiers[0].extra).toBe(33);
   });
 
-  it('omits plan fields when includePlanFields is false', () => {
+  it('omits plan fields when includePlanFields is false but still sets Floor/Ceiling', () => {
     const out = computeDerivedPresetValues(balanced, {
       startThousands: 2000,
       numYears: 25,
       includePlanFields: false,
     });
     expect(out.baseWithdrawal).toBeUndefined();
-    expect(out.floorBalance).toBeUndefined();
+    expect(out.floorPenalty).toBeUndefined();
+    expect(out.ceilingBonus).toBeUndefined();
     expect(out.glideFraction).toBeUndefined();
+    // Thresholds stay Easy Mode–owned even with Find Best Plan on.
+    expect(out.floorBalance).toBe(1600);
+    expect(out.ceilingBalance).toBe(2400);
   });
 
   it('scales the derived amounts with the starting balance and horizon', () => {
@@ -366,7 +370,9 @@ describe('defaults composition', () => {
     // Plan scalars may appear as zero/blank seeds for detached mode; presets own
     // the live values while Easy Mode is on (Goal Seek off).
     expect(BASE_DEFAULTS.baseWithdrawal).toBe(0);
-    expect(BASE_DEFAULTS.floorBalance).toBe(0);
+    expect(BASE_DEFAULTS.floorPenalty).toBe(50);
+    expect(Object.hasOwn(BASE_DEFAULTS, 'floorBalance')).toBe(false);
+    expect(Object.hasOwn(BASE_DEFAULTS, 'ceilingBalance')).toBe(false);
     expect(Object.hasOwn(BASE_DEFAULTS, 'withdrawalFloors')).toBe(false);
     expect(Object.hasOwn(BASE_DEFAULTS, 'giftingTiers')).toBe(false);
     expect(BASE_DEFAULTS.startBalance).toBe('');
@@ -383,6 +389,8 @@ describe('defaults composition', () => {
     expect(SCENARIO_DEFAULTS.withdrawalFloors).toBeUndefined();
     expect(SCENARIO_DEFAULTS.goalSeekTargetEndingBalance).toBeUndefined();
     expect(SCENARIO_DEFAULTS.glideTarget).toBeUndefined();
+    expect(SCENARIO_DEFAULTS.floorBalance).toBeUndefined();
+    expect(SCENARIO_DEFAULTS.ceilingBalance).toBeUndefined();
     expect(SCENARIO_DEFAULTS.glideRate).toBe(-1);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
       { changePct: -2, extra: 0, years: 13 },

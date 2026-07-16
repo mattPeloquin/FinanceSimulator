@@ -65,14 +65,16 @@ export const PRESET_DERIVED_SCALAR_KEYS = [
   // to that value when the lever is included, and Easy Mode should show the
   // same number in the Glide-path Target field before a search runs.
   'glideTarget',
+  // Balance Floor/Ceiling dollars stay Easy Mode–owned even when Find Best
+  // Plan is on; Goal Seek only tunes Max Cut / Boost Rate against them.
+  'floorBalance',
+  'ceilingBalance',
 ];
 
 // Spending-plan scalars computed from derived formulas when Easy Mode is on
 // and Goal Seek is off (or for unit tests with includePlanFields).
 export const PRESET_PLAN_SCALAR_KEYS = [
   'baseWithdrawal',
-  'floorBalance',
-  'ceilingBalance',
   'floorPenalty',
   'ceilingBonus',
   'dynLowAdj',
@@ -135,10 +137,12 @@ function isPositiveFinite(n) {
  *                        (specificMinPctOfPlan), not absolute $; spending-over-
  *                        time tiers are not patched.
  *   includePlanFields — when true and start > 0, also compute the full spending
- *                       plan (base withdrawal, guardrails, adjustments, glide
- *                       fraction, tier-0 extra). Used when Easy Mode is on and
- *                       Goal Seek is off. Under Specific List, shared plan
- *                       fields only (no base withdrawal or spending extras).
+ *                       plan (base withdrawal, cut/boost rates, adjustments,
+ *                       glide fraction, tier-0 extra). Used when Easy Mode is
+ *                       on and Goal Seek is off. Floor/Ceiling thresholds are
+ *                       always derived when start > 0 (not gated here). Under
+ *                       Specific List, shared plan fields only (no base
+ *                       withdrawal or spending extras).
  * }
  * @returns partial scenario: patched tier lists + derived scalar fields.
  */
@@ -247,11 +251,23 @@ export function computeDerivedPresetValues(preset, {
     // Empty list: leave alone — the app normalizes it to one flat tier.
   }
 
+  // --- Balance Floor/Ceiling thresholds (always under Easy Mode): multiples
+  // of start so each risk level keeps a distinct guardrail band even when
+  // Find Best Plan is on. Cut/boost % stay in the plan-fields block below.
+  if (hasStart) {
+    if (isPositiveFinite(d.floorBalanceMultipleOfStart)) {
+      out.floorBalance = Math.round(startThousands * d.floorBalanceMultipleOfStart);
+    }
+    if (isPositiveFinite(d.ceilingBalanceMultipleOfStart)) {
+      out.ceilingBalance = Math.round(startThousands * d.ceilingBalanceMultipleOfStart);
+    }
+  }
+
   // --- Full spending plan (Easy Mode + Goal Seek off): base withdrawal,
-  // balance guardrails, market adjustment amounts, glide recycle rate, and
-  // tier-0 go-go extra — all from per-preset derived parameters. Under
-  // Specific List only the shared guardrail/adjustment fields apply; market
-  // adj $ amounts use a virtual base from baseWithdrawalPctOfStart.
+  // balance cut/boost rates, market adjustment amounts, glide recycle rate,
+  // and tier-0 go-go extra — all from per-preset derived parameters. Under
+  // Specific List only the shared adjustment fields apply; market adj $
+  // amounts use a virtual base from baseWithdrawalPctOfStart.
   if (includePlanFields && hasStart) {
     let baseWithdrawal = 0;
     if (isPositiveFinite(d.baseWithdrawalPctOfStart)) {
@@ -264,12 +280,6 @@ export function computeDerivedPresetValues(preset, {
       }
     }
 
-    if (isPositiveFinite(d.floorBalanceMultipleOfStart)) {
-      out.floorBalance = Math.round(startThousands * d.floorBalanceMultipleOfStart);
-    }
-    if (isPositiveFinite(d.ceilingBalanceMultipleOfStart)) {
-      out.ceilingBalance = Math.round(startThousands * d.ceilingBalanceMultipleOfStart);
-    }
     if (Number.isFinite(d.floorPenalty)) out.floorPenalty = d.floorPenalty;
     if (Number.isFinite(d.ceilingBonus)) out.ceilingBonus = d.ceilingBonus;
     if (Number.isFinite(d.glideFraction)) out.glideFraction = d.glideFraction;

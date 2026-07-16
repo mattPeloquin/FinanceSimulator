@@ -94,16 +94,15 @@ export const BASE_DEFAULTS = {
   // Filled by Easy Mode (Goal Seek off) or Goal Seek when attached.
   baseWithdrawal: 0,
 
-  // Balance ($000s) below which spending scale begins cutting withdrawals.
-  floorBalance: 0,
+  // (floorBalance / ceilingBalance — Balance adjustment thresholds — come from
+  // the risk preset's derived multiples of start, always under Easy Mode.)
 
   // Spending scale at/below floorBalance, as % of target (e.g. 50 = half).
+  // Filled by Easy Mode when Goal Seek is off; Find Best Plan tunes when included.
   floorPenalty: 50,
 
-  // Balance ($000s) above which spending scale begins boosting withdrawals.
-  ceilingBalance: 0,
-
   // Spending scale at/above ceilingBalance, as % bonus (e.g. 50 = +50%).
+  // Filled by Easy Mode when Goal Seek is off; Find Best Plan tunes when included.
   ceilingBonus: 50,
 
   // (glideTarget — Glide-path Target — comes from the risk preset's derived
@@ -201,10 +200,12 @@ export const BASE_DEFAULTS = {
 };
 
 // Out-of-the-box scenario = base values + the Balanced preset's static keys +
-// its balance/horizon-derived values (minimum withdrawal, gifting, balance
-// triggers, target ending balance, spending timeline) computed at the default
-// starting portfolio and horizon. This keeps balanced.json the single source
-// of every slider-controlled default while defaultScenario() stays complete.
+// its balance/horizon-derived values (minimum withdrawal, gifting, no-cut /
+// Floor/Ceiling thresholds, target ending balance, spending timeline) computed
+// at the default starting portfolio and horizon. Without a starting portfolio,
+// balance-derived fields stay unset until the user enters one. This keeps
+// balanced.json the single source of every slider-controlled default while
+// defaultScenario() stays complete.
 export const SCENARIO_DEFAULTS = {
   ...BASE_DEFAULTS,
   ...balanced.scenario,
