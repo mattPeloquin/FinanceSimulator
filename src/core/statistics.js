@@ -106,10 +106,35 @@ export function successRate(depletionYear, horizonYears) {
   return survived / n;
 }
 
+// Fraction of simulations that (a) never depleted within the horizon and
+// (b) ended with a balance at or above the target ending balance.
+// Find Best Plan's Desired Success % uses this legacy gate alone; spending
+// shortfall vs plan is checked separately at P(100 − Desired Success %).
+// `horizonYears` may be a scalar or a per-run array.
+export function legacyGoalSuccessRate(
+  finalBalance,
+  depletionYear,
+  horizonYears,
+  targetEndingBalance,
+) {
+  const n = finalBalance.length;
+  if (n === 0) return 0;
+  const fixedHorizon = typeof horizonYears === 'number';
+  let met = 0;
+  for (let i = 0; i < n; i++) {
+    const h = fixedHorizon ? horizonYears : horizonYears[i];
+    if (depletionYear[i] <= h) continue;
+    if (finalBalance[i] < targetEndingBalance) continue;
+    met++;
+  }
+  return met / n;
+}
+
 // Fraction of simulations that (a) never depleted within the horizon,
 // (b) ended with a balance at or above the target ending balance, and
 // (c) when plannedBenchmark > 0, withdrew at least (1 - shortfallTolerance)
-// of the planned schedule total. Used by Goal Seek.
+// of the planned schedule total. Joint gate kept for tests / callers that
+// still want one combined rate; Find Best Plan uses the split helpers below.
 // `horizonYears` and `plannedBenchmark` may be scalars (fixed horizon) or
 // per-run arrays aligned with `finalBalance`.
 export function goalSuccessRate(
@@ -176,6 +201,38 @@ export function withdrawalTargetSuccessRate(actualWithdrawn, plannedBenchmark, t
     if (meetsWithdrawalTarget(actualWithdrawn[i], benchmark, tolerance)) metTarget++;
   }
   return eligible > 0 ? metTarget / eligible : null;
+}
+
+// Alias used by Find Best Plan for the separate on-plan (within RT) rate.
+export function spendingTailRate(actualWithdrawn, plannedBenchmark, shortfallTolerance = 0) {
+  return withdrawalTargetSuccessRate(actualWithdrawn, plannedBenchmark, shortfallTolerance);
+}
+
+// Actual/plan ratio at percentile p (e.g. p = 0.05 for P5 when Desired Success
+// is 95%). Skips non-positive plan benchmarks. Returns null when no eligible
+// runs exist (no spending floor to enforce).
+export function withdrawalPlanRatioPercentile(actualWithdrawn, plannedBenchmark, p) {
+  const n = actualWithdrawn?.length ?? 0;
+  if (n === 0) return null;
+
+  const ratios = [];
+  if (typeof plannedBenchmark === 'number') {
+    if (plannedBenchmark <= 0) return null;
+    for (let i = 0; i < n; i++) {
+      ratios.push(actualWithdrawn[i] / plannedBenchmark);
+    }
+  } else if (plannedBenchmark != null) {
+    for (let i = 0; i < n; i++) {
+      const benchmark = plannedBenchmark[i];
+      if (!(benchmark > 0)) continue;
+      ratios.push(actualWithdrawn[i] / benchmark);
+    }
+  } else {
+    return null;
+  }
+
+  if (ratios.length === 0) return null;
+  return percentileValue(ratios, p);
 }
 
 // Money-weighted annual return (IRR) of one simulated path, in the same real

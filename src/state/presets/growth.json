@@ -20,7 +20,7 @@
     "dynLowRet": -18,
     "dynMedRet": 5,
     "dynHighRet": 25,
-    "glideRate": -1,
+    "glideRate": -0.5,
     "maxConsecutiveMinWithdrawals": 3,
     "minWithdrawalPlanRecoveryYears": 2
   },
@@ -33,7 +33,7 @@
     },
     "spending": {
       "changePct": -2.5,
-      "remainingChangePct": -2,
+      "remainingChangePct": -1,
       "firstTierYearsFractionOfHorizon": 0.45
     },
     "noCutBalanceMultipleOfStart": 1,

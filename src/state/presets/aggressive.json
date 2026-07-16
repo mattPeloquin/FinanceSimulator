@@ -33,7 +33,7 @@
     },
     "spending": {
       "changePct": -3,
-      "remainingChangePct": -2,
+      "remainingChangePct": -1.5,
       "firstTierYearsFractionOfHorizon": 0.5
     },
     "noCutBalanceMultipleOfStart": 1,

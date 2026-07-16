@@ -3,7 +3,7 @@
     <div class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
             <h3 class="text-lg font-semibold text-theme-body">Find Best Plan</h3>
-            <p class="text-xs text-theme-faint mt-0.5">Search for the highest sustainable spending plan instead of simulating fixed numbers. Check <strong>Include in search</strong> on settings below to choose what Find Best Plan can tune.</p>
+            <p class="text-xs text-theme-faint mt-0.5">Search for the highest sustainable <strong>planned</strong> spending schedule instead of simulating fixed numbers — not the bonus-padded actuals. Check <strong>Include in search</strong> on settings below to choose what Find Best Plan can tune.</p>
         </div>
         <label class="inline-flex items-center shrink-0 cursor-pointer">
             <input type="checkbox" id="goalSeekMode" class="sr-only peer">
@@ -20,7 +20,7 @@
                     <input type="range" id="goalSeekDesiredSuccessPctSlider" min="65" max="99" step="1" class="range-theme flex-1">
                     <input type="number" id="goalSeekDesiredSuccessPct" min="65" max="99" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
-                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Minimum acceptable chance the plan hits both targets below.</p>
+                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Minimum chance of never running out and leaving at least the Target Ending Balance.</p>
             </div>
             <div>
                 <label for="goalSeekRiskTolerancePct" class="block text-sm font-medium text-theme-body">Risk Tolerance</label>
@@ -28,7 +28,7 @@
                     <input type="range" id="goalSeekRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
                     <input type="number" id="goalSeekRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
-                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Lifetime spending shortfall vs. plan in bad markets. 0% = stay on plan; higher = bigger plan, more belt-tightening allowed. The first 0–20% also adjusts how aggressive dynamic adjustments can be.</p>
+                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Allowed spending shortfall vs. plan at the failure percentile (100% − Desired Success % — e.g. P5 at 95%). 0% = that path stays on plan; higher = bigger plan, more belt-tightening in bad markets. The first 0–20% also opens how deep dynamic adjustments can go.</p>
             </div>
         </div>
 

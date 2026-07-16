@@ -7,6 +7,9 @@ import {
   closestHistogramBin,
   successRate,
   goalSuccessRate,
+  legacyGoalSuccessRate,
+  withdrawalPlanRatioPercentile,
+  spendingTailRate,
   meetsWithdrawalTarget,
   withdrawalTargetSuccessRate,
   mean,
@@ -183,6 +186,48 @@ describe('successRate', () => {
   });
 });
 
+describe('legacyGoalSuccessRate', () => {
+  it('counts runs that survived and met the ending balance target', () => {
+    const finalBalance = Float64Array.from([500, 2000, 1500, 50]);
+    const depletionYear = Float64Array.from([41, 41, 20, 41]); // numYears = 40
+    // idx0: survived but below target; idx1: survived and above target;
+    // idx2: depleted; idx3: survived but below target.
+    expect(legacyGoalSuccessRate(finalBalance, depletionYear, 40, 1000)).toBe(0.25);
+  });
+
+  it('ignores on-plan spending (unlike the joint goalSuccessRate)', () => {
+    const finalBalance = Float64Array.from([2000, 2000, 2000]);
+    const depletionYear = Float64Array.from([41, 41, 41]);
+    const totalWithdrawn = Float64Array.from([500, 500, 500]); // well below plan
+    expect(legacyGoalSuccessRate(finalBalance, depletionYear, 40, 1000)).toBe(1);
+    expect(goalSuccessRate(finalBalance, depletionYear, 40, 1000, totalWithdrawn, 1000, 0.05)).toBe(0);
+  });
+});
+
+describe('withdrawalPlanRatioPercentile', () => {
+  it('returns actual/plan at the requested percentile', () => {
+    // Ratios: 0.7, 0.85, 0.9, 1.0, 1.2 — P20 (index floor(5*0.2)=1) = 0.85
+    const actual = Float64Array.from([700, 850, 900, 1000, 1200]);
+    expect(withdrawalPlanRatioPercentile(actual, 1000, 0.2)).toBeCloseTo(0.85, 6);
+  });
+
+  it('returns null when every plan benchmark is non-positive', () => {
+    expect(withdrawalPlanRatioPercentile(
+      Float64Array.from([100, 200]),
+      Float64Array.from([0, 0]),
+      0.05,
+    )).toBeNull();
+  });
+});
+
+describe('spendingTailRate', () => {
+  it('matches withdrawalTargetSuccessRate for the RT floor', () => {
+    const actual = Float64Array.from([800, 850, 1000]);
+    expect(spendingTailRate(actual, 1000, 0.2)).toBe(1);
+    expect(spendingTailRate(actual, 1000, 0.05)).toBe(1 / 3);
+  });
+});
+
 describe('goalSuccessRate', () => {
   it('counts only runs that both survived and met the ending balance target', () => {
     const finalBalance = Float64Array.from([500, 2000, 1500, 50]);
@@ -190,6 +235,17 @@ describe('goalSuccessRate', () => {
     // idx0: survived but below target; idx1: survived and above target;
     // idx2: depleted (ignored regardless of balance); idx3: survived but below target.
     expect(goalSuccessRate(finalBalance, depletionYear, 40, 1000)).toBe(0.25);
+  });
+
+  it('is at most each of the separate legacy and on-plan rates', () => {
+    const finalBalance = Float64Array.from([2000, 2000, 50, 2000]);
+    const depletionYear = Float64Array.from([41, 41, 10, 41]); // one depleted
+    const totalWithdrawn = Float64Array.from([900, 700, 100, 1000]); // planned 1000, RT 0.2 → min 800
+    const joint = goalSuccessRate(finalBalance, depletionYear, 40, 1000, totalWithdrawn, 1000, 0.2);
+    const legacy = legacyGoalSuccessRate(finalBalance, depletionYear, 40, 1000);
+    const onPlan = spendingTailRate(totalWithdrawn, 1000, 0.2);
+    expect(joint).toBeLessThanOrEqual(legacy);
+    expect(joint).toBeLessThanOrEqual(onPlan);
   });
 
   it('returns 0 for an empty set', () => {

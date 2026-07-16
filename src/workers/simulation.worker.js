@@ -151,7 +151,9 @@ self.onmessage = async (e) => {
             fraction: fraction * 0.5,
           }),
       });
-      const shortfallTolerance = goalSeekConfig.shortfallTolerance ?? 0.05;
+      // Blue below-plan tags / on-plan success % use Advanced → Plan Risk
+      // Tolerance (on sim params), not Find Best Plan's search Risk Tolerance.
+      const shortfallTolerance = finalParams.shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
       const { userResult, classicResult, fourPercentComparison } =
         await packageWithFourPercentComparison(pool, finalParams, confirmation, {
           shortfallTolerance,

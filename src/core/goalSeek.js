@@ -1,11 +1,17 @@
 // Goal Seek: given a target ending balance and a desired success percentage,
 // search for the base withdrawal (and, optionally, a few other spending
-// levers) that maximizes withdrawals while still hitting the target. Pure
-// and DOM-free, like the rest of `core/`, so it can run inside the worker
-// and be unit-tested directly.
+// levers) that maximizes the headline planned schedule while still hitting
+// the target. Desired Success % gates survive + ending balance; Risk Tolerance
+// anchors spending at P(100 − Desired Success %) to about (1 − RT) × plan.
+// Ranking is by planned dollars (not bonus-inflated actuals), then closer RT
+// tail, then spend-down toward the Target Ending Balance. Pure and DOM-free,
+// like the rest of `core/`, so it can run inside the worker and be
+// unit-tested directly.
 
 import {
-  goalSuccessRate,
+  legacyGoalSuccessRate,
+  withdrawalPlanRatioPercentile,
+  spendingTailRate,
   median,
   isMedianYearlyMetric,
   isMeanYearlyMetric,
@@ -76,6 +82,10 @@ const DEFAULT_MAX_ROUNDS = 3;
 // fractional thousands (e.g. "84.532") instead of a clean whole number.
 const DOLLAR_ROUNDING = 1000;
 const DEFAULT_SHORTFALL_TOLERANCE = 0.2;
+// After bisection floors the base to $1,000, walk upward a few steps while the
+// split gate still passes — takes the high end of the Monte Carlo noise band
+// instead of stopping on the conservative floor.
+const MAX_BASE_NUDGE_STEPS = 20;
 
 function roundToThousand(value) {
   return Math.round(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
@@ -238,6 +248,64 @@ export function plannedScheduleBenchmark(portfolio, numYears, metric) {
   if (isMedianYearlyMetric(metric)) return plannedScheduleMedianYearly(portfolio, numYears);
   if (isMeanYearlyMetric(metric)) return plannedScheduleMeanYearly(portfolio, numYears);
   return plannedScheduleTotal(portfolio, numYears);
+}
+
+// Find Best Plan's primary ranking score: the headline planned schedule
+// (base × spending tiers / specific list), not Monte Carlo actuals that
+// include gifts, ceiling boosts, market highs, or glide surplus.
+// When earlyWindow > 0 (Spending Over Time is in the search), score the
+// average planned dollars per year in that front-loaded span so the search
+// still prefers aggressive early-tier extras over an equal lifetime total.
+export function plannedPrimaryObjective(portfolio, numYears, metric, earlyWindow = 0) {
+  if (earlyWindow > 0) {
+    const schedule = plannedYearlySchedule(portfolio, numYears);
+    const span = Math.min(earlyWindow, schedule.length);
+    if (span <= 0) return 0;
+    let total = 0;
+    for (let j = 0; j < span; j++) total += schedule[j];
+    return total / span;
+  }
+  return plannedScheduleBenchmark(portfolio, numYears, metric);
+}
+
+// How far above the Target Ending Balance the typical run finishes.
+// Lower is better for spend-down: idle legacy above the target could have
+// funded a higher plan (or more surplus recycling) instead.
+export function medianExcessEndingBalance(finalBalance, effectiveTarget = 0) {
+  const n = finalBalance?.length ?? 0;
+  if (n === 0) return 0;
+  const target = Number.isFinite(effectiveTarget) ? effectiveTarget : 0;
+  const excess = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    excess[i] = Math.max(0, finalBalance[i] - target);
+  }
+  return median(excess);
+}
+
+// Lexicographic candidate ranking for Find Best Plan:
+// 1) higher planned primary wins
+// 2) if planned is within $1,000, lower median excess ending balance (spend-down
+//    / glide) — before RT-tail closeness, so surplus recycling is not punished
+//    for raising actuals once the RT floor already clears feasibility
+// 3) lower RT-tail excess (prefer P(fail) actual/plan closer to (1 − RT))
+// 4) higher success rate (pinBase infeasible fallback)
+export function isBetterGoalSeekScore(a, b) {
+  const plannedA = a.plannedPrimary ?? 0;
+  const plannedB = b.plannedPrimary ?? 0;
+  if (plannedA > plannedB + DOLLAR_ROUNDING) return true;
+  if (plannedA < plannedB - DOLLAR_ROUNDING) return false;
+
+  const excessA = a.medianExcessEnding ?? Infinity;
+  const excessB = b.medianExcessEnding ?? Infinity;
+  if (excessA < excessB) return true;
+  if (excessA > excessB) return false;
+
+  const tailA = a.tailRatioExcess ?? Infinity;
+  const tailB = b.tailRatioExcess ?? Infinity;
+  if (tailA < tailB) return true;
+  if (tailA > tailB) return false;
+
+  return (a.successRate ?? 0) > (b.successRate ?? 0);
 }
 
 // Build a per-run planned benchmark array, memoizing by horizon length so
@@ -587,12 +655,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // Rough total, just for a smoothly-advancing progress bar (not exact).
   const estimatedEvalBudget = estimateEvalBudget(params, config);
 
-  // While Spending Over Time is included in the search, the plan is scored by
-  // how much can be spent PER YEAR during the first tier's year span (not the
-  // lifetime total) — that's what makes the search actually front-load spending
-  // instead of staying indifferent between an early dollar and a late one.
-  // Outside that lever, or once it's resolved back to 0 extra, the objective
-  // falls back to the familiar median lifetime total.
+  // While Spending Over Time is included in the search, the planned primary
+  // scores average planned dollars PER YEAR in the first tier's span (not the
+  // lifetime plan total) — that still favors front-loading without ranking on
+  // bonus-inflated Monte Carlo actuals.
   function spendingBonusSpan() {
     if (!config.includeSpendingOverTime) return 0;
     return config.spendingFirstTierYears ?? 0;
@@ -617,15 +683,6 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     return spendingBonusSpan();
   }
 
-  function computeObjective(result, window) {
-    if (window > 0) {
-      return median(result.earlyWithdrawn) / window;
-    }
-    // Median ACROSS runs (robust to outlier simulations) of the per-run
-    // metric value — total, median/yr, or mean/yr.
-    return median(perRunWithdrawalMetric(result, config.withdrawalMetric));
-  }
-
   async function evaluateWith(numSimulations, stage) {
     evalCount++;
     notify(stage, Math.min(evalCount / estimatedEvalBudget, 0.99));
@@ -635,6 +692,15 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const endpointYears = params.numYears;
     const plannedTotal = plannedScheduleTotal(working.portfolio, endpointYears);
     const plannedMedianAtEndpoint = plannedScheduleMedianYearly(working.portfolio, endpointYears);
+    // Rank by the headline planned schedule (deterministic), not median actual
+    // withdrawals — actuals include gifts/boosts/glide that would otherwise
+    // reward a low base plan padded by upside levers.
+    const objectiveValue = plannedPrimaryObjective(
+      working.portfolio,
+      endpointYears,
+      config.withdrawalMetric,
+      window,
+    );
     const perRunBenchmarks = buildPerRunPlanBenchmarks(
       working.portfolio,
       result.horizonYears,
@@ -643,24 +709,55 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     const actualWithdrawn = perRunWithdrawalMetric(result, config.withdrawalMetric);
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     // Discount Target Ending Balance by Risk Tolerance so legacy slack can fund
-    // higher spending. Success uses this discounted gate whenever a target is
-    // set (not only when Glide is searched); Glide's stop is pinned to the same
-    // number so the discounted slice is actually spendable.
+    // higher spending. Legacy success uses this discounted gate whenever a
+    // target is set (not only when Glide is searched); Glide's stop is pinned
+    // to the same number so the discounted slice is actually spendable.
     const effectiveTargetEndingBalance = discountedTargetEndingBalance(config);
-    const successRateAchieved = goalSuccessRate(
+    // Split gate: Desired Success % = survive + ending only; Risk Tolerance
+    // floors actual/plan at P(100 − Desired Success %), not as a joint per-run
+    // requirement (which left the RT band unused when depletion bound first).
+    const legacyRate = legacyGoalSuccessRate(
       result.finalBalance,
       result.depletionYear,
       result.horizonYears,
       effectiveTargetEndingBalance,
+    );
+    const desiredSuccessRate = config.desiredSuccessRate;
+    const failPct = Math.min(Math.max(1 - desiredSuccessRate, 0), 1);
+    const tailRatio = withdrawalPlanRatioPercentile(
+      actualWithdrawn,
+      perRunBenchmarks,
+      failPct,
+    );
+    const onPlanRate = spendingTailRate(
       actualWithdrawn,
       perRunBenchmarks,
       shortfallTolerance,
     );
+    // Single comparable rate for summaries / pinBase climb: the tighter of
+    // the two separate bars (each must clear Desired Success % for feasibility).
+    const successRateAchieved = onPlanRate == null
+      ? legacyRate
+      : Math.min(legacyRate, onPlanRate);
+    const rtFloor = 1 - shortfallTolerance;
+    const tailRatioExcess = tailRatio == null
+      ? 0
+      : Math.max(0, tailRatio - rtFloor);
     return {
       successRateAchieved,
+      legacyRate,
+      onPlanRate,
+      tailRatio,
+      tailRatioExcess,
+      meetsSplitGate: legacyRate >= desiredSuccessRate
+        && (tailRatio == null || tailRatio >= rtFloor),
       medianTotalWithdrawn: median(result.totalWithdrawn),
       medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
-      objectiveValue: computeObjective(result, window),
+      objectiveValue,
+      medianExcessEnding: medianExcessEndingBalance(
+        result.finalBalance,
+        effectiveTargetEndingBalance,
+      ),
       plannedTotal,
       plannedMedianAtEndpoint,
     };
@@ -671,7 +768,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   }
 
   async function meetsTarget(stage) {
-    return (await evaluate(stage)).successRateAchieved >= config.desiredSuccessRate;
+    return (await evaluate(stage)).meetsSplitGate;
   }
 
   // Neutralize every lever marked "include in search" before Phase 1 solves
@@ -842,7 +939,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       await bisectMaxSatisfyingAsync(
         async (x) => {
           working.portfolio.base = x;
-          return (await evaluateWith(resolveNumSimulations, stageLabel)).successRateAchieved >= config.desiredSuccessRate;
+          return (await evaluateWith(resolveNumSimulations, stageLabel)).meetsSplitGate;
         },
         baseLowerBound,
         innerHi,
@@ -861,33 +958,48 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   }
 
   // Try every single-field candidate, re-solving the base for each one, and
-  // keep whichever satisfies the success target with the highest objective
-  // value. Applies the winner (or the current value, if none qualified) to
-  // `working` before returning, including the base it was solved against.
+  // keep whichever satisfies the split success gate with the best planned /
+  // RT-tail / spend-down score. Applies the winner (or the current value, if
+  // none qualified) to `working` before returning, including the base it was
+  // solved against.
   async function pickBestCandidateWithResolve(candidates, applyCandidate, stageLabel, currentValue) {
     let best = currentValue;
-    let bestObjective = -Infinity;
-    let bestSuccessRate = -Infinity;
+    let bestScore = null;
     let bestBase = solvedBase;
     let foundTarget = false;
     for (const candidate of candidates) {
       applyCandidate(candidate);
-      const { resolvedBase, successRateAchieved, objectiveValue } = await scoreCurrentLeversWithResolve(stageLabel);
-      if (successRateAchieved >= config.desiredSuccessRate) {
-        if (!foundTarget || objectiveValue > bestObjective) {
+      const {
+        resolvedBase,
+        successRateAchieved,
+        meetsSplitGate,
+        objectiveValue,
+        medianExcessEnding,
+        tailRatioExcess,
+      } = await scoreCurrentLeversWithResolve(stageLabel);
+      const score = {
+        plannedPrimary: objectiveValue,
+        tailRatioExcess,
+        medianExcessEnding,
+        successRate: successRateAchieved,
+      };
+      if (meetsSplitGate) {
+        if (!foundTarget || isBetterGoalSeekScore(score, bestScore)) {
           foundTarget = true;
           best = candidate;
-          bestObjective = objectiveValue;
+          bestScore = score;
           bestBase = resolvedBase;
         }
       } else if (pinBase && !foundTarget) {
+        // Infeasible pinned-base path: climb success rate first, then the
+        // same planned / RT-tail / spend-down ranking among equal rates.
         if (
-          successRateAchieved > bestSuccessRate
-          || (successRateAchieved === bestSuccessRate && objectiveValue > bestObjective)
+          !bestScore
+          || successRateAchieved > bestScore.successRate
+          || (successRateAchieved === bestScore.successRate && isBetterGoalSeekScore(score, bestScore))
         ) {
           best = candidate;
-          bestSuccessRate = successRateAchieved;
-          bestObjective = objectiveValue;
+          bestScore = score;
           bestBase = resolvedBase;
         }
       }
@@ -909,28 +1021,40 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   // eslint-disable-next-line no-unused-vars -- not called by any current stage; kept for future paired-lever searches
   async function pickBestPairWithResolve(pairs, applyPair, stageLabel, currentPair) {
     let best = currentPair;
-    let bestObjective = -Infinity;
-    let bestSuccessRate = -Infinity;
+    let bestScore = null;
     let bestBase = solvedBase;
     let foundTarget = false;
     for (const pair of pairs) {
       applyPair(pair[0], pair[1]);
-      const { resolvedBase, successRateAchieved, objectiveValue } = await scoreCurrentLeversWithResolve(stageLabel);
-      if (successRateAchieved >= config.desiredSuccessRate) {
-        if (!foundTarget || objectiveValue > bestObjective) {
+      const {
+        resolvedBase,
+        successRateAchieved,
+        meetsSplitGate,
+        objectiveValue,
+        medianExcessEnding,
+        tailRatioExcess,
+      } = await scoreCurrentLeversWithResolve(stageLabel);
+      const score = {
+        plannedPrimary: objectiveValue,
+        tailRatioExcess,
+        medianExcessEnding,
+        successRate: successRateAchieved,
+      };
+      if (meetsSplitGate) {
+        if (!foundTarget || isBetterGoalSeekScore(score, bestScore)) {
           foundTarget = true;
           best = pair;
-          bestObjective = objectiveValue;
+          bestScore = score;
           bestBase = resolvedBase;
         }
       } else if (pinBase && !foundTarget) {
         if (
-          successRateAchieved > bestSuccessRate
-          || (successRateAchieved === bestSuccessRate && objectiveValue > bestObjective)
+          !bestScore
+          || successRateAchieved > bestScore.successRate
+          || (successRateAchieved === bestScore.successRate && isBetterGoalSeekScore(score, bestScore))
         ) {
           best = pair;
-          bestSuccessRate = successRateAchieved;
-          bestObjective = objectiveValue;
+          bestScore = score;
           bestBase = resolvedBase;
         }
       }
@@ -1127,7 +1251,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     }
   }
 
-  const finalBase = solvedBase;
+  let finalBase = solvedBase;
 
   if (config.includeBalanceOverrides) {
     clampBalanceAdjustmentRates(config, working.portfolio);
@@ -1140,13 +1264,38 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     clampMarketAdjustments(config, working.dynConfig, finalBase);
   }
 
-  const finalMetrics = await evaluate('Finalizing');
+  let finalMetrics = await evaluate('Finalizing');
+
+  // Upward nudge: bisection + $1k floor sits on the low side of MC noise.
+  // Step the base up $1k at a time while the split gate still holds; keep the
+  // last passing value. Pinned / Specific List bases are not moved.
+  if (!pinBase && finalMetrics.meetsSplitGate) {
+    for (let step = 0; step < MAX_BASE_NUDGE_STEPS; step++) {
+      const candidateBase = finalBase + DOLLAR_ROUNDING;
+      working.portfolio.base = candidateBase;
+      if (config.includeMarketAdjustments) {
+        clampMarketAdjustments(config, working.dynConfig, candidateBase);
+      }
+      const nudgedMetrics = await evaluate('Nudging base upward');
+      if (!nudgedMetrics.meetsSplitGate) {
+        working.portfolio.base = finalBase;
+        if (config.includeMarketAdjustments) {
+          clampMarketAdjustments(config, working.dynConfig, finalBase);
+        }
+        break;
+      }
+      finalBase = candidateBase;
+      solvedBase = candidateBase;
+      finalMetrics = nudgedMetrics;
+    }
+  }
+
   notify('Confirming final plan', 1);
 
   const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
   const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
 
-  if (pinBase && finalMetrics.successRateAchieved < config.desiredSuccessRate) {
+  if (pinBase && !finalMetrics.meetsSplitGate) {
     const isSpecific = params.portfolio.strategy === 'specific';
     const reason = isSpecific
       ? 'Your Specific List of withdrawals cannot meet the desired success rate even with the best lever settings. Try lowering the amounts in your list, the target ending balance, or the desired success rate, or raising the risk tolerance.'
@@ -1189,6 +1338,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         shortfallTolerance,
         plannedScheduleTotal: plannedTotal,
         achievedSuccessRate: finalMetrics.successRateAchieved,
+        achievedTailRatio: finalMetrics.tailRatio,
         achievedMedianTotalWithdrawn: finalMetrics.medianTotalWithdrawn,
         achievedMedianYearlyWithdrawn: finalMetrics.medianYearlyWithdrawn,
         achievedObjectiveValue: finalMetrics.objectiveValue,
@@ -1231,11 +1381,12 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     shortfallTolerance,
     plannedScheduleTotal: plannedTotal,
     achievedSuccessRate: finalMetrics.successRateAchieved,
+    achievedTailRatio: finalMetrics.tailRatio,
     achievedMedianTotalWithdrawn: finalMetrics.medianTotalWithdrawn,
     achievedMedianYearlyWithdrawn: finalMetrics.medianYearlyWithdrawn,
     achievedObjectiveValue: finalMetrics.objectiveValue,
-    // Only set when the search actively optimized for the bonus-years window
-    // rather than the lifetime total (see currentEarlyWindow above).
+    // Only set when the search scored the early-tier planned average rather
+    // than the lifetime planned benchmark (see currentEarlyWindow above).
     earlyYearsWindow: earlyYearsWindow > 0 ? earlyYearsWindow : undefined,
     evaluationCount: evalCount,
   };

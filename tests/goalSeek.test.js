@@ -18,6 +18,9 @@ import {
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
   plannedScheduleMeanYearly,
+  plannedPrimaryObjective,
+  medianExcessEndingBalance,
+  isBetterGoalSeekScore,
   buildPerRunPlanBenchmarks,
   riskEnvelopeScale,
   scalePctGridByEnvelope,
@@ -491,6 +494,93 @@ describe('plannedScheduleMeanYearly', () => {
   });
 });
 
+describe('plannedPrimaryObjective', () => {
+  const portfolio = {
+    base: 100_000,
+    spendingOverTimeSeries: spendingSeries(5, [
+      { changePct: 0, extra: 20_000, years: 2 },
+      { changePct: 0, extra: 0 },
+    ]),
+    withdrawalFloorSeries: new Array(5).fill(0),
+  };
+
+  it('uses the planned schedule benchmark when there is no early window', () => {
+    expect(plannedPrimaryObjective(portfolio, 5, 'total')).toBe(540_000);
+    expect(plannedPrimaryObjective(portfolio, 5, 'medianYearly')).toBe(100_000);
+    expect(plannedPrimaryObjective(portfolio, 5, 'meanYearly')).toBe(108_000);
+  });
+
+  it('averages planned dollars over the early window when front-loading', () => {
+    // years 0-1 are 120k each → average 120k over a 2-year window
+    expect(plannedPrimaryObjective(portfolio, 5, 'total', 2)).toBe(120_000);
+  });
+});
+
+describe('medianExcessEndingBalance', () => {
+  it('returns the median of ending balances above the target', () => {
+    // Excesses vs $100k target: 0, 50k, 100k → median 50k
+    expect(medianExcessEndingBalance(
+      Float64Array.from([50_000, 150_000, 200_000]),
+      100_000,
+    )).toBe(50_000);
+  });
+
+  it('returns 0 when every run finishes at or below the target', () => {
+    expect(medianExcessEndingBalance(
+      Float64Array.from([0, 50_000, 100_000]),
+      100_000,
+    )).toBe(0);
+  });
+});
+
+describe('isBetterGoalSeekScore', () => {
+  it('prefers a meaningfully higher planned primary over lower excess ending', () => {
+    expect(isBetterGoalSeekScore(
+      { plannedPrimary: 2_000_000, medianExcessEnding: 500_000, successRate: 0.8 },
+      { plannedPrimary: 1_500_000, medianExcessEnding: 0, successRate: 0.9 },
+    )).toBe(true);
+  });
+
+  it('uses spend-down before RT-tail excess when planned values are within $1,000', () => {
+    expect(isBetterGoalSeekScore(
+      { plannedPrimary: 1_000_500, tailRatioExcess: 0.15, medianExcessEnding: 10_000, successRate: 0.8 },
+      { plannedPrimary: 1_000_000, tailRatioExcess: 0.02, medianExcessEnding: 50_000, successRate: 0.8 },
+    )).toBe(true);
+    expect(isBetterGoalSeekScore(
+      { plannedPrimary: 1_000_500, tailRatioExcess: 0.02, medianExcessEnding: 50_000, successRate: 0.8 },
+      { plannedPrimary: 1_000_000, tailRatioExcess: 0.15, medianExcessEnding: 10_000, successRate: 0.8 },
+    )).toBe(false);
+  });
+
+  it('prefers lower RT-tail excess when planned and spend-down are tied', () => {
+    expect(isBetterGoalSeekScore(
+      { plannedPrimary: 1_000_500, tailRatioExcess: 0.02, medianExcessEnding: 10_000, successRate: 0.8 },
+      { plannedPrimary: 1_000_000, tailRatioExcess: 0.15, medianExcessEnding: 10_000, successRate: 0.8 },
+    )).toBe(true);
+    expect(isBetterGoalSeekScore(
+      { plannedPrimary: 1_000_500, tailRatioExcess: 0.15, medianExcessEnding: 10_000, successRate: 0.8 },
+      { plannedPrimary: 1_000_000, tailRatioExcess: 0.02, medianExcessEnding: 10_000, successRate: 0.8 },
+    )).toBe(false);
+  });
+
+  it('breaks a full tie with higher success rate', () => {
+    expect(isBetterGoalSeekScore(
+      {
+        plannedPrimary: 1_000_000,
+        tailRatioExcess: 0.05,
+        medianExcessEnding: 10_000,
+        successRate: 0.9,
+      },
+      {
+        plannedPrimary: 1_000_000,
+        tailRatioExcess: 0.05,
+        medianExcessEnding: 10_000,
+        successRate: 0.8,
+      },
+    )).toBe(true);
+  });
+});
+
 describe('highestMinimumWithdrawal', () => {
   it('returns the largest tier amount in the series', () => {
     expect(highestMinimumWithdrawal({ withdrawalFloorSeries: [120_000, 80_000, 0] })).toBe(120_000);
@@ -526,9 +616,34 @@ describe('runGoalSeek', () => {
     expect(summary.earlyYearsWindow).toBeUndefined();
   });
 
-  it('optimizes median yearly withdrawal when that metric is selected', async () => {
+  it('enforces the P(100 − Desired) spending ratio RT floor on feasible plans', async () => {
     const params = makeParams();
+    const shortfallTolerance = 0.2;
+    const desiredSuccessRate = 0.8;
     const { summary } = await seek(params, {
+      targetEndingBalance: 0,
+      desiredSuccessRate,
+      shortfallTolerance,
+      includeSpendingOverTime: false,
+      includeMarketAdjustments: true,
+      includeBalanceOverrides: true,
+      searchNumSimulations: 800,
+      maxRounds: 2,
+      ...FAST_LEVER_GRIDS,
+    });
+
+    expect(summary.feasible).toBe(true);
+    const rtFloor = 1 - shortfallTolerance;
+    // Split gate: the failure-percentile actual/plan ratio must clear (1 − RT).
+    // Legacy/depletion may still bind first, so the ratio need not sit exactly
+    // on the floor — only at or above it.
+    expect(summary.achievedTailRatio).toBeGreaterThanOrEqual(rtFloor - 1e-9);
+    expect(summary.achievedSuccessRate).toBeGreaterThanOrEqual(desiredSuccessRate - 0.05);
+  });
+
+  it('ranks by planned median yearly when that metric is selected', async () => {
+    const params = makeParams();
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeSpendingOverTime: false,
@@ -541,12 +656,15 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(true);
     expect(summary.achievedMedianYearlyWithdrawn).toBeGreaterThan(0);
-    expect(summary.achievedObjectiveValue).toBe(summary.achievedMedianYearlyWithdrawn);
+    // Objective is the planned schedule median/yr, not median actual spending.
+    expect(summary.achievedObjectiveValue).toBe(
+      plannedScheduleMedianYearly(finalParams.portfolio, params.numYears),
+    );
   });
 
-  it('optimizes mean yearly withdrawal when that metric is selected', async () => {
+  it('ranks by planned mean yearly when that metric is selected', async () => {
     const params = makeParams();
-    const { summary } = await seek(params, {
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeSpendingOverTime: false,
@@ -559,9 +677,8 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(true);
     expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
-    // Fixed horizon: median of per-run means is exactly the median total / years.
     expect(summary.achievedObjectiveValue).toBeCloseTo(
-      summary.achievedMedianTotalWithdrawn / params.numYears,
+      plannedScheduleMeanYearly(finalParams.portfolio, params.numYears),
       6,
     );
   });
@@ -901,16 +1018,12 @@ describe('runGoalSeek', () => {
     expect(summary.balanceAdjustment.ceilingBalance).toBe(1_800_000);
   });
 
-  // Regression test for the fixed-base scoring bug: since a spending cut only
-  // pays off once the base is re-solved against it, a plan allowed to use
-  // guardrails must never come out WORSE than one without them. The fair
-  // comparison is the search's own objective (median lifetime withdrawals):
-  // with the aggressive sub-1x ceiling grid the winner may legitimately trade
-  // a slightly lower base for balance-conditional boosts that spend more in
-  // total, so the base itself is no longer a one-directional proxy for plan
-  // quality. The small tolerance absorbs the $1,000 round-down of the final
-  // base re-bisection.
-  it('produces at least as good a plan with guardrails available as without', async () => {
+  // Guardrails may raise actual spending via ceiling boosts, but the search
+  // ranks by the headline planned schedule — so with extras off, the planned
+  // total (and base) must not be sacrificed for bonus-only actual gains.
+  // The small tolerance absorbs the $1,000 round-down of the final base
+  // re-bisection.
+  it('does not sacrifice planned schedule for guardrail-only upside', async () => {
     const baseParams = makeParams({
       numYears: 30,
       numSimulations: 600,
@@ -946,37 +1059,37 @@ describe('runGoalSeek', () => {
 
     expect(withoutGuardrails.summary.feasible).toBe(true);
     expect(withGuardrails.summary.feasible).toBe(true);
-    expect(withGuardrails.summary.achievedMedianTotalWithdrawn).toBeGreaterThanOrEqual(
-      withoutGuardrails.summary.achievedMedianTotalWithdrawn * 0.99,
+    expect(withGuardrails.summary.plannedScheduleTotal).toBeGreaterThanOrEqual(
+      withoutGuardrails.summary.plannedScheduleTotal - 1000,
+    );
+    expect(withGuardrails.summary.baseWithdrawal).toBeGreaterThanOrEqual(
+      withoutGuardrails.summary.baseWithdrawal - 1000,
     );
   });
 
-  // The early-years objective: when Bonus Years is included in the search,
-  // the achieved objective (average annual withdrawal during the bonus-year
-  // window) should be reported, and the window should reflect whatever
-  // first-tier year span the search actually converged on.
-  it('optimizes for average annual spending during the bonus-year window when Bonus Years is included', async () => {
+  // When Spending Over Time is included, the objective is average planned
+  // dollars per year in the first tier — not median actual early withdrawals.
+  it('optimizes for average planned spending during the early-tier window when Spending Over Time is included', async () => {
     const params = makeParams({ numYears: 20, numSimulations: 500 });
-    const { summary } = await seek(params, {
+    const earlyWindow = 5;
+    const { params: finalParams, summary } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.75,
       includeSpendingOverTime: true,
       includeMarketAdjustments: false,
       includeBalanceOverrides: false,
+      spendingFirstTierYears: earlyWindow,
       searchNumSimulations: 500,
       maxRounds: 2,
       ...FAST_LEVER_GRIDS,
     });
 
     expect(summary.feasible).toBe(true);
-    if (summary.spendingOverTimeBonus > 0) {
-      expect(summary.earlyYearsWindow).toBeGreaterThan(0);
-      expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
-    } else {
-      // Bonus resolved to zero — search falls back to the lifetime-total
-      // objective even though the first tier's year span may still be set on the portfolio.
-      expect(summary.achievedObjectiveValue).toBeGreaterThan(0);
-    }
+    expect(summary.earlyYearsWindow).toBe(earlyWindow);
+    expect(summary.achievedObjectiveValue).toBeCloseTo(
+      plannedPrimaryObjective(finalParams.portfolio, params.numYears, 'total', earlyWindow),
+      6,
+    );
   });
 
   it('takes the no-lever fast path (roundsUsed is 0, single confirming bisection)', async () => {
@@ -1352,6 +1465,87 @@ describe('runGoalSeek', () => {
 
     expect(summary.feasible).toBe(true);
     expect(summary.glideSpendDown.fraction).toBeGreaterThanOrEqual(0.05);
+  });
+});
+
+describe('runGoalSeek upward base nudge', () => {
+  // Fake engine: split gate passes only when base ≤ maxFeasible. Bisection plus
+  // $1k flooring can stop a step low; the post-search nudge should climb back
+  // to the highest whole-thousand base that still passes.
+  function gateByBaseSimulate(maxFeasible) {
+    return (p) => {
+      const n = p.numSimulations;
+      const years = p.numYears;
+      const base = p.portfolio.base ?? 0;
+      const ok = base <= maxFeasible + 1e-9;
+      const actual = Math.max(0, base) * years;
+      return Promise.resolve({
+        finalBalance: new Float64Array(n).fill(ok ? 1_000_000 : 0),
+        depletionYear: new Float64Array(n).fill(ok ? years + 1 : 1),
+        horizonYears: Int32Array.from(new Array(n).fill(years)),
+        totalWithdrawn: new Float64Array(n).fill(actual),
+        medianYearlyWithdrawal: new Float64Array(n).fill(Math.max(0, base)),
+        earlyWithdrawn: new Float64Array(n).fill(0),
+      });
+    };
+  }
+
+  it('nudges a floored base up to the highest feasible $1,000 step', async () => {
+    const maxFeasible = 103_000;
+    const { summary } = await runGoalSeek(
+      makeParams({
+        portfolio: {
+          ...makeParams().portfolio,
+          base: 50_000,
+          spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+          withdrawalFloorSeries: new Array(25).fill(0),
+        },
+      }),
+      {
+        targetEndingBalance: 0,
+        desiredSuccessRate: 0.9,
+        shortfallTolerance: 0.2,
+        includeSpendingOverTime: false,
+        includeMarketAdjustments: false,
+        includeBalanceOverrides: false,
+        includeGlidePath: false,
+        searchNumSimulations: 200,
+        maxRounds: 1,
+      },
+      gateByBaseSimulate(maxFeasible),
+    );
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.baseWithdrawal).toBe(103_000);
+  });
+
+  it('does not nudge a pinned base', async () => {
+    const pinned = 70_000;
+    const { summary } = await runGoalSeek(
+      makeParams({
+        portfolio: {
+          ...makeParams().portfolio,
+          base: pinned,
+          spendingOverTimeSeries: spendingSeries(25, [{ changePct: 0, extra: 0 }]),
+        },
+      }),
+      {
+        targetEndingBalance: 0,
+        desiredSuccessRate: 0.9,
+        shortfallTolerance: 0.2,
+        pinBaseWithdrawal: true,
+        includeSpendingOverTime: false,
+        includeMarketAdjustments: false,
+        includeBalanceOverrides: true,
+        searchNumSimulations: 200,
+        maxRounds: 1,
+        ...FAST_LEVER_GRIDS,
+      },
+      gateByBaseSimulate(200_000),
+    );
+
+    expect(summary.feasible).toBe(true);
+    expect(summary.baseWithdrawal).toBe(pinned);
   });
 });
 

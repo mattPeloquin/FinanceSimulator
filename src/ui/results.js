@@ -185,22 +185,22 @@ function setFourPercentVerdict(comparison) {
 
   const classicSuccess = formatPercent(comparison.classicSuccessRate, 0);
   headline.textContent =
-    `Total Withdrawal ${formatDollarK(comparison.classicMedianWithdrawn)}  ·  ` +
-    `Mean ${formatDollarK(comparison.classicMeanYearlyWithdrawn)}/yr  ·  ` +
-    `Success ${classicSuccess || '—'}  ·  ` +
-    `Median balance ${formatDollarK(comparison.classicLeftover)}`;
+    `Median withdrawn ${formatDollarK(comparison.classicMedianWithdrawn)}  ·  ` +
+    `Mean withdrawal ${formatDollarK(comparison.classicMeanYearlyWithdrawn)}/yr  ·  ` +
+    `Not depleted ${classicSuccess || '—'}  ·  ` +
+    `Median end balance ${formatDollarK(comparison.classicLeftover)}`;
 
   if (comparison.equivalent) {
     body.textContent =
-      'Delta unspent $0 vs your plan — you are already on this flat 4% schedule ' +
-      '(no market cuts or boosts). See the dashed path on Average Timelines.';
+      'You are already on this flat 4% schedule (no market cuts or boosts). ' +
+      'See the dashed path on Average Timelines. Delta unspent $0 vs your plan.';
     return;
   }
 
   const unspentDelta = comparison.leftoverDelta;
   const unspentFact =
     unspentDelta > 0
-      ? `Delta unspent ${formatSignedDollarK(unspentDelta)} more left behind than your plan.`
+      ? `${formatDollarK(unspentDelta)} more left behind than your plan.`
       : unspentDelta < 0
         ? `Delta unspent ${formatSignedDollarK(unspentDelta)} — your plan left more behind than the 4% rule.`
         : 'Delta unspent $0 vs your plan.';
@@ -211,15 +211,16 @@ function setFourPercentVerdict(comparison) {
     totalDelta === 0 && meanDelta === 0
       ? 'Spending matched the rule.'
       : `Spending delta ${formatSignedDollarK(totalDelta)} total ` +
-        `(${formatSignedDollarK(meanDelta)}/yr mean) for your plan vs the rule.`;
+        `(${formatSignedDollarK(meanDelta)}/yr mean) for your plan vs the 4% rule.`;
 
   const userSuccess = formatPercent(comparison.userSuccessRate, 0);
   const userRate = formatRatePct(comparison.userYear1Rate);
 
   body.textContent =
-    `${unspentFact} ${spendFact} ` +
-    `Survival: your plan ${userSuccess} vs 4% ${classicSuccess}. ` +
-    `Your plan starts at ${userRate}; the rule always uses 4.0%.`;
+    `${spendFact} ` +
+    `Survival: your plan ${userSuccess} vs ${classicSuccess}. ` +
+    `Your plan starts at ${userRate}; the rule always uses 4.0%. ` +
+    `${unspentFact}`;
 }
 
 export function renderResults(result, params, { goalSeekWarning, fourPercentComparison, classicResult } = {}) {

@@ -37,8 +37,8 @@ Each file has two sections:
     adjustment Floor/Ceiling dollars = multiple × start. Always applied under
     Easy Mode (Find Best Plan on or off); Find Best Plan keeps these fixed and
     only tunes Max Cut / Boost Rate when that lever is included
-  - `glideRate` (in `scenario`) — glide-path spend timing (-2 = later … 0 = sooner);
-    Conservative is one tick later, Aggressive one tick sooner, the middle three at -1
+  - `glideRate` (in `scenario`) — glide-path spend timing in 0.5% steps
+    (-2 = later … 0 = sooner; five positions: -2, -1.5, -1, -0.5, 0)
   - `maxConsecutiveMinWithdrawals` / `minWithdrawalPlanRecoveryYears` (in
     `scenario`) — after this many years in a row at the minimum, spending returns
     to the plan for that many years. Steps up from Conservative (2 / 2) to
