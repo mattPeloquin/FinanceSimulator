@@ -28,15 +28,15 @@
     "minWithdrawalLifetimePctOfStart": 60,
     "specificMinPctOfPlan": 50,
     "gifting": {
-      "amountPctOfStart": 2,
+      "amountPctOfStart": 1.5,
       "balanceMultipleOfStart": 0.5
     },
     "spending": {
-      "changePct": -3,
+      "changePct": -5,
       "remainingChangePct": -1.5,
-      "firstTierYearsFractionOfHorizon": 0.5
+      "firstTierYearsFractionOfHorizon": 0.55
     },
-    "noCutBalanceMultipleOfStart": 1,
+    "noCutBalanceMultipleOfStart": 0.5,
     "baseWithdrawalPctOfStart": 6,
     "floorBalanceMultipleOfStart": 0.5,
     "ceilingBalanceMultipleOfStart": 1,

@@ -13,6 +13,7 @@ import { meetsWithdrawalTarget, median, isMedianYearlyMetric, isMeanYearlyMetric
 import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
+import { CLASSIC_FOUR_PERCENT_RATE } from '../../core/fourPercentComparison.js';
 import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, SURFACE_EMPHASIS_MAX_RATIO, yearAtDisplayCoord } from './yearEmphasis.js';
@@ -370,18 +371,20 @@ function largeWithdrawalLegendOptions(theme) {
       boxWidth: 36,
       boxHeight: 2,
       padding: 12,
+      // Default Chart.js legend generation walks `_getSortedDatasetMetas()`,
+      // which sorts by dataset.order (draw order). Build from the datasets
+      // array instead so "4% rule" (appended last) stays last in the legend
+      // while still drawn behind other series.
       generateLabels(chart) {
-        const defaults = Chart.defaults.plugins.legend.labels.generateLabels;
-        return defaults.call(this, chart).map((label) => {
-          const dataset = chart.data.datasets[label.datasetIndex];
-          return {
-            ...label,
-            fillStyle: 'transparent',
-            strokeStyle: dataset.borderColor,
-            lineWidth: Math.max(dataset.borderWidth ?? 2, 1.5),
-            lineDash: dataset.borderDash ?? [],
-          };
-        });
+        return chart.data.datasets.map((dataset, datasetIndex) => ({
+          text: dataset.label,
+          fillStyle: 'transparent',
+          strokeStyle: dataset.borderColor,
+          lineWidth: Math.max(dataset.borderWidth ?? 2, 1.5),
+          lineDash: dataset.borderDash ?? [],
+          hidden: !chart.isDatasetVisible(datasetIndex),
+          datasetIndex,
+        }));
       },
     },
   };
@@ -581,8 +584,10 @@ export function withdrawalChartTooltipCallbacks(source) {
       return lines;
     },
     // "Actual Withdrawal" is omitted here since afterTitle's "Withdrawn" line
-    // already shows that same value (plus its delta from plan).
-    filter: (item) => item.dataset.label !== 'Actual Withdrawal',
+    // already shows that same value (plus its delta from plan). The quiet
+    // "4% rule" guide stays off the popup so it doesn't clutter the hover.
+    filter: (item) =>
+      item.dataset.label !== 'Actual Withdrawal' && item.dataset.label !== '4% rule',
     label: (ctx) => {
       const value = formatK(ctx.parsed.y);
       if (ctx.dataset.label === 'Minimum') return `Minimum: ${value}`;
@@ -651,8 +656,9 @@ function planOverlaySlice(portfolio, length) {
 
 function buildWithdrawalOverlayDatasets(series, { large = false, portfolio } = {}) {
   const theme = getChartTheme();
+  const resolvedPortfolio = portfolio ?? surfaceState.simParams?.portfolio;
   const { floorSeries, giftAmounts } = planOverlaySlice(
-    portfolio ?? surfaceState.simParams?.portfolio,
+    resolvedPortfolio,
     series.labels.length,
   );
   const datasets = [];
@@ -700,6 +706,30 @@ function buildWithdrawalOverlayDatasets(series, { large = false, portfolio } = {
   return datasets;
 }
 
+/** Flat start × 4% reference — quiet dash, adorn color; first in legend, drawn on top. */
+function buildFourPercentRuleDataset(series, portfolio) {
+  const theme = getChartTheme();
+  const resolvedPortfolio = portfolio ?? surfaceState.simParams?.portfolio;
+  const startBalance = resolvedPortfolio?.start ?? 0;
+  if (!(startBalance > 0) || series.labels.length === 0) return null;
+  const classicAmount = startBalance * CLASSIC_FOUR_PERCENT_RATE;
+  return {
+    label: '4% rule',
+    data: series.labels.map(() => classicAmount),
+    borderColor: theme.planLine,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderDash: [2, 5],
+    tension: 0,
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    fill: false,
+    // Highest draw order = painted last (on top). First in the datasets array
+    // = first in the legend (see largeWithdrawalLegendOptions).
+    order: 10,
+  };
+}
+
 // Chart.js datasets comparing the original withdrawal plan against what was
 // actually withdrawn. Shared by the small float panel, the large dialog, and
 // the sequence-risk scatter's drill-down; `large` just scales line and point
@@ -712,11 +742,16 @@ export function withdrawalComparisonDatasets(series, { large = false, portfolio 
   // depicts withdrawals, so clamp those to 0 rather than dipping below the axis.
   const unadjustedData = series.unadjustedData.map((v) => Math.max(0, v));
   const actualData = series.actualData.map((v) => Math.max(0, v));
+  const fourPercentRule = buildFourPercentRuleDataset(series, portfolio);
+  // Keep Original Plan immediately before Actual so fill target '-1' still
+  // compares actual vs plan. 4% rule is listed first for the legend.
   return [
+    ...(fourPercentRule ? [fourPercentRule] : []),
     {
       label: 'Original Plan',
       data: unadjustedData,
-      borderColor: theme.planLine,
+      // Color only swapped with 4% rule (muted axis tick); dash/width unchanged.
+      borderColor: theme.axisTick,
       borderWidth: large ? 2 : 1.5,
       borderDash: large ? [5, 5] : [4, 4],
       tension: 0.1,

@@ -28,15 +28,15 @@
     "minWithdrawalLifetimePctOfStart": 65,
     "specificMinPctOfPlan": 60,
     "gifting": {
-      "amountPctOfStart": 1.5,
+      "amountPctOfStart": 1,
       "balanceMultipleOfStart": 0.7
     },
     "spending": {
-      "changePct": -2.5,
+      "changePct": -5,
       "remainingChangePct": -1,
-      "firstTierYearsFractionOfHorizon": 0.45
+      "firstTierYearsFractionOfHorizon": 0.5
     },
-    "noCutBalanceMultipleOfStart": 1,
+    "noCutBalanceMultipleOfStart": 0.6,
     "baseWithdrawalPctOfStart": 5.5,
     "floorBalanceMultipleOfStart": 0.7,
     "ceilingBalanceMultipleOfStart": 1.1,
@@ -50,6 +50,6 @@
     "spendingExtraPctOfBase": 40,
     "targetEndingBalancePctOfStart": 8,
     "glideFraction": 40,
-    "maxBoostDrawdownPct": 2
+    "maxBoostDrawdownPct": 3
   }
 }

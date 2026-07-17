@@ -68,7 +68,8 @@ export function sampleRunTooltipXAlign(caretX, chartArea) {
 export function sampleRunTooltipOptions(callbacks, { large = false } = {}) {
   return {
     displayColors: false,
-    bodyFont: { size: 9 },
+    titleFont: { size: 10 },
+    bodyFont: { size: 10 },
     padding: 4,
     yAlign: 'center',
     xAlign: (ctx) => sampleRunTooltipXAlign(ctx.tooltip.caretX, ctx.chart.chartArea),

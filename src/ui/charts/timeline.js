@@ -23,7 +23,7 @@ let lastPercentiles = null;
 let lastNumYears = 0;
 let lastClassicMedianPath = null;
 
-const CLASSIC_SERIES_LABEL = 'Classic 4%';
+const CLASSIC_SERIES_LABEL = '4% rule';
 
 function pathDataset(label, pathObj, color, values, returnOffset) {
   const returnAt = (dataIndex) => {

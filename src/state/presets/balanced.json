@@ -32,11 +32,11 @@
       "balanceMultipleOfStart": 0.9
     },
     "spending": {
-      "changePct": -2,
+      "changePct": -5,
       "remainingChangePct": -1,
-      "firstTierYearsFractionOfHorizon": 0.43
+      "firstTierYearsFractionOfHorizon": 0.45
     },
-    "noCutBalanceMultipleOfStart": 1,
+    "noCutBalanceMultipleOfStart": 0.7,
     "baseWithdrawalPctOfStart": 5,
     "floorBalanceMultipleOfStart": 0.8,
     "ceilingBalanceMultipleOfStart": 1.2,
@@ -50,6 +50,6 @@
     "spendingExtraPctOfBase": 33,
     "targetEndingBalancePctOfStart": 16,
     "glideFraction": 30,
-    "maxBoostDrawdownPct": 1
+    "maxBoostDrawdownPct": 2
   }
 }

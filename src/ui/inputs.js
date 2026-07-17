@@ -688,7 +688,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   const spendingCheckbox = document.getElementById('goalSeekIncludeSpendingOverTime');
   if (spendingCheckbox) {
     spendingCheckbox.addEventListener('change', (e) => {
-      toggleSpendingBonusSearchable(e.target.checked);
+      const goalSeekOn = !!document.getElementById('goalSeekMode')?.checked;
+      toggleSpendingBonusSearchable(goalSeekOn && e.target.checked);
+      syncGoalSeekSectionExpansion();
       notify();
     });
   }

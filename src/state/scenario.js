@@ -595,11 +595,18 @@ export function readSpendingOverTimeTiersFromDom(doc = document) {
   return tiers;
 }
 
+/** True when Goal Seek owns the first tier's Extra Withdrawal field. */
+function isFirstSpendingExtraSearchLocked(doc = document) {
+  return !!doc.getElementById('goalSeekMode')?.checked
+    && !!doc.getElementById('goalSeekIncludeSpendingOverTime')?.checked;
+}
+
 export function writeSpendingOverTimeTiersToDom(tiers, doc = document) {
   const list = doc.getElementById('spendingOverTimeTiersList');
   if (!list) return;
 
   const normalized = normalizeSpendingOverTimeTiers(tiers);
+  const lockFirstExtra = isFirstSpendingExtraSearchLocked(doc);
   list.innerHTML = '';
 
   normalized.forEach((tier, index) => {
@@ -620,10 +627,14 @@ export function writeSpendingOverTimeTiersToDom(tiers, doc = document) {
 
     const extraWrap = doc.createElement('div');
     extraWrap.className = 'flex-1 min-w-[7rem]';
+    // Re-apply Goal Seek lock here: this writer rebuilds the whole list, so a
+    // prior disabled state on the first-tier Extra field would otherwise be lost
+    // (Add/Remove tier, Easy Mode rescale, session load, etc.).
+    const extraDisabled = index === 0 && lockFirstExtra ? ' disabled' : '';
     extraWrap.innerHTML = `
       <label class="block text-[10px] uppercase text-theme-faint font-semibold">Extra Withdrawal</label>
       <div class="input-adorned has-suffix mt-1">
-        <input type="text" data-spending-extra class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.extra)}">
+        <input type="text" data-spending-extra class="currency-input w-full rounded input-theme p-1 text-sm" value="${formatCurrency(tier.extra)}"${extraDisabled}>
         <span class="input-adorn-suffix">000s</span>
       </div>`;
     row.appendChild(extraWrap);
