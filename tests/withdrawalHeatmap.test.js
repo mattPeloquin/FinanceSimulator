@@ -13,6 +13,7 @@ import {
   windowAnchorSeries,
   windowDeltaDomain,
   windowAbsoluteDomain,
+  clampHeatmapDeposit,
   formatHeatmapTooltip,
 } from '../src/ui/charts/withdrawalHeatmap.js';
 
@@ -95,6 +96,12 @@ describe('cellRgb depletion override', () => {
   it('keeps the diverging spectrum for any positive withdrawal, including tiny ones', () => {
     expect(cellRgb(1, -50_000, dom, false)).toEqual(divergingRgb(-50_000, dom, false));
     expect(cellRgb(50_000, 0, dom, false)).toEqual(divergingRgb(0, dom, false));
+  });
+
+  it('does not treat deposit years (negative raw withdrawals) as depletion', () => {
+    // Amount mode clamps deposits to $0 for display; depletion red must still
+    // key off the raw signed value so inflows do not paint bright red.
+    expect(cellRgb(-50_000, -50_000, dom, false)).toEqual(divergingRgb(-50_000, dom, false));
   });
 });
 
@@ -269,6 +276,15 @@ describe('windowDeltaDomain', () => {
   });
 });
 
+describe('clampHeatmapDeposit', () => {
+  it('floors deposits at zero and leaves spending / NaN alone', () => {
+    expect(clampHeatmapDeposit(-50_000)).toBe(0);
+    expect(clampHeatmapDeposit(0)).toBe(0);
+    expect(clampHeatmapDeposit(40_000)).toBe(40_000);
+    expect(Number.isNaN(clampHeatmapDeposit(NaN))).toBe(true);
+  });
+});
+
 describe('windowAbsoluteDomain', () => {
   it('uses P2/P98 of finite cells in the visible window, split at the median', () => {
     const values = Float64Array.from([
@@ -295,6 +311,13 @@ describe('windowAbsoluteDomain', () => {
     const values = Float64Array.from([5, 5, 5]);
     const domain = windowAbsoluteDomain(values, 1, 0, 3);
     expect(domain.hi).toBeGreaterThan(domain.lo);
+  });
+
+  it('clamps deposit years so inflows do not pull the low end below zero', () => {
+    const values = Float64Array.from([-50_000, 100_000, 20_000, 200_000]);
+    const domain = windowAbsoluteDomain(values, 2, 0, 2);
+    expect(domain.lo).toBe(0);
+    expect(domain.hi).toBe(200_000);
   });
 
   it('produces an off-center mid for a skewed distribution, not the mean of lo/hi', () => {

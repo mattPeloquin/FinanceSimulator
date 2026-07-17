@@ -336,6 +336,16 @@ export function windowDeltaDomain(values, anchor, numYears, start, end) {
   };
 }
 
+// Amount-mode display: deposits are stored as negative withdrawals in the
+// sim. Floor them at $0 so the absolute scale and labels only show spending
+// (matching the path / 3D withdrawal charts). True $0 depletion years stay
+// distinct via the raw value's exact-zero check in cellRgb.
+// Exported pure for unit tests.
+export function clampHeatmapDeposit(v) {
+  if (Number.isNaN(v)) return v;
+  return Math.max(0, v);
+}
+
 // Absolute withdrawal scale for Amount mode: P2/P98 of finite cell values in
 // the visible from/to columns (all years), split by the actual MEDIAN of
 // those values (not the arithmetic mean of lo/hi). Anchoring on the mean
@@ -343,15 +353,16 @@ export function windowDeltaDomain(values, anchor, numYears, start, end) {
 // so a skewed distribution (say, low sitting 3x closer to zero than high is
 // far above it) would still saturate both color arms equally, hiding that
 // asymmetry. The median instead reflects where the data actually centers, so
-// the shorter arm reaches its pole sooner and reads visibly paler. Guard
-// hi > lo so color transfer never divides by zero.
+// the shorter arm reaches its pole sooner and reads visibly paler. Deposit
+// years are clamped at $0 before sampling so inflows do not pull `lo` below
+// the axis. Guard hi > lo so color transfer never divides by zero.
 // Exported pure for unit tests.
 export function windowAbsoluteDomain(values, numYears, start, end) {
   const samples = [];
   for (let c = start; c < end; c++) {
     for (let j = 0; j < numYears; j++) {
       const v = values[c * numYears + j];
-      if (!Number.isNaN(v)) samples.push(v);
+      if (!Number.isNaN(v)) samples.push(clampHeatmapDeposit(v));
     }
   }
   samples.sort((a, b) => a - b);
@@ -491,15 +502,22 @@ function currentFrameIndex(col) {
   return -1;
 }
 
-// The value a cell currently displays. All painting, hit testing, and
-// tooltips read through here so every surface agrees on what is on screen.
-function cellValue(col, year) {
+// Raw packaged withdrawal for a cell (may be negative = deposit).
+function rawCellValue(col, year) {
   const hm = state.heatmap;
   const f = currentFrameIndex(col);
   if (f >= 0 && hm.frameValues) {
     return hm.frameValues[(f * hm.numCols + col) * hm.numYears + year];
   }
   return hm.values[col * hm.numYears + year];
+}
+
+// The value a cell currently displays. All painting, hit testing, and
+// tooltips read through here so every surface agrees on what is on screen.
+// Amount mode floors deposits at $0; delta modes keep the signed raw value.
+function cellValue(col, year) {
+  const v = rawCellValue(col, year);
+  return state.encoding === 'abs' ? clampHeatmapDeposit(v) : v;
 }
 
 // Paint the cells into an offscreen canvas: one pixel column per data column,
@@ -533,8 +551,11 @@ function buildOffscreen() {
 
   for (let c = 0; c < hm.numCols; c++) {
     for (let j = 0; j < hm.numYears; j++) {
-      const v = cellValue(c, j);
-      absSeries[j] = v;
+      // Depletion red keys off the raw absolute (exact $0). Amount mode's
+      // deposit clamp must not turn inflows into false depletion years.
+      const raw = rawCellValue(c, j);
+      const v = info.mode === 'abs' ? clampHeatmapDeposit(raw) : raw;
+      absSeries[j] = raw;
       if (info.mode === 'abs') {
         series[j] = v;
       } else {
