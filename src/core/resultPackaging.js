@@ -10,8 +10,7 @@ import {
   successRate,
   withdrawalTargetSuccessRate,
   median,
-  isMedianYearlyMetric,
-  isMeanYearlyMetric,
+  isEarlyWeightingActive,
   meanYearlyWithdrawals,
   perRunWithdrawalMetric,
   buildHistogram,
@@ -22,7 +21,7 @@ import {
   plannedScheduleTotal,
   plannedScheduleMedianYearly,
   plannedScheduleMeanYearly,
-  plannedScheduleBenchmark,
+  weightedPlannedBenchmark,
   plannedYearlySchedule,
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
@@ -210,7 +209,7 @@ export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, planByYear
 // averaging the band of runs whose withdrawal rank sits within ±halfW of the
 // target rank. When horizons differ, each year renormalizes weights over runs
 // still active at that year.
-function smoothedPercentile(params, result, rankW, centerRank, halfW) {
+function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetric = null) {
   const lo = Math.max(0, centerRank - halfW);
   const hi = Math.min(rankW.length - 1, centerRank + halfW);
 
@@ -224,6 +223,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
 
   let maxLen = 0;
   let totalWithdrawn = 0;
+  let earlyWeightedWithdrawn = 0;
   let finalBalance = 0;
   let avgReturn = 0;
   let irr = 0;
@@ -235,6 +235,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
   for (const e of entries) {
     maxLen = Math.max(maxLen, e.path.balances.length);
     totalWithdrawn += e.w * result.totalWithdrawn[e.simIndex];
+    if (rankedMetric) earlyWeightedWithdrawn += e.w * rankedMetric[e.simIndex];
     finalBalance += e.w * result.finalBalance[e.simIndex];
     avgReturn += e.w * result.avgReturn[e.simIndex];
     // IRR is NaN for pathological paths (no positive inflows); average the rest.
@@ -280,6 +281,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
 
   return {
     totalWithdrawn: totalWithdrawn / wSum,
+    earlyWeightedWithdrawn: rankedMetric ? earlyWeightedWithdrawn / wSum : totalWithdrawn / wSum,
     medianYearlyWithdrawal: medianYearlyWithdrawal / wSum,
     finalBalance: finalBalance / wSum,
     avgReturn: avgReturn / wSum,
@@ -295,11 +297,22 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW) {
   };
 }
 
-function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdrawalMetric) {
+function buildSurfacePathEntry(
+  params,
+  result,
+  simIndex,
+  benchmarkCache,
+  withdrawalMetric,
+  rankingWeighting,
+  rankedMetric,
+) {
   const re = regeneratePath(params, result.baseSeed, simIndex);
   const h = re.horizonYears;
   if (!benchmarkCache.has(h)) {
-    benchmarkCache.set(h, plannedScheduleBenchmark(params.portfolio, h, withdrawalMetric));
+    benchmarkCache.set(
+      h,
+      weightedPlannedBenchmark(params.portfolio, h, withdrawalMetric, rankingWeighting),
+    );
   }
   return {
     balances: re.path.balances,
@@ -308,6 +321,7 @@ function buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdra
     unadjustedWithdrawals: re.path.unadjustedWithdrawals,
     withdrawalBreakdown: re.path.withdrawalBreakdown,
     totalWithdrawn: result.totalWithdrawn[simIndex],
+    earlyWeightedScore: rankedMetric ? rankedMetric[simIndex] : result.totalWithdrawn[simIndex],
     medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
     avgReturn: result.avgReturn[simIndex],
     irr: result.irr[simIndex],
@@ -324,13 +338,27 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const maxYears = params.maxYears ?? endpointYears;
   const horizonVariable = params.horizonRange != null;
   const withdrawalMetric = params.withdrawalMetric || 'total';
+  const rankingWeighting = {
+    strengthPct: params.earlyWeightStrengthPct ?? 0,
+    earlyEmphasisPct: params.earlyWeightEmphasisPct ?? 30,
+    lateFloorPct: params.earlyWeightLateFloorPct ?? 40,
+  };
+  const earlyWeightingActive = isEarlyWeightingActive(rankingWeighting);
 
-  const rankW = rankByWithdrawn(result, withdrawalMetric);
+  const rankedMetric = perRunWithdrawalMetric(result, withdrawalMetric, rankingWeighting);
+  const rankW = rankByWithdrawn(result, withdrawalMetric, rankingWeighting);
   const halfW = Math.round((params.smoothFraction || 0) * n);
   const percentiles = {};
   for (const p of PERCENTILES) {
     const centerRank = percentileIndex(n, p);
-    percentiles[`p${Math.round(p * 100)}`] = smoothedPercentile(params, result, rankW, centerRank, halfW);
+    percentiles[`p${Math.round(p * 100)}`] = smoothedPercentile(
+      params,
+      result,
+      rankW,
+      centerRank,
+      halfW,
+      rankedMetric,
+    );
   }
 
   const benchmarkCache = new Map();
@@ -341,7 +369,15 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   for (let i = 0; i < SURFACE_SAMPLES; i++) {
     const rankIndex = Math.min(p5i + i * step, p65i);
     const simIndex = rankW[rankIndex];
-    surfacePaths.push(buildSurfacePathEntry(params, result, simIndex, benchmarkCache, withdrawalMetric));
+    surfacePaths.push(buildSurfacePathEntry(
+      params,
+      result,
+      simIndex,
+      benchmarkCache,
+      withdrawalMetric,
+      rankingWeighting,
+      rankedMetric,
+    ));
   }
 
   // The heatmap's deviation baseline: the planned schedule is a pure function
@@ -373,16 +409,18 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const plannedWithdrawn = plannedScheduleTotal(params.portfolio, endpointYears);
   const plannedMedianYearly = plannedScheduleMedianYearly(params.portfolio, endpointYears);
   const plannedMeanYearly = plannedScheduleMeanYearly(params.portfolio, endpointYears);
-  const onPlanBenchmark = isMedianYearlyMetric(withdrawalMetric)
-    ? plannedMedianYearly
-    : isMeanYearlyMetric(withdrawalMetric)
-      ? plannedMeanYearly
-      : plannedWithdrawn;
-  const onPlanActuals = perRunWithdrawalMetric(result, withdrawalMetric);
+  const onPlanBenchmark = weightedPlannedBenchmark(
+    params.portfolio,
+    endpointYears,
+    withdrawalMetric,
+    rankingWeighting,
+  );
+  const onPlanActuals = rankedMetric;
   const perRunBenchmarks = buildPerRunPlanBenchmarks(
     params.portfolio,
     result.horizonYears,
     withdrawalMetric,
+    rankingWeighting,
   );
 
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
@@ -412,6 +450,10 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     metricWasAuto: !!params.metricWasAuto,
     seed: result.baseSeed,
     withdrawalMetric,
+    earlyWeightStrengthPct: rankingWeighting.strengthPct,
+    earlyWeightEmphasisPct: rankingWeighting.earlyEmphasisPct,
+    earlyWeightLateFloorPct: rankingWeighting.lateFloorPct,
+    earlyWeightingActive,
     successRate: successRate(result.depletionYear, result.horizonYears),
     withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(
       onPlanActuals,
@@ -423,6 +465,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
     meanYearlyWithdrawn: median(meanYearlyWithdrawals(result.totalWithdrawn, result.horizonYears)),
+    medianEarlyWeightedWithdrawn: median(onPlanActuals),
     plannedWithdrawn,
     plannedMedianYearly,
     plannedMeanYearly,
@@ -433,6 +476,9 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       numSimulations: n,
       rankW,
       withdrawalMetric,
+      earlyWeightStrengthPct: rankingWeighting.strengthPct,
+      earlyWeightEmphasisPct: rankingWeighting.earlyEmphasisPct,
+      earlyWeightLateFloorPct: rankingWeighting.lateFloorPct,
       maxYears,
       p5Rank: p5i,
       p65Rank: p65i,

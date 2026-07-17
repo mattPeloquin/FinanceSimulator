@@ -89,6 +89,9 @@ describe('migrateScenario', () => {
       presetActive: false,
       presetLevel: SCENARIO_DEFAULTS.presetLevel,
       allocationOverTimeTiers: [],
+      earlyWeightSlot: SCENARIO_DEFAULTS.earlyWeightSlot,
+      earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
+      earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
     });
   });
   it('adds an empty allocation-over-time schedule when migrating pre-v7 saves', () => {
@@ -97,23 +100,48 @@ describe('migrateScenario', () => {
       presetActive: true,
       presetLevel: 4,
     };
+    const earlyWeightDefaults = {
+      earlyWeightSlot: SCENARIO_DEFAULTS.earlyWeightSlot,
+      earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
+      earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
+    };
     expect(migrateScenario(s, 5)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
+      ...earlyWeightDefaults,
     });
     expect(migrateScenario(s, 6)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
+      ...earlyWeightDefaults,
     });
   });
-  it('leaves v7 scenarios untouched', () => {
+  it('leaves fully-migrated v8 scenarios untouched when already current', () => {
     const s = {
       startBalance: 4000,
       presetActive: true,
       presetLevel: 4,
       allocationOverTimeTiers: [],
+      earlyWeightSlot: 0,
+      earlyWeightEmphasisPct: 30,
+      earlyWeightLateFloorPct: 40,
     };
-    expect(migrateScenario(s, 7)).toEqual(s);
+    expect(migrateScenario(s, 8)).toEqual(s);
+  });
+  it('maps legacy earlyWeightStrengthPct to a 5-stop slot and drops shape', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      earlyWeightStrengthPct: 50,
+      rankWeightingShape: 'linear',
+      allocationOverTimeTiers: [],
+    };
+    const migrated = migrateScenario(s, 7);
+    expect(migrated.earlyWeightSlot).toBe(2);
+    expect(migrated.earlyWeightEmphasisPct).toBe(SCENARIO_DEFAULTS.earlyWeightEmphasisPct);
+    expect(migrated.earlyWeightLateFloorPct).toBe(SCENARIO_DEFAULTS.earlyWeightLateFloorPct);
+    expect(migrated.earlyWeightStrengthPct).toBeUndefined();
+    expect(migrated.rankWeightingShape).toBeUndefined();
   });
   it('detaches any schema version that omits Easy Mode', () => {
     expect(migrateScenario({ startBalance: 1000 }, 6)).toMatchObject({

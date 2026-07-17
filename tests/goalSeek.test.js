@@ -19,6 +19,8 @@ import {
   plannedScheduleMedianYearly,
   plannedScheduleMeanYearly,
   plannedPrimaryObjective,
+  plannedScheduleBenchmark,
+  weightedPlannedBenchmark,
   medianExcessEndingBalance,
   isBetterGoalSeekScore,
   buildPerRunPlanBenchmarks,
@@ -396,6 +398,53 @@ describe('buildPerRunPlanBenchmarks', () => {
     const benchmarks = buildPerRunPlanBenchmarks(portfolio, horizons, 'meanYearly');
     expect(benchmarks[0]).toBeCloseTo(plannedScheduleTotal(portfolio, 25) / 25, 6);
     expect(benchmarks[1]).toBeCloseTo(plannedScheduleTotal(portfolio, 30) / 30, 6);
+  });
+
+  it('uses early-weighted plan benchmarks when strength is above 0', () => {
+    const portfolio = {
+      strategy: 'base',
+      base: 100_000,
+      spendingOverTimeSeries: spendingSeries(10, [
+        { changePct: 0, extra: 50_000, years: 3 },
+        { changePct: 0, extra: 0 },
+      ]),
+      withdrawalFloorSeries: new Array(10).fill(0),
+    };
+    const horizons = Int32Array.from([10]);
+    const flat = buildPerRunPlanBenchmarks(portfolio, horizons, 'total');
+    const weighted = buildPerRunPlanBenchmarks(portfolio, horizons, 'total', {
+      strengthPct: 100,
+      earlyEmphasisPct: 50,
+      lateFloorPct: 40,
+    });
+    // Front-loaded plan scores higher under early weighting than lifetime total alone.
+    expect(weighted[0]).toBeGreaterThan(flat[0]);
+    expect(weightedPlannedBenchmark(portfolio, 10, 'total', { strengthPct: 0 })).toBe(
+      plannedScheduleBenchmark(portfolio, 10, 'total'),
+    );
+  });
+});
+
+describe('plannedPrimaryObjective vs early-weight shortfall lens', () => {
+  it('primary objective ignores early-weight strength (flat schedule unchanged)', () => {
+    const portfolio = {
+      strategy: 'base',
+      base: 80_000,
+      spendingOverTimeSeries: spendingSeries(20, [{ changePct: 0, extra: 0 }]),
+      withdrawalFloorSeries: new Array(20).fill(0),
+    };
+    // Maximize-plan score stays the lifetime (or early-window) plan — the
+    // Withdrawals slider only changes shortfall judgment, not this objective.
+    expect(plannedPrimaryObjective(portfolio, 20, 'total', 0)).toBe(
+      plannedScheduleTotal(portfolio, 20),
+    );
+    expect(
+      weightedPlannedBenchmark(portfolio, 20, 'total', {
+        strengthPct: 100,
+        earlyEmphasisPct: 50,
+        lateFloorPct: 40,
+      }),
+    ).toBeCloseTo(plannedScheduleTotal(portfolio, 20), 4);
   });
 });
 

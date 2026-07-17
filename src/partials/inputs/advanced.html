@@ -39,7 +39,7 @@
                     <option value="meanYearly">Mean withdrawal per year</option>
                     <option value="medianYearly">Median withdrawal per year</option>
                 </select>
-                <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Find Best Plan. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results.</p>
+                <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Find Best Plan. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results. When the Withdrawals slider favors Early Withdrawal, early-weighted spending overrides median/yr for ranking.</p>
             </div>
             <div>
                 <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
@@ -48,6 +48,33 @@
                     <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
                 <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate, blue below-plan markers, and 3D chart coloring — including after Find Best Plan. Find Best Plan&rsquo;s own Risk Tolerance only shapes the search.</p>
+            </div>
+        </div>
+
+        <div class="space-y-3 p-3 border rounded-lg bg-theme-muted">
+            <div>
+                <label class="block text-sm font-medium text-theme-body">Early-weight Curve</label>
+                <p class="text-xs text-theme-faint mt-0.5">Used when the Withdrawals slider is not on Total Lifetime. Early emphasis steepens the drop after year 1; Late floor keeps the last years counting (never a hard zero).</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="earlyWeightEmphasisPct" class="block text-sm font-medium text-theme-body">Early emphasis</label>
+                    <div class="flex items-center gap-3 mt-1">
+                        <input type="range" id="earlyWeightEmphasisPctSlider" min="0" max="100" step="1" class="range-theme flex-1">
+                        <input type="number" id="earlyWeightEmphasisPct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                    </div>
+                </div>
+                <div>
+                    <label for="earlyWeightLateFloorPct" class="block text-sm font-medium text-theme-body">Late floor</label>
+                    <div class="flex items-center gap-3 mt-1">
+                        <input type="range" id="earlyWeightLateFloorPctSlider" min="0" max="100" step="1" class="range-theme flex-1">
+                        <input type="number" id="earlyWeightLateFloorPct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-1 rounded-md border border-theme-border bg-theme-surface/60 p-2 max-w-md">
+                <svg id="earlyWeightPreview" viewBox="0 0 320 64" class="block w-full h-16 text-theme-accent-text" role="img" aria-label="Year-weight preview chart"></svg>
+                <p id="earlyWeightPreviewCaption" class="text-[10px] text-theme-faint mt-1 leading-tight"></p>
             </div>
         </div>
 

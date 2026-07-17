@@ -5,7 +5,13 @@ import { drawDistributionChart, drawAllYearsDistributionChart, drawIrrDistributi
 import { drawIrrScatter } from './charts/irrScatter.js';
 import { drawWithdrawalHeatmap } from './charts/withdrawalHeatmap.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
-import { isMedianYearlyMetric, isMeanYearlyMetric, median, withdrawalMetricLabels } from '../core/statistics.js';
+import {
+  isMedianYearlyMetric,
+  isMeanYearlyMetric,
+  isEarlyWeightingActive,
+  median,
+  withdrawalMetricLabels,
+} from '../core/statistics.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
 
@@ -84,48 +90,57 @@ function setSecondaryMetric(id, value) {
   el.textContent = formatK(value);
 }
 
-function applyMetricLabels(metric, horizonVariable) {
-  const useMedianYearly = isMedianYearlyMetric(metric);
+function applyMetricLabels(metric, horizonVariable, weighting = null) {
+  const earlyWeighted = isEarlyWeightingActive(weighting);
+  const useMedianYearly = !earlyWeighted && isMedianYearlyMetric(metric);
   const useMeanYearly = isMeanYearlyMetric(metric);
-  const { primary } = withdrawalMetricLabels(metric);
+  const { primary } = withdrawalMetricLabels(metric, weighting);
   const [secondary1, secondary2] = secondaryMetricSlots(metric);
   setText(
     'medianWithdrawnLabel',
-    useMedianYearly
-      ? 'Median Withdrawal / Year'
-      : useMeanYearly
-        ? 'Mean Withdrawal / Year'
-        : 'Median Total Withdrawn',
+    earlyWeighted
+      ? (useMeanYearly ? 'Early-weighted Mean / Year' : 'Early-weighted Spending')
+      : useMedianYearly
+        ? 'Median Withdrawal / Year'
+        : useMeanYearly
+          ? 'Mean Withdrawal / Year'
+          : 'Median Total Withdrawn',
   );
   setText('medianWithdrawnSecondaryLabel', METRIC_SHORT_LABELS[secondary1]);
   setText('medianWithdrawnSecondary2Label', METRIC_SHORT_LABELS[secondary2]);
   setText(
     'plannedWithdrawnLabel',
-    useMedianYearly
-      ? 'Planned Median / Year'
-      : useMeanYearly
-        ? 'Planned Mean / Year'
-        : 'Planned Total Withdrawal',
+    earlyWeighted
+      ? (useMeanYearly ? 'Planned Early-weighted Mean / Year' : 'Planned Early-weighted Spending')
+      : useMedianYearly
+        ? 'Planned Median / Year'
+        : useMeanYearly
+          ? 'Planned Mean / Year'
+          : 'Planned Total Withdrawal',
   );
   setText('plannedWithdrawnSecondaryLabel', METRIC_SHORT_LABELS[secondary1]);
   setText('plannedWithdrawnSecondary2Label', METRIC_SHORT_LABELS[secondary2]);
   setText(
     'outcomesDescription',
-    useMedianYearly
-      ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
-      : useMeanYearly
-        ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by mean withdrawal per year.'
-        : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
+    earlyWeighted
+      ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by early-weighted spending.'
+      : useMedianYearly
+        ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
+        : useMeanYearly
+          ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by mean withdrawal per year.'
+          : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
   );
   const horizonNote = horizonVariable ? ' Horizons vary across runs.' : '';
   const descEl = document.getElementById('outcomesDescription');
   if (descEl && horizonNote) descEl.textContent += horizonNote;
 
-  const deltaTitle = useMedianYearly
-    ? 'Difference from the planned median per year'
-    : useMeanYearly
-      ? 'Difference from the planned mean per year'
-      : 'Difference from the planned withdrawal total';
+  const deltaTitle = earlyWeighted
+    ? 'Difference from the planned early-weighted spending'
+    : useMedianYearly
+      ? 'Difference from the planned median per year'
+      : useMeanYearly
+        ? 'Difference from the planned mean per year'
+        : 'Difference from the planned withdrawal total';
   for (const key of PERCENTILE_KEYS) {
     setText(`${key}WdLabel`, primary);
     setText(`${key}WdSecondaryLabel`, METRIC_SHORT_LABELS[secondary1]);
@@ -227,15 +242,23 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   setGoalSeekWarning(goalSeekWarning ?? null);
   setFourPercentVerdict(fourPercentComparison ?? null);
   const metric = result.withdrawalMetric;
-  const useMedianYearly = isMedianYearlyMetric(metric);
+  const rankingWeighting = {
+    strengthPct: result.earlyWeightStrengthPct ?? 0,
+    earlyEmphasisPct: result.earlyWeightEmphasisPct ?? 30,
+    lateFloorPct: result.earlyWeightLateFloorPct ?? 40,
+  };
+  const earlyWeighted = isEarlyWeightingActive(rankingWeighting);
+  const useMedianYearly = !earlyWeighted && isMedianYearlyMetric(metric);
   const useMeanYearly = isMeanYearlyMetric(metric);
   const plannedBenchmark = result.onPlanBenchmark
     ?? (useMedianYearly ? result.plannedMedianYearly : useMeanYearly ? result.plannedMeanYearly : result.plannedWithdrawn);
-  const medianActual = useMedianYearly
-    ? result.medianYearlyWithdrawn
-    : useMeanYearly
-      ? result.meanYearlyWithdrawn
-      : result.medianWithdrawn;
+  const medianActual = earlyWeighted
+    ? (result.medianEarlyWeightedWithdrawn ?? result.medianWithdrawn)
+    : useMedianYearly
+      ? result.medianYearlyWithdrawn
+      : useMeanYearly
+        ? result.meanYearlyWithdrawn
+        : result.medianWithdrawn;
   // Same slotting as the outcome cards: the two non-primary metrics share
   // one line, median left of total.
   const actualValues = {
@@ -256,14 +279,16 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   }
   const onPlanCard = onPlanLabel?.closest('.rounded-lg');
   if (onPlanCard) {
-    onPlanCard.title = useMedianYearly
-      ? `Share of runs whose median yearly withdrawal reached at least ${100 - tolerancePct}% of the planned median per year`
-      : useMeanYearly
-        ? `Share of runs whose mean yearly withdrawal reached at least ${100 - tolerancePct}% of the planned mean per year`
-        : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
+    onPlanCard.title = earlyWeighted
+      ? `Share of runs whose early-weighted spending reached at least ${100 - tolerancePct}% of the early-weighted plan`
+      : useMedianYearly
+        ? `Share of runs whose median yearly withdrawal reached at least ${100 - tolerancePct}% of the planned median per year`
+        : useMeanYearly
+          ? `Share of runs whose mean yearly withdrawal reached at least ${100 - tolerancePct}% of the planned mean per year`
+          : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
 
-  applyMetricLabels(metric, result.horizonVariable);
+  applyMetricLabels(metric, result.horizonVariable, rankingWeighting);
 
   // Whole percents only: a tenth of a percent of runs is Monte Carlo noise, not signal.
   setText('successRate', formatPercent(result.successRate, 0));
@@ -288,11 +313,13 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
       medianYearly: p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path),
       meanYearly: p.horizonYears > 0 ? p.totalWithdrawn / p.horizonYears : 0,
     };
-    const actual = useMedianYearly
-      ? metricValues.medianYearly
-      : useMeanYearly
-        ? metricValues.meanYearly
-        : metricValues.total;
+    const actual = earlyWeighted
+      ? (p.earlyWeightedWithdrawn ?? p.totalWithdrawn)
+      : useMedianYearly
+        ? metricValues.medianYearly
+        : useMeanYearly
+          ? metricValues.meanYearly
+          : metricValues.total;
     setText(`${key}Wd`, formatK(actual));
     setSecondaryMetric(`${key}WdSecondary`, metricValues[secondarySlot1]);
     setSecondaryMetric(`${key}WdSecondary2`, metricValues[secondarySlot2]);

@@ -10,10 +10,14 @@ import { formatPct1, roundPct1 } from '../core/precision.js';
 import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries, buildMajorEventsSeries } from '../core/withdrawal.js';
 import { buildAllocationOverTimeSeries } from '../core/allocation.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
+import {
+  earlyWeightSlotFromStrengthPct,
+  resolveEarlyWeighting,
+} from '../core/statistics.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -42,6 +46,10 @@ const FIELDS = [
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
   field('planRiskTolerancePct', 'planRiskTolerancePct', 'float'),
   field('withdrawalMetric', 'withdrawalMetric', 'string'),
+  // Range input is the canonical control (no paired number box).
+  field('earlyWeightSlot', 'earlyWeightSlot', 'int'),
+  field('earlyWeightEmphasisPct', 'earlyWeightEmphasisPct', 'float'),
+  field('earlyWeightLateFloorPct', 'earlyWeightLateFloorPct', 'float'),
 
   field('startYear', 'startYear', 'int'),
   field('endYear', 'endYear', 'int'),
@@ -265,6 +273,24 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     if (migrated.allocationOverTimeTiers == null) {
       migrated.allocationOverTimeTiers = [];
     }
+  }
+
+  if (schemaVersion < 8) {
+    // 0–100 strength + named shapes → 5-stop slot + Early emphasis / Late floor.
+    if (migrated.earlyWeightSlot == null && migrated.earlyWeightStrengthPct != null) {
+      migrated.earlyWeightSlot = earlyWeightSlotFromStrengthPct(migrated.earlyWeightStrengthPct);
+    }
+    if (migrated.earlyWeightSlot == null) {
+      migrated.earlyWeightSlot = SCENARIO_DEFAULTS.earlyWeightSlot;
+    }
+    if (migrated.earlyWeightEmphasisPct == null) {
+      migrated.earlyWeightEmphasisPct = SCENARIO_DEFAULTS.earlyWeightEmphasisPct;
+    }
+    if (migrated.earlyWeightLateFloorPct == null) {
+      migrated.earlyWeightLateFloorPct = SCENARIO_DEFAULTS.earlyWeightLateFloorPct;
+    }
+    delete migrated.earlyWeightStrengthPct;
+    delete migrated.rankWeightingShape;
   }
 
   return migrated;
@@ -983,6 +1009,8 @@ const PAIRED_SLIDER_IDS = {
   goalSeekDesiredSuccessPct: 'goalSeekDesiredSuccessPctSlider',
   goalSeekRiskTolerancePct: 'goalSeekRiskTolerancePctSlider',
   planRiskTolerancePct: 'planRiskTolerancePctSlider',
+  earlyWeightEmphasisPct: 'earlyWeightEmphasisPctSlider',
+  earlyWeightLateFloorPct: 'earlyWeightLateFloorPctSlider',
 };
 
 // Same scenario value shown in both Base and Specific minimum-withdrawal panels.
@@ -1153,6 +1181,7 @@ export function buildSimParams(scenario, samples) {
       : null;
   const resolvedMetric = resolveWithdrawalMetric(scenario);
   const metricWasAuto = (scenario.withdrawalMetric ?? SCENARIO_DEFAULTS.withdrawalMetric) === 'auto';
+  const earlyWeighting = resolveEarlyWeighting(scenario);
 
   return {
     numYears: endpointYears,
@@ -1167,6 +1196,10 @@ export function buildSimParams(scenario, samples) {
     smoothFraction: Math.min(Math.max(num(scenario.smoothWindowPct) / 100, 0), 0.1),
     withdrawalMetric: resolvedMetric,
     metricWasAuto,
+    earlyWeightSlot: Math.min(Math.max(Math.round(num(scenario.earlyWeightSlot) || 0), 0), 4),
+    earlyWeightStrengthPct: earlyWeighting.strengthPct,
+    earlyWeightEmphasisPct: earlyWeighting.earlyEmphasisPct,
+    earlyWeightLateFloorPct: earlyWeighting.lateFloorPct,
     allocation: {
       usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
       usLgValue: (scenario.usLgValueAllocation || 0) / 100,
@@ -1345,6 +1378,14 @@ export function buildGoalSeekConfig(scenario) {
     includeGlidePath: !!scenario.goalSeekIncludeGlidePath,
     searchNumSimulations: num(scenario.goalSeekNumSimulations) || undefined,
     withdrawalMetric: resolveWithdrawalMetric(scenario),
+    ...(() => {
+      const weighting = resolveEarlyWeighting(scenario);
+      return {
+        earlyWeightStrengthPct: weighting.strengthPct,
+        earlyWeightEmphasisPct: weighting.earlyEmphasisPct,
+        earlyWeightLateFloorPct: weighting.lateFloorPct,
+      };
+    })(),
   };
 }
 

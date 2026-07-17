@@ -49,6 +49,20 @@ export const BASE_DEFAULTS = {
   //   'medianYearly' — median withdrawal per year (horizon-independent)
   withdrawalMetric: 'auto',
 
+  // Five-stop Withdrawals slider: how much early-weighted spending matters when
+  // ranking futures and on-plan success. 0 = Total Lifetime (flat years),
+  // 4 = Early Withdrawal (full Advanced curve). Maps to blend 0/25/50/75/100.
+  // Does not change boosts, floors, or Find Best Plan lever grids.
+  earlyWeightSlot: 0,
+
+  // Advanced: how steeply importance falls after year 1 (0 = gentler, 100 = steeper).
+  // Valid UI range: 0–100. Used only when earlyWeightSlot > 0.
+  earlyWeightEmphasisPct: 30,
+
+  // Advanced: last-year weight as % of year-1 on the raw curve (floor 5%–100%).
+  // Higher keeps late retirement counting; lower focuses more on early years.
+  earlyWeightLateFloorPct: 40,
+
   // Expected length of consecutive-year runs (resampling) or AR(1) smoothing
   // strength (log-normal). Valid UI range: 1–6. 1 = fully independent years.
   blockSize: 3,

@@ -28,6 +28,69 @@ import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 import { syncAllocationPreview } from './charts/allocationPreview.js';
 import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
+import { weightPreviewSeries } from '../core/statistics.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Redraw the Advanced early-weight curve preview from current form values. */
+export function syncEarlyWeightPreview() {
+  const svg = document.getElementById('earlyWeightPreview');
+  const caption = document.getElementById('earlyWeightPreviewCaption');
+  if (!svg) return;
+  const horizon = Math.max(1, parseInt(document.getElementById('numYears')?.value, 10) || 30);
+  const earlyEmphasisPct = Number(document.getElementById('earlyWeightEmphasisPct')?.value) || 0;
+  const lateFloorPct = Number(document.getElementById('earlyWeightLateFloorPct')?.value) || 0;
+  const preview = weightPreviewSeries(horizon, { earlyEmphasisPct, lateFloorPct });
+  const { weights } = preview;
+  const w = 320;
+  const h = 64;
+  const padX = 4;
+  const padY = 6;
+  // Float64Array.map always returns a Float64Array (objects coerce to NaN),
+  // so build coords via Array.from.
+  const weightList = Array.from(weights);
+  const maxW = Math.max(...weightList, 1e-9);
+  const n = weightList.length;
+  const innerW = w - padX * 2;
+  const innerH = h - padY * 2;
+  const coords = weightList.map((wt, i) => {
+    const x = padX + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+    const y = padY + innerH - (wt / maxW) * innerH;
+    return { x, y };
+  });
+  // Build paths with createElementNS — svg.innerHTML often drops path elements
+  // (HTML parser, not SVG namespace), so the chart looked empty.
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  if (n > 0) {
+    const linePts = coords.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L ');
+    const areaD =
+      `M ${padX} ${(padY + innerH).toFixed(1)} L ${linePts} L ${(padX + innerW).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+    const lineD = `M ${linePts}`;
+    const area = document.createElementNS(SVG_NS, 'path');
+    area.setAttribute('d', areaD);
+    area.setAttribute('fill', 'currentColor');
+    area.setAttribute('opacity', '0.2');
+    const line = document.createElementNS(SVG_NS, 'path');
+    line.setAttribute('d', lineD);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', 'currentColor');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linejoin', 'round');
+    line.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(area);
+    svg.appendChild(line);
+  }
+  if (caption) {
+    const last = horizon;
+    const ratio = Number.isFinite(preview.year1VsLast)
+      ? preview.year1VsLast.toFixed(1)
+      : '∞';
+    caption.textContent =
+      `Full curve at Early Withdrawal (horizon ${horizon} yrs). ` +
+      `Year 1 ≈ ${ratio}× year ${last}; late years keep ${preview.rawLateSharePct}% of year 1 on the raw curve.`;
+  }
+}
 
 // Charts created inside a collapsed <details> render at 0px; resize them when the
 // accordion is opened so they fill the now-visible container. Open/closed state for
@@ -57,6 +120,9 @@ export function setupAccordionResize() {
       }
       if (details.id === 'section-investment' || details.id === 'details-allocation-over-time') {
         syncAllocationPreview();
+      }
+      if (details.id === 'section-advanced') {
+        syncEarlyWeightPreview();
       }
     });
   });
@@ -654,6 +720,30 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const earlyWeightSlot = document.getElementById('earlyWeightSlot');
+  if (earlyWeightSlot) {
+    earlyWeightSlot.addEventListener('input', notify);
+  }
+
+  function pairEarlyWeightKnob(numberId, sliderId) {
+    const numberEl = document.getElementById(numberId);
+    const sliderEl = document.getElementById(sliderId);
+    if (!numberEl || !sliderEl) return;
+    sliderEl.addEventListener('input', (e) => {
+      numberEl.value = e.target.value;
+      syncEarlyWeightPreview();
+      notify();
+    });
+    numberEl.addEventListener('input', (e) => {
+      sliderEl.value = e.target.value;
+      syncEarlyWeightPreview();
+      notify();
+    });
+  }
+  pairEarlyWeightKnob('earlyWeightEmphasisPct', 'earlyWeightEmphasisPctSlider');
+  pairEarlyWeightKnob('earlyWeightLateFloorPct', 'earlyWeightLateFloorPctSlider');
+  syncEarlyWeightPreview();
+
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
       toggleDistMethod(e.target.value);
@@ -773,7 +863,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       input.id === 'scaledHistoricalSmoothingSlider' ||
       input.id === 'goalSeekDesiredSuccessPctSlider' ||
       input.id === 'goalSeekRiskTolerancePctSlider' ||
-      input.id === 'planRiskTolerancePctSlider'
+      input.id === 'planRiskTolerancePctSlider' ||
+      input.id === 'earlyWeightEmphasisPctSlider' ||
+      input.id === 'earlyWeightLateFloorPctSlider'
     ) return;
     // The Risk Level control notifies through its own module (riskPreset.js).
     if (input.id === 'presetLevel' || input.id === 'presetActive') return;
@@ -797,6 +889,8 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   if (numYearsEl) {
     numYearsEl.addEventListener('change', syncAllocationPreview);
     numYearsEl.addEventListener('input', syncAllocationPreview);
+    numYearsEl.addEventListener('change', syncEarlyWeightPreview);
+    numYearsEl.addEventListener('input', syncEarlyWeightPreview);
   }
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever

@@ -9,7 +9,15 @@ import {
   sampleOverviewPaths,
   ranksForPercentileWindow,
 } from '../../core/surfaceDrilldown.js';
-import { meetsWithdrawalTarget, median, isMedianYearlyMetric, isMeanYearlyMetric, withdrawalMetricLabels } from '../../core/statistics.js';
+import {
+  meetsWithdrawalTarget,
+  median,
+  isMedianYearlyMetric,
+  isMeanYearlyMetric,
+  isEarlyWeightingActive,
+  weightedScheduleScore,
+  withdrawalMetricLabels,
+} from '../../core/statistics.js';
 import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
@@ -162,9 +170,25 @@ function pathDepleted(balances) {
   return balances.some((b, i) => i > 0 && b <= 0);
 }
 
+function rankingWeightingFromState() {
+  const meta = surfaceState.surfaceMeta;
+  return {
+    strengthPct: meta?.earlyWeightStrengthPct ?? 0,
+    earlyEmphasisPct: meta?.earlyWeightEmphasisPct ?? 30,
+    lateFloorPct: meta?.earlyWeightLateFloorPct ?? 40,
+  };
+}
+
 // Funded path that fell short of the risk-adjusted plan benchmark (same rule as
 // the "Success Rate (within X% of plan)" metric and Goal Seek scoring).
 function pathActualWithdrawal(path, withdrawalMetric) {
+  const weighting = rankingWeightingFromState();
+  if (isEarlyWeightingActive(weighting)) {
+    if (path.earlyWeightedScore != null) return path.earlyWeightedScore;
+    const h = path.horizonYears ?? path.withdrawals?.length ?? 0;
+    const weightedTotal = weightedScheduleScore(path.withdrawals || [], weighting);
+    return isMeanYearlyMetric(withdrawalMetric) && h > 0 ? weightedTotal / h : weightedTotal;
+  }
   if (isMedianYearlyMetric(withdrawalMetric)) {
     if (path.medianYearlyWithdrawal != null) return path.medianYearlyWithdrawal;
     return median(path.withdrawals || []);
@@ -271,8 +295,11 @@ function updateSurfaceChrome({ mode, centerRank, lo, hi, n } = {}) {
     const loLabel = percentileLabelForRank(lo, n, DRILLDOWN_PERCENTILE_DECIMALS);
     const hiLabel = percentileLabelForRank(hi, n, DRILLDOWN_PERCENTILE_DECIMALS);
     titleEl.textContent = `Explore paths near ${centerLabel}`;
+    const rankLens = isEarlyWeightingActive(rankingWeightingFromState())
+      ? 'early-weighted spending ranks'
+      : 'total-withdrawn ranks';
     descEl.innerHTML =
-      `Showing ~200 simulations with total-withdrawn ranks between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
+      `Showing ~200 simulations with ${rankLens} between ${loLabel} and ${hiLabel} (centered on ${centerLabel}). ` +
       `Column height represents ${heightMetricPhrase()}; color reflects each year's market return. ` +
       `<strong>Single-click</strong> a column to pin it; <strong>double-click</strong> any column to return to the P${surfaceState.lowerPct}–P${surfaceState.upperPct} overview.`;
     return;
@@ -1422,6 +1449,7 @@ function applySurfaceDataset(surfacePaths, numYears) {
 function enrichDrilldownPaths(paths) {
   const cache = surfaceState.surfaceMeta?.benchmarkCache ?? {};
   const metric = surfaceState.withdrawalMetric;
+  const weighting = rankingWeightingFromState();
   return paths.map((path) => {
     const h = path.horizonYears;
     let planBenchmark = path.planBenchmark;
@@ -1429,14 +1457,22 @@ function enrichDrilldownPaths(paths) {
       planBenchmark = cache[h];
     }
     if (planBenchmark == null && h != null && surfaceState.simParams?.portfolio) {
-      if (isMedianYearlyMetric(metric)) {
+      if (isEarlyWeightingActive(weighting)) {
+        const weightedPlan = weightedScheduleScore(path.unadjustedWithdrawals ?? path.withdrawals ?? [], weighting);
+        planBenchmark = isMeanYearlyMetric(metric) && h > 0 ? weightedPlan / h : weightedPlan;
+      } else if (isMedianYearlyMetric(metric)) {
         planBenchmark = median(path.withdrawals || []);
       } else {
         const plannedTotal = (path.unadjustedWithdrawals ?? []).reduce((sum, w) => sum + w, 0);
         planBenchmark = isMeanYearlyMetric(metric) && h > 0 ? plannedTotal / h : plannedTotal;
       }
     }
-    return { ...path, planBenchmark: planBenchmark ?? 0 };
+    let earlyWeightedScore = path.earlyWeightedScore;
+    if (earlyWeightedScore == null && isEarlyWeightingActive(weighting)) {
+      const weightedTotal = weightedScheduleScore(path.withdrawals || [], weighting);
+      earlyWeightedScore = isMeanYearlyMetric(metric) && h > 0 ? weightedTotal / h : weightedTotal;
+    }
+    return { ...path, planBenchmark: planBenchmark ?? 0, earlyWeightedScore };
   });
 }
 

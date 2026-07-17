@@ -15,7 +15,9 @@ import {
   median,
   isMedianYearlyMetric,
   isMeanYearlyMetric,
+  isEarlyWeightingActive,
   perRunWithdrawalMetric,
+  weightedScheduleScore,
 } from './statistics.js';
 import { buildBaseWithdrawalSchedule } from './withdrawal.js';
 
@@ -247,6 +249,24 @@ export function plannedScheduleBenchmark(portfolio, numYears, metric) {
   return plannedScheduleTotal(portfolio, numYears);
 }
 
+// Same benchmark as plannedScheduleBenchmark, but when early-weight strength
+// is above 0 the planned yearly schedule is scored with the same year weights
+// used for Monte Carlo actuals — so on-plan success and Find Best Plan's
+// shortfall gate stay in sync with the percentile ranking.
+export function weightedPlannedBenchmark(portfolio, numYears, metric, weighting = null) {
+  if (!isEarlyWeightingActive(weighting)) {
+    return plannedScheduleBenchmark(portfolio, numYears, metric);
+  }
+  const schedule = plannedYearlySchedule(portfolio, numYears);
+  const weightedTotal = weightedScheduleScore(schedule, weighting);
+  if (isMeanYearlyMetric(metric)) {
+    return numYears > 0 ? weightedTotal / numYears : 0;
+  }
+  // Median/yr only applies at strength 0; with weighting use the weighted sum
+  // (same dollar family as total) so actual and plan share one primary.
+  return weightedTotal;
+}
+
 // Find Best Plan's primary ranking score: the headline planned schedule
 // (base × spending tiers / specific list), not Monte Carlo actuals that
 // include gifts, ceiling boosts, market highs, or glide surplus.
@@ -307,14 +327,19 @@ export function isBetterGoalSeekScore(a, b) {
 
 // Build a per-run planned benchmark array, memoizing by horizon length so
 // variable-horizon Monte Carlo runs only compute each distinct schedule once.
-export function buildPerRunPlanBenchmarks(portfolio, horizonYearsArray, metric) {
+export function buildPerRunPlanBenchmarks(
+  portfolio,
+  horizonYearsArray,
+  metric,
+  weighting = null,
+) {
   const n = horizonYearsArray.length;
   const benchmarks = new Float64Array(n);
   const cache = new Map();
   for (let i = 0; i < n; i++) {
     const h = horizonYearsArray[i];
     if (!cache.has(h)) {
-      cache.set(h, plannedScheduleBenchmark(portfolio, h, metric));
+      cache.set(h, weightedPlannedBenchmark(portfolio, h, metric, weighting));
     }
     benchmarks[i] = cache.get(h);
   }
@@ -699,12 +724,25 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       config.withdrawalMetric,
       window,
     );
+    // Early-weight strength only changes the shortfall / on-plan judgment
+    // (same lens as percentile charts). It does not change the maximize-plan
+    // objective or which levers Find Best Plan may tune.
+    const rankingWeighting = {
+      strengthPct: config.earlyWeightStrengthPct ?? 0,
+      earlyEmphasisPct: config.earlyWeightEmphasisPct ?? 30,
+      lateFloorPct: config.earlyWeightLateFloorPct ?? 40,
+    };
     const perRunBenchmarks = buildPerRunPlanBenchmarks(
       working.portfolio,
       result.horizonYears,
       config.withdrawalMetric,
+      rankingWeighting,
     );
-    const actualWithdrawn = perRunWithdrawalMetric(result, config.withdrawalMetric);
+    const actualWithdrawn = perRunWithdrawalMetric(
+      result,
+      config.withdrawalMetric,
+      rankingWeighting,
+    );
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
     // Discount Target Ending Balance by Risk Tolerance so legacy slack can fund
     // higher spending. Legacy success uses this discounted gate whenever a

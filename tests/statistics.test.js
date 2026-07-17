@@ -20,6 +20,14 @@ import {
   irrFromPath,
   meanYearlyWithdrawals,
   withdrawalMetricLabels,
+  yearWeights,
+  earlyWeightRawCurve,
+  weightPreviewSeries,
+  earlyWeightSlotFromStrengthPct,
+  earlyWeightStrengthFromSlot,
+  weightedWithdrawalScore,
+  weightedScheduleScore,
+  isEarlyWeightingActive,
 } from '../src/core/statistics.js';
 
 function makeSummary(arrs) {
@@ -35,6 +43,9 @@ function makeSummary(arrs) {
       arrs.horizonYears ?? arrs.totalWithdrawn.map(() => 1),
     ),
     depletionYear: Float64Array.from(arrs.depletionYear ?? []),
+    allYearsWithdrawals: arrs.allYearsWithdrawals
+      ? Float64Array.from(arrs.allYearsWithdrawals)
+      : undefined,
   };
 }
 
@@ -115,6 +126,140 @@ describe('withdrawalMetricLabels', () => {
     expect(withdrawalMetricLabels('total')).toEqual({ primary: 'Total Withdrawn', secondary: 'Median / Year' });
     expect(withdrawalMetricLabels('medianYearly')).toEqual({ primary: 'Median / Year', secondary: 'Total Withdrawn' });
     expect(withdrawalMetricLabels('meanYearly')).toEqual({ primary: 'Mean / Year', secondary: 'Total Withdrawn' });
+  });
+
+  it('uses early-weighted primary labels when strength is above 0', () => {
+    expect(withdrawalMetricLabels('total', { strengthPct: 50 })).toEqual({
+      primary: 'Early-weighted Spending',
+      secondary: 'Total Withdrawn',
+    });
+    expect(withdrawalMetricLabels('meanYearly', { strengthPct: 50 })).toEqual({
+      primary: 'Early-weighted Mean / Year',
+      secondary: 'Total Withdrawn',
+    });
+  });
+});
+
+describe('early weight slot helpers', () => {
+  it('maps slots to blend strengths and snaps legacy percents', () => {
+    expect(earlyWeightStrengthFromSlot(0)).toBe(0);
+    expect(earlyWeightStrengthFromSlot(2)).toBe(50);
+    expect(earlyWeightStrengthFromSlot(4)).toBe(100);
+    expect(earlyWeightSlotFromStrengthPct(50)).toBe(2);
+    expect(earlyWeightSlotFromStrengthPct(60)).toBe(2);
+    expect(earlyWeightSlotFromStrengthPct(90)).toBe(4);
+  });
+});
+
+describe('yearWeights', () => {
+  it('returns all ones at strength 0', () => {
+    expect(Array.from(yearWeights(5, { strengthPct: 0 }))).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it('rescales so mean weight is 1 at full strength', () => {
+    const w = yearWeights(10, {
+      strengthPct: 100,
+      earlyEmphasisPct: 30,
+      lateFloorPct: 40,
+    });
+    const meanW = Array.from(w).reduce((a, b) => a + b, 0) / w.length;
+    expect(meanW).toBeCloseTo(1, 10);
+    expect(w[0]).toBeGreaterThan(w[w.length - 1]);
+  });
+
+  it('raw curve lands on late floor and emphasis steepens the front', () => {
+    const gentle = earlyWeightRawCurve(30, { earlyEmphasisPct: 0, lateFloorPct: 40 });
+    const steep = earlyWeightRawCurve(30, { earlyEmphasisPct: 100, lateFloorPct: 40 });
+    expect(gentle[0]).toBeCloseTo(1, 10);
+    expect(gentle[29]).toBeCloseTo(0.05 + 0.95 * 0.4, 10);
+    expect(steep[29]).toBeCloseTo(gentle[29], 10);
+    // Mid-horizon: steeper emphasis is lower than gentle (more weight early).
+    expect(steep[10]).toBeLessThan(gentle[10]);
+    expect(steep[0] / steep[10]).toBeGreaterThan(gentle[0] / gentle[10]);
+  });
+
+  it('weightPreviewSeries reports late-share on the raw curve', () => {
+    const preview = weightPreviewSeries(20, { earlyEmphasisPct: 30, lateFloorPct: 40 });
+    expect(preview.weights.length).toBe(20);
+    // lateFloorPct 40 → 5% + 95%×0.40 = 43% of year 1 on the raw curve.
+    expect(preview.rawLateSharePct).toBe(43);
+    expect(preview.year1Weight).toBeGreaterThan(preview.yearLastWeight);
+  });
+});
+
+describe('weightedWithdrawalScore', () => {
+  it('clamps deposit years to zero so early inflows do not inflate rank', () => {
+    const maxYears = 4;
+    // One run: deposit in year 1, then normal withdrawals.
+    const matrix = Float64Array.from([-50_000, 40_000, 40_000, 40_000]);
+    const weighting = { strengthPct: 100, earlyEmphasisPct: 50, lateFloorPct: 40 };
+    const score = weightedWithdrawalScore(matrix, maxYears, 0, 4, weighting);
+    const noDeposit = weightedWithdrawalScore(
+      Float64Array.from([0, 40_000, 40_000, 40_000]),
+      maxYears,
+      0,
+      4,
+      weighting,
+    );
+    expect(score).toBeCloseTo(noDeposit, 8);
+  });
+
+  it('matches unweighted total at strength 0 via schedule helper', () => {
+    const schedule = [10, 20, 30];
+    expect(weightedScheduleScore(schedule, { strengthPct: 0 })).toBe(60);
+    expect(isEarlyWeightingActive({ strengthPct: 0 })).toBe(false);
+  });
+});
+
+describe('rankByWithdrawn with early weighting', () => {
+  it('matches unweighted ranking at strength 0; early weight can reorder equal-lifetime paths', () => {
+    const maxYears = 3;
+    // Run 0: late-heavy but higher lifetime total; run 1: early-heavy; run 2: low.
+    const allYearsWithdrawals = Float64Array.from([
+      10, 10, 100, // total 120
+      70, 20, 10, // total 100
+      20, 20, 20, // total 60
+    ]);
+    const summary = makeSummary({
+      avgReturn: [0, 0, 0],
+      finalBalance: [1, 2, 3],
+      totalWithdrawn: [120, 100, 60],
+      horizonYears: [3, 3, 3],
+      allYearsWithdrawals,
+    });
+    const weighting = { strengthPct: 100, earlyEmphasisPct: 80, lateFloorPct: 20 };
+    expect(Array.from(rankByWithdrawn(summary, 'total'))).toEqual([2, 1, 0]);
+    expect(Array.from(rankByWithdrawn(summary, 'total', { strengthPct: 0 }))).toEqual([2, 1, 0]);
+    const s0 = weightedWithdrawalScore(allYearsWithdrawals, maxYears, 0, 3, weighting);
+    const s1 = weightedWithdrawalScore(allYearsWithdrawals, maxYears, 1, 3, weighting);
+    expect(s1).toBeGreaterThan(s0);
+    // Early-heavy run 1 outranks late-heavy run 0 despite lower lifetime total.
+    expect(Array.from(rankByWithdrawn(summary, 'total', weighting))).toEqual([2, 0, 1]);
+  });
+
+  it('renormalizes weights for shorter horizons', () => {
+    const maxYears = 4;
+    const allYearsWithdrawals = Float64Array.from([
+      50, 50, NaN, NaN, // horizon 2
+      10, 10, 10, 10, // horizon 4
+    ]);
+    const summary = makeSummary({
+      avgReturn: [0, 0],
+      finalBalance: [0, 0],
+      totalWithdrawn: [100, 40],
+      horizonYears: [2, 4],
+      allYearsWithdrawals,
+    });
+    const ranks = Array.from(
+      rankByWithdrawn(summary, 'total', {
+        strengthPct: 100,
+        earlyEmphasisPct: 50,
+        lateFloorPct: 40,
+      }),
+    );
+    // Shorter high-early path should outrank the longer low path under early weight.
+    expect(ranks[0]).toBe(1);
+    expect(ranks[1]).toBe(0);
   });
 });
 

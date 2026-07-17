@@ -1,6 +1,8 @@
 // Statistical helpers operating on the packed simulation summaries.
 
 export const WITHDRAWAL_METRICS = ['total', 'medianYearly', 'meanYearly'];
+/** Five-stop Withdrawals slider: slot → blend strength toward the Advanced curve. */
+export const EARLY_WEIGHT_SLOT_STRENGTHS = [0, 25, 50, 75, 100];
 
 export function isMedianYearlyMetric(metric) {
   return metric === 'medianYearly';
@@ -10,8 +12,66 @@ export function isMeanYearlyMetric(metric) {
   return metric === 'meanYearly';
 }
 
+/** True when early-year weighting should change ranking / on-plan scoring. */
+export function isEarlyWeightingActive(weighting) {
+  if (!weighting) return false;
+  const strength = Number(weighting.strengthPct);
+  return Number.isFinite(strength) && strength > 0;
+}
+
+/** Map the 0–4 Withdrawals slot to a 0–100 blend strength. */
+export function earlyWeightStrengthFromSlot(slot) {
+  const index = Math.min(Math.max(Math.round(Number(slot) || 0), 0), EARLY_WEIGHT_SLOT_STRENGTHS.length - 1);
+  return EARLY_WEIGHT_SLOT_STRENGTHS[index];
+}
+
+/** Snap a legacy 0–100 strength percentage to the nearest 5-stop slot. */
+export function earlyWeightSlotFromStrengthPct(strengthPct) {
+  const pct = Math.min(Math.max(Number(strengthPct) || 0, 0), 100);
+  return Math.min(4, Math.max(0, Math.round(pct / 25)));
+}
+
+/**
+ * Normalize scenario/params fields into the weighting object yearWeights expects.
+ * Slot (or legacy strengthPct) sets blend; Advanced knobs set curve shape.
+ */
+export function resolveEarlyWeighting({
+  earlyWeightSlot,
+  earlyWeightStrengthPct,
+  earlyWeightEmphasisPct,
+  earlyWeightLateFloorPct,
+  strengthPct,
+  earlyEmphasisPct,
+  lateFloorPct,
+} = {}) {
+  let strength = strengthPct;
+  if (strength == null && earlyWeightSlot != null) {
+    strength = earlyWeightStrengthFromSlot(earlyWeightSlot);
+  }
+  if (strength == null) {
+    strength = earlyWeightStrengthPct ?? 0;
+  }
+  return {
+    strengthPct: Math.min(Math.max(Number(strength) || 0, 0), 100),
+    earlyEmphasisPct: Math.min(
+      Math.max(Number(earlyEmphasisPct ?? earlyWeightEmphasisPct) || 0, 0),
+      100,
+    ),
+    lateFloorPct: Math.min(
+      Math.max(Number(lateFloorPct ?? earlyWeightLateFloorPct) || 0, 0),
+      100,
+    ),
+  };
+}
+
 /** Display labels for primary vs secondary withdrawal metrics in results UI. */
-export function withdrawalMetricLabels(metric) {
+export function withdrawalMetricLabels(metric, weighting = null) {
+  if (isEarlyWeightingActive(weighting)) {
+    if (isMeanYearlyMetric(metric)) {
+      return { primary: 'Early-weighted Mean / Year', secondary: 'Total Withdrawn' };
+    }
+    return { primary: 'Early-weighted Spending', secondary: 'Total Withdrawn' };
+  }
   if (isMedianYearlyMetric(metric)) return { primary: 'Median / Year', secondary: 'Total Withdrawn' };
   if (isMeanYearlyMetric(metric)) return { primary: 'Mean / Year', secondary: 'Total Withdrawn' };
   return { primary: 'Total Withdrawn', secondary: 'Median / Year' };
@@ -32,21 +92,181 @@ export function meanYearlyWithdrawals(totalWithdrawn, horizonYears) {
   return out;
 }
 
-// Per-run values of the chosen withdrawal metric.
-export function perRunWithdrawalMetric(summary, metric) {
-  if (isMedianYearlyMetric(metric)) return summary.medianYearlyWithdrawal;
-  if (isMeanYearlyMetric(metric)) return meanYearlyWithdrawals(summary.totalWithdrawn, summary.horizonYears);
-  return summary.totalWithdrawn;
+/**
+ * Raw early-weight curve (year 1 = 1, last year = lateFloor) before blending
+ * with flat years or mean-rescaling. Exposed for tests and the Advanced preview
+ * caption ("late years keep X% of year 1").
+ *
+ * - lateFloorPct 0–100 → last year as a fraction of year 1 in [0.05, 1]
+ * - earlyEmphasisPct 0–100 → power p in [1, 4]; higher drops faster early
+ *   while still landing on the late floor (no cliff to ~0).
+ */
+export function earlyWeightRawCurve(
+  horizonYears,
+  { earlyEmphasisPct = 30, lateFloorPct = 40 } = {},
+) {
+  const horizon = Math.max(0, Math.floor(horizonYears) || 0);
+  const raw = new Float64Array(horizon);
+  if (horizon === 0) return raw;
+  if (horizon === 1) {
+    raw[0] = 1;
+    return raw;
+  }
+
+  const emphasis = Math.min(Math.max(Number(earlyEmphasisPct) || 0, 0), 100) / 100;
+  const lateFloor = 0.05 + 0.95 * (Math.min(Math.max(Number(lateFloorPct) || 0, 0), 100) / 100);
+  // p = 1 → linear fade from 1 to lateFloor; p = 4 → steeper early drop.
+  const power = 1 + 3 * emphasis;
+
+  for (let t = 0; t < horizon; t++) {
+    const u = t / (horizon - 1);
+    raw[t] = lateFloor + (1 - lateFloor) * (1 - u) ** power;
+  }
+  return raw;
+}
+
+/**
+ * Per-year importance weights for ranking / on-plan scoring.
+ *
+ * Strength 0 → every year counts equally (all ones) — same as today's lifetime
+ * total. Strength 100 blends fully toward the Advanced curve (early emphasis +
+ * late floor). After blending we rescale so the average weight is 1, which keeps
+ * Σ w_t × withdrawal_t in the same dollar units as a lifetime total.
+ */
+export function yearWeights(
+  horizonYears,
+  { strengthPct = 0, earlyEmphasisPct = 30, lateFloorPct = 40 } = {},
+) {
+  const horizon = Math.max(0, Math.floor(horizonYears) || 0);
+  const weights = new Float64Array(horizon);
+  if (horizon === 0) return weights;
+
+  const strength = Math.min(Math.max(Number(strengthPct) || 0, 0), 100) / 100;
+  if (strength <= 0) {
+    weights.fill(1);
+    return weights;
+  }
+
+  const raw = earlyWeightRawCurve(horizon, { earlyEmphasisPct, lateFloorPct });
+
+  // Blend toward the curve, then force mean(weight) = 1 so a flat schedule's
+  // weighted total still matches its unweighted lifetime total.
+  let sum = 0;
+  for (let t = 0; t < horizon; t++) {
+    const blended = (1 - strength) * 1 + strength * raw[t];
+    weights[t] = blended;
+    sum += blended;
+  }
+  const meanWeight = sum / horizon;
+  if (meanWeight > 0) {
+    for (let t = 0; t < horizon; t++) weights[t] /= meanWeight;
+  }
+  return weights;
+}
+
+/** Series for the Advanced weight preview (full curve at strength 100). */
+export function weightPreviewSeries(horizonYears, knobs = {}) {
+  const weights = yearWeights(horizonYears, { ...knobs, strengthPct: 100 });
+  const raw = earlyWeightRawCurve(horizonYears, knobs);
+  const horizon = weights.length;
+  const year1 = horizon > 0 ? weights[0] : 0;
+  const yearLast = horizon > 0 ? weights[horizon - 1] : 0;
+  const rawLateSharePct = horizon > 0 ? Math.round((raw[horizon - 1] / raw[0]) * 100) : 100;
+  return {
+    weights,
+    year1Weight: year1,
+    yearLastWeight: yearLast,
+    year1VsLast: yearLast > 0 ? year1 / yearLast : Infinity,
+    rawLateSharePct,
+  };
+}
+
+/**
+ * Early-weighted spending score for one Monte Carlo run: sum over years of
+ * (weight × withdrawal). Negative "withdrawals" are deposits — they count as
+ * $0 here so an early inflow cannot push a cut-heavy path up the ranks.
+ */
+export function weightedWithdrawalScore(
+  allYearsWithdrawals,
+  maxYears,
+  simIndex,
+  horizonYears,
+  weighting,
+) {
+  const horizon = Math.max(0, Math.min(horizonYears || 0, maxYears || 0));
+  if (horizon <= 0 || !allYearsWithdrawals) return 0;
+  const weights = yearWeights(horizon, weighting);
+  const base = simIndex * maxYears;
+  let score = 0;
+  for (let t = 0; t < horizon; t++) {
+    const raw = allYearsWithdrawals[base + t];
+    if (!Number.isFinite(raw)) continue;
+    // Deposits arrive as negative withdrawals in the sim; ignore them for rank.
+    const withdrawal = Math.max(0, raw);
+    score += weights[t] * withdrawal;
+  }
+  return score;
+}
+
+/** Weighted sum of a planned yearly schedule (same clamp / weight rules). */
+export function weightedScheduleScore(yearlyAmounts, weighting) {
+  const horizon = yearlyAmounts?.length ?? 0;
+  if (horizon <= 0) return 0;
+  if (!isEarlyWeightingActive(weighting)) {
+    let total = 0;
+    for (let t = 0; t < horizon; t++) total += Math.max(0, yearlyAmounts[t] || 0);
+    return total;
+  }
+  const weights = yearWeights(horizon, weighting);
+  let score = 0;
+  for (let t = 0; t < horizon; t++) {
+    score += weights[t] * Math.max(0, yearlyAmounts[t] || 0);
+  }
+  return score;
+}
+
+// Per-run values of the chosen withdrawal metric. When early-weight strength
+// is above 0, score from the year-by-year matrix instead of lifetime totals so
+// bad early spending (classic sequence risk) sinks toward the low percentiles.
+// Median/yr only applies at strength 0; with weighting we use the weighted sum
+// (same path as total) so there is one clear early-weighted primary.
+export function perRunWithdrawalMetric(summary, metric, weighting = null) {
+  if (!isEarlyWeightingActive(weighting) || !summary.allYearsWithdrawals) {
+    if (isMedianYearlyMetric(metric)) return summary.medianYearlyWithdrawal;
+    if (isMeanYearlyMetric(metric)) {
+      return meanYearlyWithdrawals(summary.totalWithdrawn, summary.horizonYears);
+    }
+    return summary.totalWithdrawn;
+  }
+
+  const n = summary.numSimulations;
+  const maxYears = summary.allYearsWithdrawals.length / n;
+  const out = new Float64Array(n);
+  const { horizonYears } = summary;
+  for (let i = 0; i < n; i++) {
+    const horizon = horizonYears[i];
+    const weightedTotal = weightedWithdrawalScore(
+      summary.allYearsWithdrawals,
+      maxYears,
+      i,
+      horizon,
+      weighting,
+    );
+    out[i] = isMeanYearlyMetric(metric) && horizon > 0
+      ? weightedTotal / horizon
+      : weightedTotal;
+  }
+  return out;
 }
 
 // Indices sorted by the chosen withdrawal metric (asc), tie-broken by total
 // withdrawn then final balance (asc). Used for percentile cards and timelines.
-export function rankByWithdrawn(summary, metric = 'total') {
+export function rankByWithdrawn(summary, metric = 'total', weighting = null) {
   const n = summary.numSimulations;
   const idx = new Int32Array(n);
   for (let i = 0; i < n; i++) idx[i] = i;
   const { totalWithdrawn, finalBalance } = summary;
-  const primary = perRunWithdrawalMetric(summary, metric);
+  const primary = perRunWithdrawalMetric(summary, metric, weighting);
   return Array.prototype.sort.call(idx, (a, b) => {
     if (primary[a] !== primary[b]) return primary[a] - primary[b];
     if (totalWithdrawn[a] !== totalWithdrawn[b]) return totalWithdrawn[a] - totalWithdrawn[b];
