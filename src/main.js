@@ -282,13 +282,11 @@ function applyGoalSeekSummaryToDom(summary, strategy) {
 
   // The Expected (med) adjustment is never searched — it is the user's fixed
   // on-plan anchor — so only the tuned Low/High bands are written back.
+  // Optional calibration knobs (no-cut balance / max boost drawdown) stay as
+  // the user/preset left them.
   if (summary.marketAdjustments) {
     setCurrencyField('dynLowAdj', summary.marketAdjustments.low);
     setCurrencyField('dynHighAdj', summary.marketAdjustments.high);
-  }
-
-  if (summary.marketNoCutBalance !== undefined) {
-    setCurrencyField('dynNoCutBal', summary.marketNoCutBalance);
   }
 
   // Floor/Ceiling dollars stay Easy Mode / user-owned — Find Best Plan only

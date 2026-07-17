@@ -32,9 +32,6 @@ const DEFAULT_MARKET_DOWN_ADJ_GRID = { minPct: -50, maxPct: -5, stepPct: 5 };
 // 0) and only anchors the Low/High grids.
 const DEFAULT_MARKET_UP_ADJ_GRID = { minPct: 10, maxPct: 100, stepPct: 10 };
 const DEFAULT_FLOOR_MULTIPLES = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
-// Includes sub-1x multiples so the ceiling boost can engage before the
-// portfolio has grown past its starting balance, not only after it balloons.
-const DEFAULT_CEILING_MULTIPLES = [0, 0.75, 1.0, 1.25, 1.5, 2.0];
 // Used by the exported buildFractionGrid()'s own default (unit-tested directly).
 const DEFAULT_PENALTY_BONUS_GRID = { minPct: 5, maxPct: 65, stepPct: 10 };
 // Coarser than DEFAULT_PENALTY_BONUS_GRID: ceiling pairs tune balance threshold
@@ -555,7 +552,9 @@ function cloneParams(params) {
       low: { ...params.dynConfig.low },
       med: { ...params.dynConfig.med },
       high: { ...params.dynConfig.high },
+      // Optional calibration knobs (blank = off) — not Goal Seek levers.
       noCutBal: params.dynConfig.noCutBal ?? null,
+      maxBoostDrawdownPct: params.dynConfig.maxBoostDrawdownPct ?? null,
     },
   };
 }
@@ -580,7 +579,6 @@ function perCandidateCost(config) {
 }
 
 function estimateEvalBudget(params, config) {
-  const ceilingMultiplesLen = (config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES).length;
   const marketDownAdjLen = gridLength(resolveMarketDownAdjGrid(config));
   const marketUpAdjLen = gridLength(resolveMarketUpAdjGrid(config));
   const floorPenaltyGridLen = buildBalanceAdjustmentFractionGrid(resolveFloorPenaltyGrid(config)).length;
@@ -592,7 +590,7 @@ function estimateEvalBudget(params, config) {
   const perRoundLeverCost =
     (config.includeSpendingOverTime ? bonusGridLen * candidateCost : 0) +
     (config.includeMarketAdjustments
-      ? (marketDownAdjLen + marketUpAdjLen + ceilingMultiplesLen) * candidateCost
+      ? (marketDownAdjLen + marketUpAdjLen) * candidateCost
       : 0) +
     (config.includeBalanceOverrides
       ? (floorPenaltyGridLen + ceilingBonusGridLen) * candidateCost
@@ -625,8 +623,10 @@ function estimateEvalBudget(params, config) {
 //                            0–20% and discounts targetEndingBalance
 //   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
-//   includeMarketAdjustments   bool — covers dynLow/HighAdj AND dynNoCutBal;
-//                              dynMedAdj is never searched (fixed as typed)
+//   includeMarketAdjustments   bool — covers dynLow/HighAdj only;
+//                              dynMedAdj is never searched (fixed as typed);
+//                              dynNoCutBal / maxBoostDrawdownPct stay as typed
+//                              (optional calibration, blank = off)
 //   includeBalanceOverrides    bool — keeps Floor/Ceiling dollars fixed (Easy Mode
 //                              or user-typed); tunes floorPenalty/ceilingBonus only
 //                              when the matching threshold is active
@@ -637,8 +637,6 @@ function estimateEvalBudget(params, config) {
 //   searchNumSimulations       optional override of the reduced sim count
 //   marketDownAdjGrid          optional { minPct, maxPct, stepPct } for dynLowAdj
 //   marketUpAdjGrid            optional { minPct, maxPct, stepPct } for dynHighAdj
-//   ceilingMultiples           optional array of starting-balance multiples for the
-//                              dynNoCutBal grid (market lever)
 //   floorPenaltyGrid           optional { minPct, maxPct, stepPct } — full max before envelope scale
 //   ceilingBonusGrid           optional { minPct, maxPct, stepPct }
 export async function runGoalSeek(params, config, simulateAsync, { onProgress } = {}) {
@@ -782,10 +780,10 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   if (config.includeMarketAdjustments) {
     // The Expected (med) adjustment is the user's fixed on-plan anchor and is
     // never searched; Low/High reset to the closest neutral values that keep
-    // the low ≤ expected ≤ high ordering around it.
+    // the low ≤ expected ≤ high ordering around it. Optional calibration
+    // knobs (noCutBal, maxBoostDrawdownPct) stay as typed — blank = off.
     working.dynConfig.low.adj = Math.min(0, working.dynConfig.med.adj);
     working.dynConfig.high.adj = Math.max(0, working.dynConfig.med.adj);
-    working.dynConfig.noCutBal = null;
   }
   if (config.includeBalanceOverrides) {
     // Floor/Ceiling dollars stay as provided (Easy Mode or user). Only the
@@ -833,10 +831,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
 
   if (!feasibleAtMinBase) {
     // Still write back the neutralized lever state so the form does not keep
-    // showing a previous run's adjustments after this early exit. The no-cut
-    // balance threshold is omitted on purpose: it was cleared to null for the
-    // search, and blanking it would wipe the preset-derived dynNoCutBal value
-    // the user just loaded. Floor/Ceiling dollars are never rewritten.
+    // showing a previous run's adjustments after this early exit. Optional
+    // calibration knobs (noCutBal, maxBoostDrawdownPct) and Floor/Ceiling
+    // dollars are never rewritten.
     if (config.includeMarketAdjustments) {
       clampMarketAdjustments(config, working.dynConfig, baseLowerBound);
     }
@@ -1131,23 +1128,6 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       );
       enforceAscendingMarketAdjustments(working.dynConfig);
       clampMarketAdjustments(config, working.dynConfig, solvedBase);
-
-      // "No cut while ahead" threshold: candidates are multiples of the
-      // starting balance (0 = off/null), sharing the ceiling grid since both
-      // describe a "balance comfortably above start" line.
-      const noCutBalanceGrid = buildBalanceGrid(
-        params.portfolio.start,
-        config.ceilingMultiples || DEFAULT_CEILING_MULTIPLES,
-        null,
-      );
-      working.dynConfig.noCutBal = await pickBestCandidateWithResolve(
-        noCutBalanceGrid,
-        (value) => {
-          working.dynConfig.noCutBal = value;
-        },
-        'Tuning no-cut balance threshold',
-        working.dynConfig.noCutBal,
-      );
     }
 
     if (config.includeBalanceOverrides) {
@@ -1205,7 +1185,6 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     if (config.includeMarketAdjustments) {
       snapshot.dynLowAdj = working.dynConfig.low.adj;
       snapshot.dynHighAdj = working.dynConfig.high.adj;
-      snapshot.dynNoCutBal = working.dynConfig.noCutBal;
     }
     if (config.includeBalanceOverrides) {
       snapshot.floorBalance = working.portfolio.floorBalance;
@@ -1315,9 +1294,6 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         marketAdjustments: config.includeMarketAdjustments
           ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
           : undefined,
-        marketNoCutBalance: config.includeMarketAdjustments
-          ? working.dynConfig.noCutBal
-          : undefined,
         balanceAdjustment: config.includeBalanceOverrides
           ? {
               floorBalance: working.portfolio.floorBalance,
@@ -1359,9 +1335,6 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     spendingOverTimeBonus: config.includeSpendingOverTime ? readSpendingBonus() : undefined,
     marketAdjustments: config.includeMarketAdjustments
       ? { low: working.dynConfig.low.adj, med: working.dynConfig.med.adj, high: working.dynConfig.high.adj }
-      : undefined,
-    marketNoCutBalance: config.includeMarketAdjustments
-      ? working.dynConfig.noCutBal
       : undefined,
     balanceAdjustment: config.includeBalanceOverrides
       ? {

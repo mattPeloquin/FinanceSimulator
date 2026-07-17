@@ -368,8 +368,10 @@ function largeWithdrawalLegendOptions(theme) {
     position: 'top',
     labels: {
       color: theme.legend,
-      boxWidth: 36,
+      // Match heatmap / sequence-risk sample-run charts (short line swatches).
+      boxWidth: 14,
       boxHeight: 2,
+      font: { size: 10 },
       padding: 12,
       // Default Chart.js legend generation walks `_getSortedDatasetMetas()`,
       // which sorts by dataset.order (draw order). Build from the datasets

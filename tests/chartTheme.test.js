@@ -36,6 +36,22 @@ describe('withdrawalComparisonDatasets minimum overlay', () => {
     expect(minimum.tension).toBe(0.1);
   });
 
+  it('clamps deposit years (negative withdrawals) to zero on the chart', () => {
+    const series = {
+      labels: [1, 2, 3],
+      unadjustedData: [-50_000, 100_000, 100_000],
+      actualData: [-50_000, 90_000, 100_000],
+    };
+    const portfolio = { start: 1_000_000 };
+
+    const datasets = withdrawalComparisonDatasets(series, { portfolio });
+    const plan = datasets.find((dataset) => dataset.label === 'Original Plan');
+    const actual = datasets.find((dataset) => dataset.label === 'Actual Withdrawal');
+
+    expect(plan.data).toEqual([0, 100_000, 100_000]);
+    expect(actual.data).toEqual([0, 90_000, 100_000]);
+  });
+
   it('lists 4% rule first and draws it last (highest order)', () => {
     const series = {
       labels: [1, 2, 3],

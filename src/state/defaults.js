@@ -160,8 +160,8 @@ export const BASE_DEFAULTS = {
   enableDynamicAdjustments: true,
 
   // Adjustment amounts ($000s) at each market anchor. The return triggers
-  // (dyn*Ret) and the no-cut balance threshold (dynNoCutBal) come from the
-  // risk preset.
+  // (dyn*Ret) and optional calibration knobs (dynNoCutBal, max boost
+  // drawdown) come from the risk preset — blank = off; not Goal Seek levers.
   dynLowAdj: 0,
   dynMedAdj: 0,
   dynHighAdj: 0,

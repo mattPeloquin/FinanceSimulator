@@ -25,6 +25,28 @@ let lastClassicMedianPath = null;
 
 const CLASSIC_SERIES_LABEL = '4% rule';
 
+// Absolute floor for the log axis (Chart.js cannot plot ≤ 0).
+const BALANCE_LOG_HARD_MIN = 1000;
+
+// Log-axis floor near start÷10, snapped down to a 1–2–2.5–5 "nice" dollar
+// amount so tick labels stay clean without leaving two empty decades under start.
+export function niceBalanceLogFloor(startBalance) {
+  if (!(startBalance > 0)) return BALANCE_LOG_HARD_MIN;
+  const target = startBalance / 10;
+  if (target <= BALANCE_LOG_HARD_MIN) return BALANCE_LOG_HARD_MIN;
+
+  const exp = Math.floor(Math.log10(target));
+  const mag = 10 ** exp;
+  // Prior decade's 5× lets targets just above a power of 10 step down cleanly
+  // (e.g. $110k → $100k rather than stalling at a coarser choice).
+  const candidates = [5 * (mag / 10), 1 * mag, 2 * mag, 2.5 * mag, 5 * mag, 10 * mag];
+  let nice = BALANCE_LOG_HARD_MIN;
+  for (const value of candidates) {
+    if (value <= target + 1e-9 && value > nice) nice = value;
+  }
+  return Math.max(BALANCE_LOG_HARD_MIN, nice);
+}
+
 function pathDataset(label, pathObj, color, values, returnOffset) {
   const returnAt = (dataIndex) => {
     if (!pathObj.returns || dataIndex + returnOffset < 0) return null;
@@ -95,7 +117,10 @@ function buildBalanceOptions(logFloor, theme) {
       },
     },
     plugins: {
-      legend: { position: 'top', labels: { color: theme.legend } },
+      legend: {
+        position: 'top',
+        labels: { color: theme.legend, boxWidth: 14, boxHeight: 2, font: { size: 10 } },
+      },
       tooltip: {
         ...chartJsTooltip(theme),
         callbacks: {
@@ -120,6 +145,7 @@ function buildWithdrawalOptions(theme) {
       x: axisScale(theme),
       y: axisScale(theme, {
         beginAtZero: true,
+        min: 0,
         title: { display: true, text: 'Withdrawals ($000s)', color: theme.axisName },
         ticks: { callback: (v) => formatK(v) },
       }),
@@ -161,7 +187,7 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
   const withdrawalLabels = Array.from({ length: numYears }, (_, i) => `Year ${i + 1}`);
 
   const startBalance = percentiles.p50?.path?.balances?.[0] ?? 0;
-  const logFloor = Math.max(1000, startBalance / 100);
+  const logFloor = niceBalanceLogFloor(startBalance);
   const theme = getChartTheme();
   const COLORS = getColors();
   const classicColor = theme.planLine;
@@ -192,16 +218,19 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
     options: buildBalanceOptions(logFloor, theme),
   });
 
+  // Deposit years are stored as negative withdrawals; this chart only shows
+  // outflows, so clamp those years to 0 rather than dipping below the axis.
+  const clampWithdrawals = (values) => values.map((v) => Math.max(0, v));
   const withdrawalDatasets = SERIES.map((s) => {
     const path = percentiles[s.key].path;
-    return pathDataset(s.label, path, COLORS[s.key], path.withdrawals, 0);
+    return pathDataset(s.label, path, COLORS[s.key], clampWithdrawals(path.withdrawals), 0);
   });
   if (classicMedianPath?.withdrawals) {
     withdrawalDatasets.push(
       classicOverlayDataset(
         classicMedianPath,
         classicColor,
-        classicMedianPath.withdrawals,
+        clampWithdrawals(classicMedianPath.withdrawals),
         0,
       ),
     );

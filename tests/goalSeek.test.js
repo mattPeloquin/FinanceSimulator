@@ -730,7 +730,6 @@ describe('runGoalSeek', () => {
     // Market Low/High are clamped to the mildest non-zero grid points on
     // write-back (same "never stay at $0" rule as a successful search).
     expect(summary.marketAdjustments).toEqual({ low: -4000, med: 0, high: 8000 });
-    expect(summary.marketNoCutBalance).toBeUndefined();
     expect(summary.balanceAdjustment.floorBalance).toBe(999_000);
     expect(summary.balanceAdjustment.ceilingBalance).toBe(2_000_000);
     expect(summary.balanceAdjustment.floorPenalty).toBeGreaterThan(0);
@@ -783,7 +782,6 @@ describe('runGoalSeek', () => {
     for (const value of Object.values(summary.marketAdjustments)) {
       expect(value % 1000 === 0).toBe(true);
     }
-    expect(summary.marketNoCutBalance === null || summary.marketNoCutBalance % 1000 === 0).toBe(true);
     // Thresholds are echoed unchanged (not searched); rates are tuned.
     expect(summary.balanceAdjustment.floorBalance).toBe(params.portfolio.floorBalance);
     expect(summary.balanceAdjustment.ceilingBalance).toBe(params.portfolio.ceilingBalance);
@@ -807,9 +805,14 @@ describe('runGoalSeek', () => {
     expect(summary.spendingOverTimeBonus).toBeGreaterThanOrEqual(0);
   });
 
-  it('tunes market adjustments and the no-cut balance threshold together', async () => {
-    const params = makeParams();
-    const { summary } = await seek(params, {
+  it('tunes Low/High market adjustments and leaves no-cut balance alone', async () => {
+    const params = makeParams({
+      dynConfig: {
+        ...makeParams().dynConfig,
+        noCutBal: 3_000_000,
+      },
+    });
+    const { summary, params: finalParams } = await seek(params, {
       targetEndingBalance: 0,
       desiredSuccessRate: 0.8,
       includeSpendingOverTime: false,
@@ -823,7 +826,9 @@ describe('runGoalSeek', () => {
     expect(summary.marketAdjustments).toHaveProperty('low');
     expect(summary.marketAdjustments).toHaveProperty('med');
     expect(summary.marketAdjustments).toHaveProperty('high');
-    expect(summary).toHaveProperty('marketNoCutBalance');
+    expect(summary.marketNoCutBalance).toBeUndefined();
+    // Optional calibration — blank = off — is not a Goal Seek lever.
+    expect(finalParams.dynConfig.noCutBal).toBe(3_000_000);
   });
 
   it('never returns $0 Low or High market adjustments with the default grids', async () => {
@@ -836,7 +841,6 @@ describe('runGoalSeek', () => {
       includeBalanceOverrides: false,
       searchNumSimulations: 300,
       maxRounds: 1,
-      ceilingMultiples: [0, 1],
     });
     expect(summary.feasible).toBe(true);
     expect(summary.marketAdjustments.low).toBeLessThan(0);
@@ -884,7 +888,6 @@ describe('runGoalSeek', () => {
       marketDownAdjGrid: { minPct: -40, maxPct: 40, stepPct: 20 },
       marketUpAdjGrid: { minPct: -20, maxPct: 60, stepPct: 20 },
       floorMultiples: [0, 1],
-      ceilingMultiples: [0, 1],
     });
 
     expect(summary.feasible).toBe(true);
@@ -1232,15 +1235,16 @@ describe('runGoalSeek', () => {
     };
 
     const paramsA = makeParams();
-    // Thresholds stay fixed (same in both). Only neutralized rate / market
-    // fields may differ; Expected (med) stays the user's fixed anchor.
+    // Thresholds and optional calibration knobs stay fixed (same in both).
+    // Only neutralized rate / market fields may differ; Expected (med) stays
+    // the user's fixed anchor.
     const paramsB = makeParams({
       dynConfig: {
         enabled: true,
         low: { ret: -15, adj: -90_000 },
         med: { ret: 5, adj: 0 },
         high: { ret: 20, adj: 90_000 },
-        noCutBal: 4_000_000,
+        noCutBal: null,
       },
       portfolio: {
         ...makeParams().portfolio,
