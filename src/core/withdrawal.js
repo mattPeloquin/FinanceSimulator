@@ -270,33 +270,94 @@ export function buildBaseWithdrawalSchedule(base, spendingSeries, numYears) {
   return amounts;
 }
 
+/** Optional % fields are blank when both trigger and target are null/undefined. */
+export function giftingUsesPercentMode(gift) {
+  if (!gift) return false;
+  return gift.triggerPct != null || gift.targetPct != null;
+}
+
+// How much of the configured Gift to pay this year.
+//
+// Two modes:
+// 1. Legacy (both Trigger % and Target % blank): pay the full Gift when the
+//    post-withdrawal balance exceeds the tier's Balance > threshold.
+// 2. Percent mode (either % filled): ignore Balance >; compare the
+//    post-withdrawal balance to the funded need of remaining planned
+//    withdrawals (undiscounted, no ending-balance cushion). Percents may be
+//    negative (below that need) or positive (above it). Gift scales linearly
+//    from 0% at the trigger level to 100% at the target level; above the
+//    target, pay the full Gift only — never the surplus itself.
+//
+// `remainingPlanNeed` is the dollars still needed after this year's regular
+// withdrawal to fund the rest of the plan (0 in the final year).
+export function scaledGiftAmount(gift, balance, remainingPlanNeed = 0) {
+  if (!gift || !(gift.amount > 0)) return 0;
+
+  if (!giftingUsesPercentMode(gift)) {
+    return balance > gift.balanceThreshold ? gift.amount : 0;
+  }
+
+  // No remaining plan left (last year, or only deposits ahead): any positive
+  // leftover is above every finite % band, so the full gift is available.
+  if (!(remainingPlanNeed > 0)) {
+    return balance > 0 ? gift.amount : 0;
+  }
+
+  // Blank trigger → start scaling at plan (0% above). Blank target → step
+  // function at the trigger (0 below, full gift at/above).
+  const triggerPct = gift.triggerPct != null ? gift.triggerPct : 0;
+  const targetPct = gift.targetPct != null ? gift.targetPct : triggerPct;
+  const triggerLevel = remainingPlanNeed * (1 + triggerPct / 100);
+  const targetLevel = remainingPlanNeed * (1 + targetPct / 100);
+
+  // Strictly below the trigger → no gift. At the trigger with a wider target
+  // band the scale is 0; when trigger equals target (step), at/above pays full.
+  if (balance < triggerLevel) return 0;
+  if (balance >= targetLevel || !(targetLevel > triggerLevel)) {
+    return gift.amount;
+  }
+
+  // Linear ramp: halfway between trigger and target → half the gift.
+  const scale = (balance - triggerLevel) / (targetLevel - triggerLevel);
+  return gift.amount * scale;
+}
+
 // Build a per-year gifting schedule from staged tiers ($000s in tiers).
-// Each entry carries the gift amount and the balance threshold that must be
-// exceeded (after growth and the regular withdrawal) before the gift is paid.
-// Intermediate tiers run for their year count; the final tier fills the horizon.
+// Each entry carries the gift amount, the legacy Balance > threshold, and
+// optional trigger/target % fields (null = blank). Intermediate tiers run for
+// their year count; the final tier fills the horizon.
 export function buildGiftingSeries(tiers, numYears, toDollarsFn) {
   if (numYears <= 0) return [];
-  const emptyEntry = { amount: 0, balanceThreshold: 0 };
+  const emptyEntry = {
+    amount: 0,
+    balanceThreshold: 0,
+    triggerPct: null,
+    targetPct: null,
+  };
   const series = new Array(numYears).fill(null);
   if (!tiers || tiers.length === 0) {
     return series.map(() => ({ ...emptyEntry }));
   }
 
+  const entryFromTier = (tier) => ({
+    amount: toDollarsFn(tier.amount),
+    balanceThreshold: toDollarsFn(tier.balance),
+    triggerPct: tier.triggerPct != null && Number.isFinite(tier.triggerPct) ? tier.triggerPct : null,
+    targetPct: tier.targetPct != null && Number.isFinite(tier.targetPct) ? tier.targetPct : null,
+  });
+
   let yearIndex = 0;
   for (let i = 0; i < tiers.length - 1; i++) {
-    const amount = toDollarsFn(tiers[i].amount);
-    const balanceThreshold = toDollarsFn(tiers[i].balance);
+    const entry = entryFromTier(tiers[i]);
     const span = Math.max(0, parseInt(tiers[i].years, 10) || 0);
     for (let k = 0; k < span && yearIndex < numYears; k++) {
-      series[yearIndex++] = { amount, balanceThreshold };
+      series[yearIndex++] = { ...entry };
     }
   }
 
-  const last = tiers[tiers.length - 1];
-  const lastAmount = toDollarsFn(last.amount);
-  const lastBalance = toDollarsFn(last.balance);
+  const lastEntry = entryFromTier(tiers[tiers.length - 1]);
   while (yearIndex < numYears) {
-    series[yearIndex++] = { amount: lastAmount, balanceThreshold: lastBalance };
+    series[yearIndex++] = { ...lastEntry };
   }
   return series;
 }

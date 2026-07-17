@@ -10,6 +10,7 @@ import {
   buildBaseWithdrawalSchedule,
   buildGlideRequiredBalances,
   glideSpendAmount,
+  scaledGiftAmount,
 } from './withdrawal.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
@@ -22,6 +23,14 @@ const MAX_HORIZON_YEARS = 100;
 // limited boost. Recovery counters only matter for future years, so this
 // probe reads whether a forced-plan year is already active and ignores the
 // consecutive-min bookkeeping that would only change later years.
+// Dollars still needed after this year's planned withdrawal to fund the rest
+// of the plan (undiscounted, no ending-balance cushion). Used by %-mode gifting.
+function remainingPlanNeedAfterWithdrawal(planFundedNeed, planAmount, yearIndex) {
+  if (!planFundedNeed) return 0;
+  const fundedNeed = planFundedNeed[yearIndex] ?? 0;
+  return Math.max(0, fundedNeed - Math.max(0, planAmount));
+}
+
 function estimateSpendingExGlide({
   postGrowthBalance,
   boost,
@@ -38,6 +47,7 @@ function estimateSpendingExGlide({
   glideRequired,
   glideFraction,
   yearIndex,
+  planFundedNeed,
 }) {
   let balance = postGrowthBalance;
   let targetWithdrawal = unadjustedTarget + boost;
@@ -78,9 +88,14 @@ function estimateSpendingExGlide({
   const metPlan =
     targetWithdrawal < 0
     || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
-  if (gift && gift.amount > 0 && metPlan && balance > gift.balanceThreshold) {
+  if (gift && gift.amount > 0 && metPlan) {
     // Gifts leave the portfolio too; only the balance reduction matters here.
-    balance -= Math.min(balance, gift.amount);
+    const remainingNeed = remainingPlanNeedAfterWithdrawal(
+      planFundedNeed,
+      unadjustedTarget,
+      yearIndex,
+    );
+    balance -= Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
   }
 
   return { spendingExGlide: postGrowthBalance - balance };
@@ -240,6 +255,14 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       ? buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, horizonYears)
       : null;
 
+  // Unadjusted withdrawal plan for this run's horizon — shared by glide-path
+  // required balances and by %-mode gifting (funded need of remaining plan).
+  const glidePlan = buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears);
+
+  // Gifting % bands compare post-withdrawal balance to the undiscounted
+  // funded need of remaining planned withdrawals (ending target 0, rate 0).
+  const planFundedNeed = buildGlideRequiredBalances(glidePlan, 0, 0);
+
   // Glide-path spend-down (optional; glideTarget null/blank = off, engine
   // behaves exactly as before). Precompute the per-year balance required to
   // fund the remaining plan and still land on the glide target at this run's
@@ -253,7 +276,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     && Number.isFinite(portfolio.glideTarget)
     && glideFraction > 0
       ? buildGlideRequiredBalances(
-          buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears),
+          glidePlan,
           portfolio.glideTarget,
           portfolio.glideRate ?? 0,
         )
@@ -451,6 +474,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         glideRequired,
         glideFraction,
         yearIndex: j,
+        planFundedNeed,
       };
       const withoutBoost = estimateSpendingExGlide({ ...probeArgs, boost: 0 }).spendingExGlide;
       const withFullBoost = estimateSpendingExGlide({
@@ -558,11 +582,12 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     }
 
     // Tiered gifting: give only when this year's non-gift spending fully meets
-    // the plan and the balance left after the regular withdrawal still exceeds
-    // the tier's threshold. "Meets the plan" counts the upcoming glide surplus
-    // (computed before any gift) so a market-adj cut that glide would more than
-    // replace does not block gifting — same eligibility as when glide ran first.
-    // Deposit years always meet the plan, so only the balance check applies.
+    // the plan. Legacy tiers also require Balance >; %-mode tiers scale the
+    // Gift against surplus over the remaining-plan funded need instead.
+    // "Meets the plan" counts the upcoming glide surplus (computed before any
+    // gift) so a market-adj cut that glide would more than replace does not
+    // block gifting — same eligibility as when glide ran first. Deposit years
+    // always meet the plan, so only the gift-amount rules apply.
     let prospectiveGlideExtra = 0;
     if (glideRequired && targetWithdrawal >= 0) {
       prospectiveGlideExtra = glideSpendAmount(
@@ -575,8 +600,13 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     const metPlan =
       targetWithdrawal < 0
       || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
-    if (gift && gift.amount > 0 && metPlan && balance > gift.balanceThreshold) {
-      giftPaid = Math.min(balance, gift.amount);
+    if (gift && gift.amount > 0 && metPlan) {
+      const remainingNeed = remainingPlanNeedAfterWithdrawal(
+        planFundedNeed,
+        unadjustedTarget,
+        j,
+      );
+      giftPaid = Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
       balance -= giftPaid;
       actualWithdrawal += giftPaid;
     }

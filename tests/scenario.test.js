@@ -356,10 +356,21 @@ describe('buildSimParams', () => {
     s.giftingTiers = [{ amount: 25, balance: 2000, years: 2 }, { amount: 10, balance: 1500 }];
     const p = buildSimParams(s, { years: [] });
     expect(p.portfolio.giftingSeries).toEqual([
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 10_000, balanceThreshold: 1_500_000 },
-      { amount: 10_000, balanceThreshold: 1_500_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000, triggerPct: null, targetPct: null },
+      { amount: 25_000, balanceThreshold: 2_000_000, triggerPct: null, targetPct: null },
+      { amount: 10_000, balanceThreshold: 1_500_000, triggerPct: null, targetPct: null },
+      { amount: 10_000, balanceThreshold: 1_500_000, triggerPct: null, targetPct: null },
+    ]);
+  });
+
+  it('passes gifting trigger and target percents into the series', () => {
+    const s = simScenario();
+    s.numYears = 2;
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: 10, targetPct: 40 }];
+    const p = buildSimParams(s, { years: [] });
+    expect(p.portfolio.giftingSeries).toEqual([
+      { amount: 25_000, balanceThreshold: 0, triggerPct: 10, targetPct: 40 },
+      { amount: 25_000, balanceThreshold: 0, triggerPct: 10, targetPct: 40 },
     ]);
   });
 
@@ -649,10 +660,50 @@ describe('validateScenario', () => {
     expect(validateScenario(s, range).some((e) => e.includes('positive balance threshold'))).toBe(true);
   });
 
+  it('allows a zero balance threshold when Trigger or Target % is set', () => {
+    const s = plainScenario();
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: 10, targetPct: 40 }];
+    expect(validateScenario(s, range)).toEqual([]);
+  });
+
+  it('allows negative Trigger and Target percents when Target is at least Trigger', () => {
+    const s = plainScenario();
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: -20, targetPct: -5 }];
+    expect(validateScenario(s, range)).toEqual([]);
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: -10, targetPct: 25 }];
+    expect(validateScenario(s, range)).toEqual([]);
+  });
+
+  it('rejects Target % below Trigger %', () => {
+    const s = plainScenario();
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: 40, targetPct: 10 }];
+    expect(validateScenario(s, range).some((e) => e.includes('Target %'))).toBe(true);
+    s.giftingTiers = [{ amount: 25, balance: 0, triggerPct: -5, targetPct: -20 }];
+    expect(validateScenario(s, range).some((e) => e.includes('Target %'))).toBe(true);
+  });
+
   it('normalizes gifting tiers with default year spans', () => {
     expect(normalizeGiftingTiers([{ amount: 25, balance: 2000, years: 3 }, { amount: 10, balance: 1500 }])).toEqual([
-      { amount: 25, balance: 2000, years: 3 },
-      { amount: 10, balance: 1500 },
+      { amount: 25, balance: 2000, triggerPct: null, targetPct: null, years: 3 },
+      { amount: 10, balance: 1500, triggerPct: null, targetPct: null },
+    ]);
+  });
+
+  it('normalizes optional gifting trigger and target percents', () => {
+    expect(normalizeGiftingTiers([
+      { amount: 25, balance: 0, years: 2, triggerPct: '10', targetPct: '' },
+      { amount: 10, balance: 500, targetPct: 25 },
+    ])).toEqual([
+      { amount: 25, balance: 0, triggerPct: 10, targetPct: null, years: 2 },
+      { amount: 10, balance: 500, triggerPct: null, targetPct: 25 },
+    ]);
+  });
+
+  it('accepts trigger/target percents typed with a % suffix', () => {
+    expect(normalizeGiftingTiers([
+      { amount: 25, balance: 0, triggerPct: '10%', targetPct: '40 %' },
+    ])).toEqual([
+      { amount: 25, balance: 0, triggerPct: 10, targetPct: 40 },
     ]);
   });
 

@@ -539,12 +539,18 @@ export function setupGiftingTierList({ onChange }) {
   addBtn.addEventListener('click', () => {
     const tiers = readGiftingTiersFromDom();
     if (tiers.length === 0) {
-      writeGiftingTiersToDom([{ amount: 0, balance: 0 }]);
+      writeGiftingTiersToDom([{ amount: 0, balance: 0, triggerPct: null, targetPct: null }]);
       notify();
       return;
     }
     const last = tiers.pop();
-    tiers.push({ amount: last.amount, balance: last.balance, years: 1 });
+    tiers.push({
+      amount: last.amount,
+      balance: last.balance,
+      triggerPct: last.triggerPct ?? null,
+      targetPct: last.targetPct ?? null,
+      years: 1,
+    });
     tiers.push(last);
     writeGiftingTiersToDom(tiers);
     notify();

@@ -21,7 +21,12 @@ function maxHorizonYears(params) {
 }
 
 function zeroGiftSeries(numYears) {
-  return Array.from({ length: numYears }, () => ({ amount: 0, balanceThreshold: 0 }));
+  return Array.from({ length: numYears }, () => ({
+    amount: 0,
+    balanceThreshold: 0,
+    triggerPct: null,
+    targetPct: null,
+  }));
 }
 
 function flatSpendingSeries(numYears) {

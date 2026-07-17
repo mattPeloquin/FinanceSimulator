@@ -238,7 +238,7 @@ describe('rankByWithdrawn with early weighting', () => {
   });
 
   it('renormalizes weights for shorter horizons', () => {
-    const maxYears = 4;
+    // Layout is 2 runs × 4 years (maxYears inferred from the packed array).
     const allYearsWithdrawals = Float64Array.from([
       50, 50, NaN, NaN, // horizon 2
       10, 10, 10, 10, // horizon 4

@@ -1281,6 +1281,49 @@ describe('tiered gifting', () => {
     expect(w[2]).toBeCloseTo(150_000, 3);
     expect(w[3]).toBeCloseTo(150_000, 3);
   });
+
+  it('scales the gift at the mid-band of trigger and target percent', () => {
+    // Zero-return path: start 3M, plan 100k/yr for 2 years.
+    // After year-0 withdrawal, remaining plan need = 100k.
+    // Trigger 0% → 100k, target 100% → 200k. Mid balance 150k → half gift.
+    const p = giftingParams({ numYears: 2 });
+    p.portfolio.start = 250_000;
+    p.portfolio.base = 100_000;
+    p.portfolio.giftingSeries = [
+      { amount: 40_000, balanceThreshold: 0, triggerPct: 0, targetPct: 100 },
+      { amount: 40_000, balanceThreshold: 0, triggerPct: 0, targetPct: 100 },
+    ];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    // Post-withdrawal balance = 150k → scale 0.5 → gift 20k; total wd = 120k
+    expect(s.path.withdrawals[0]).toBeCloseTo(120_000, 3);
+    expect(s.path.withdrawalBreakdown[0].gift).toBeCloseTo(20_000, 3);
+  });
+
+  it('pays the full gift at or above the target percent', () => {
+    const p = giftingParams({ numYears: 2 });
+    p.portfolio.start = 400_000;
+    p.portfolio.base = 100_000;
+    p.portfolio.giftingSeries = [
+      { amount: 40_000, balanceThreshold: 0, triggerPct: 0, targetPct: 100 },
+      { amount: 40_000, balanceThreshold: 0, triggerPct: 0, targetPct: 100 },
+    ];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    // Remaining need 100k; post-wd balance 300k ≥ target 200k → full gift
+    expect(s.path.withdrawalBreakdown[0].gift).toBeCloseTo(40_000, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(140_000, 3);
+  });
+
+  it('pays the full gift in the final year when remaining plan need is zero', () => {
+    const p = giftingParams({ numYears: 1 });
+    p.portfolio.start = 200_000;
+    p.portfolio.base = 100_000;
+    p.portfolio.giftingSeries = [
+      { amount: 30_000, balanceThreshold: 0, triggerPct: 10, targetPct: 50 },
+    ];
+    const s = simulatePath(p, createRng(deriveSeed(1, 0)), true);
+    expect(s.path.withdrawalBreakdown[0].gift).toBeCloseTo(30_000, 3);
+    expect(s.path.withdrawals[0]).toBeCloseTo(130_000, 3);
+  });
 });
 
 describe('gift then glide', () => {

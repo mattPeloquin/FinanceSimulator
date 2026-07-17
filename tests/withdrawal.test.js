@@ -4,6 +4,8 @@ import {
   buildWithdrawalFloorPctSeries,
   buildSpecificWithdrawalFloorSeries,
   buildGiftingSeries,
+  scaledGiftAmount,
+  giftingUsesPercentMode,
   buildGiftOverlaySeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
@@ -276,19 +278,21 @@ describe('buildBaseWithdrawalSchedule', () => {
 });
 
 describe('buildGiftingSeries', () => {
+  const blankPct = { triggerPct: null, targetPct: null };
+
   it('returns zero entries when tiers are empty', () => {
     expect(buildGiftingSeries([], 3, toDollars)).toEqual([
-      { amount: 0, balanceThreshold: 0 },
-      { amount: 0, balanceThreshold: 0 },
-      { amount: 0, balanceThreshold: 0 },
+      { amount: 0, balanceThreshold: 0, ...blankPct },
+      { amount: 0, balanceThreshold: 0, ...blankPct },
+      { amount: 0, balanceThreshold: 0, ...blankPct },
     ]);
   });
 
   it('applies a single tier across the full horizon', () => {
     expect(buildGiftingSeries([{ amount: 25, balance: 2000 }], 3, toDollars)).toEqual([
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
     ]);
   });
 
@@ -299,21 +303,83 @@ describe('buildGiftingSeries', () => {
       { amount: 10, balance: 1500 },
     ];
     expect(buildGiftingSeries(tiers, 5, toDollars)).toEqual([
-      { amount: 30_000, balanceThreshold: 2_500_000 },
-      { amount: 30_000, balanceThreshold: 2_500_000 },
-      { amount: 20_000, balanceThreshold: 2_000_000 },
-      { amount: 10_000, balanceThreshold: 1_500_000 },
-      { amount: 10_000, balanceThreshold: 1_500_000 },
+      { amount: 30_000, balanceThreshold: 2_500_000, ...blankPct },
+      { amount: 30_000, balanceThreshold: 2_500_000, ...blankPct },
+      { amount: 20_000, balanceThreshold: 2_000_000, ...blankPct },
+      { amount: 10_000, balanceThreshold: 1_500_000, ...blankPct },
+      { amount: 10_000, balanceThreshold: 1_500_000, ...blankPct },
     ]);
   });
 
   it('stops assigning intermediate tiers at the horizon', () => {
     const tiers = [{ amount: 25, balance: 2000, years: 10 }, { amount: 10, balance: 1000 }];
     expect(buildGiftingSeries(tiers, 3, toDollars)).toEqual([
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 25_000, balanceThreshold: 2_000_000 },
-      { amount: 25_000, balanceThreshold: 2_000_000 },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
+      { amount: 25_000, balanceThreshold: 2_000_000, ...blankPct },
     ]);
+  });
+
+  it('copies trigger and target percent fields onto each year', () => {
+    const tiers = [
+      { amount: 10, balance: 0, years: 1, triggerPct: 10, targetPct: 40 },
+      { amount: 20, balance: 500, triggerPct: null, targetPct: 25 },
+    ];
+    expect(buildGiftingSeries(tiers, 3, toDollars)).toEqual([
+      { amount: 10_000, balanceThreshold: 0, triggerPct: 10, targetPct: 40 },
+      { amount: 20_000, balanceThreshold: 500_000, triggerPct: null, targetPct: 25 },
+      { amount: 20_000, balanceThreshold: 500_000, triggerPct: null, targetPct: 25 },
+    ]);
+  });
+});
+
+describe('scaledGiftAmount', () => {
+  const legacyGift = { amount: 50_000, balanceThreshold: 2_000_000, triggerPct: null, targetPct: null };
+
+  it('uses legacy Balance > when both percent fields are blank', () => {
+    expect(giftingUsesPercentMode(legacyGift)).toBe(false);
+    expect(scaledGiftAmount(legacyGift, 2_000_001, 1_000_000)).toBe(50_000);
+    expect(scaledGiftAmount(legacyGift, 2_000_000, 1_000_000)).toBe(0);
+  });
+
+  it('pays nothing below the trigger and full gift at/above the target', () => {
+    const gift = { amount: 40_000, balanceThreshold: 0, triggerPct: 20, targetPct: 60 };
+    // remainingNeed 1_000_000 → trigger 1.2M, target 1.6M
+    expect(scaledGiftAmount(gift, 1_199_999, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(gift, 1_200_000, 1_000_000)).toBe(0); // at trigger, scale = 0
+    expect(scaledGiftAmount(gift, 1_400_000, 1_000_000)).toBeCloseTo(20_000, 6);
+    expect(scaledGiftAmount(gift, 1_600_000, 1_000_000)).toBe(40_000);
+    expect(scaledGiftAmount(gift, 2_000_000, 1_000_000)).toBe(40_000);
+  });
+
+  it('scales the gift linearly halfway between trigger and target', () => {
+    const gift = { amount: 40_000, balanceThreshold: 0, triggerPct: 0, targetPct: 100 };
+    // remainingNeed 1_000_000 → trigger 1M, target 2M; mid = 1.5M → half gift
+    expect(scaledGiftAmount(gift, 1_500_000, 1_000_000)).toBeCloseTo(20_000, 6);
+  });
+
+  it('treats blank trigger as 0% and blank target as a step at the trigger', () => {
+    const triggerOnly = { amount: 10_000, balanceThreshold: 0, triggerPct: 50, targetPct: null };
+    expect(scaledGiftAmount(triggerOnly, 1_499_999, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(triggerOnly, 1_500_000, 1_000_000)).toBe(10_000);
+
+    const targetOnly = { amount: 10_000, balanceThreshold: 0, triggerPct: null, targetPct: 100 };
+    expect(scaledGiftAmount(targetOnly, 1_000_000, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(targetOnly, 1_500_000, 1_000_000)).toBeCloseTo(5_000, 6);
+  });
+
+  it('pays the full gift when remaining plan need is zero and balance is positive', () => {
+    const gift = { amount: 25_000, balanceThreshold: 0, triggerPct: 10, targetPct: 50 };
+    expect(scaledGiftAmount(gift, 1, 0)).toBe(25_000);
+    expect(scaledGiftAmount(gift, 0, 0)).toBe(0);
+  });
+
+  it('scales across a negative-to-positive percent band', () => {
+    const gift = { amount: 40_000, balanceThreshold: 0, triggerPct: -20, targetPct: 20 };
+    // remainingNeed 1_000_000 → trigger 800k, target 1.2M; mid = 1M → half gift
+    expect(scaledGiftAmount(gift, 799_999, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(gift, 1_000_000, 1_000_000)).toBeCloseTo(20_000, 6);
+    expect(scaledGiftAmount(gift, 1_200_000, 1_000_000)).toBe(40_000);
   });
 });
 

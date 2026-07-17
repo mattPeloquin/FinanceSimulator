@@ -472,6 +472,22 @@ export function writeSpecificWithdrawalFloorsToDom(tiers, doc = document) {
   });
 }
 
+/** Optional percent: blank/empty → null; otherwise a finite number.
+ *  Accepts values typed with a trailing % (the field already shows a % suffix). */
+function parseOptionalPct(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const normalized = String(value).replace(/%/g, '').replace(/,/g, '').trim();
+  if (normalized === '') return null;
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatOptionalPct(value) {
+  const n = parseOptionalPct(value);
+  return n == null ? '' : String(n);
+}
+
 /** Normalize gifting tiers; empty array means no gifting. */
 export function normalizeGiftingTiers(tiers) {
   if (!Array.isArray(tiers) || tiers.length === 0) {
@@ -480,10 +496,18 @@ export function normalizeGiftingTiers(tiers) {
   return tiers.map((tier, index, arr) => {
     const amount = parseCurrency(tier?.amount);
     const balance = parseCurrency(tier?.balance);
+    const triggerPct = parseOptionalPct(tier?.triggerPct);
+    const targetPct = parseOptionalPct(tier?.targetPct);
     const isLast = index === arr.length - 1;
-    if (isLast) return { amount, balance };
+    if (isLast) return { amount, balance, triggerPct, targetPct };
     const years = parseInt(tier?.years, 10);
-    return { amount, balance, years: Number.isFinite(years) && years >= 1 ? years : 1 };
+    return {
+      amount,
+      balance,
+      triggerPct,
+      targetPct,
+      years: Number.isFinite(years) && years >= 1 ? years : 1,
+    };
   });
 }
 
@@ -498,15 +522,25 @@ export function readGiftingTiersFromDom(doc = document) {
   rows.forEach((row, index) => {
     const amountInput = row.querySelector('[data-gift-amount]');
     const balanceInput = row.querySelector('[data-gift-balance]');
+    const triggerInput = row.querySelector('[data-gift-trigger-pct]');
+    const targetInput = row.querySelector('[data-gift-target-pct]');
     const yearsInput = row.querySelector('[data-gift-years]');
     const amount = parseCurrency(amountInput?.value);
     const balance = parseCurrency(balanceInput?.value);
+    const triggerPct = parseOptionalPct(triggerInput?.value);
+    const targetPct = parseOptionalPct(targetInput?.value);
     const isLast = index === rows.length - 1;
     if (isLast) {
-      tiers.push({ amount, balance });
+      tiers.push({ amount, balance, triggerPct, targetPct });
     } else {
       const years = parseInt(yearsInput?.value, 10);
-      tiers.push({ amount, balance, years: Number.isFinite(years) ? years : null });
+      tiers.push({
+        amount,
+        balance,
+        triggerPct,
+        targetPct,
+        years: Number.isFinite(years) ? years : null,
+      });
     }
   });
   return tiers;
@@ -544,6 +578,28 @@ export function writeGiftingTiersToDom(tiers, doc = document) {
         <span class="input-adorn-suffix">000s</span>
       </div>`;
     row.appendChild(balanceWrap);
+
+    // Text inputs (not type=number): number inputs report value="" for
+    // "10%" / partial keystrokes, so filled-looking fields were read as blank.
+    const triggerWrap = doc.createElement('div');
+    triggerWrap.className = 'w-24';
+    triggerWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Trigger</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" inputmode="decimal" data-gift-trigger-pct class="w-full rounded input-theme p-1 text-sm text-center" value="${formatOptionalPct(tier.triggerPct)}">
+        <span class="input-adorn-suffix">%</span>
+      </div>`;
+    row.appendChild(triggerWrap);
+
+    const targetWrap = doc.createElement('div');
+    targetWrap.className = 'w-24';
+    targetWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Target</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="text" inputmode="decimal" data-gift-target-pct class="w-full rounded input-theme p-1 text-sm text-center" value="${formatOptionalPct(tier.targetPct)}">
+        <span class="input-adorn-suffix">%</span>
+      </div>`;
+    row.appendChild(targetWrap);
 
     if (!isLast) {
       const yearsWrap = doc.createElement('div');
@@ -1596,8 +1652,20 @@ export function validateScenario(scenario, { minYear, maxYear }) {
       errors.push('Each gifting tier must have a zero or positive balance threshold.');
       break;
     }
-    if (tier.amount > 0 && tier.balance <= 0) {
-      errors.push('Gifting tiers with a positive gift amount need a positive balance threshold.');
+    const usesPercentMode = tier.triggerPct != null || tier.targetPct != null;
+    if (!usesPercentMode && tier.amount > 0 && tier.balance <= 0) {
+      errors.push('Gifting tiers with a positive gift amount need a positive Balance > threshold (or set Trigger/Target %).');
+      break;
+    }
+    // Trigger/Target may be negative (below remaining-plan need) or positive
+    // (above it). When both are set, Target must be ≥ Trigger so the scale
+    // band runs from lower surplus to higher surplus.
+    if (
+      tier.triggerPct != null
+      && tier.targetPct != null
+      && tier.targetPct < tier.triggerPct
+    ) {
+      errors.push('Each gifting Target % must be at least the Trigger %.');
       break;
     }
   }
