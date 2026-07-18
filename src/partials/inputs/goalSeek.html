@@ -1,13 +1,24 @@
+<!-- Outcome ranking preference — applies to results and Find Best Plan -->
+<div>
+    <label for="earlyWeightSlot" class="block text-sm font-medium text-theme-body">What matters more when judging outcomes?</label>
+    <div class="flex items-center gap-3 mt-2 max-w-xs">
+        <span class="text-xs text-theme-faint whitespace-nowrap shrink-0">Total Lifetime</span>
+        <input type="range" id="earlyWeightSlot" min="0" max="4" step="1" class="range-theme flex-1">
+        <span class="text-xs text-theme-faint whitespace-nowrap shrink-0">Early Withdrawal</span>
+    </div>
+    <p class="text-[10px] text-theme-faint mt-1 leading-tight">Optionally rank success by early-weighted spending. Does not change boosts or guardrails — set those in <strong>Withdrawal Strategy</strong> for a front-loaded plan.</p>
+</div>
+
 <!-- Goal Seek: search for spending settings instead of just simulating what's typed in -->
 <div class="space-y-4 p-4 border rounded-lg bg-theme-accent-subtle/30">
     <div class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
             <h3 class="text-lg font-semibold text-theme-body">Find Best Plan</h3>
-            <p class="text-xs text-theme-faint mt-0.5">Search for the highest sustainable <strong>planned</strong> spending schedule instead of simulating fixed numbers — not the bonus-padded actuals. Check <strong>Include in search</strong> on settings below to choose what Find Best Plan can tune.</p>
+            <p class="text-xs text-theme-faint mt-0.5">Search for the highest sustainable spending schedule. Check <strong>Include in search</strong> on settings below to choose what to tune.</p>
         </div>
         <label class="inline-flex items-center shrink-0 cursor-pointer">
             <input type="checkbox" id="goalSeekMode" class="sr-only peer">
-            <div class="relative w-9 h-5 bg-theme-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-theme-accent/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-theme-surface after:border-theme-input after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-theme-accent"></div>
+            <div class="toggle-track"></div>
             <span class="ms-2 text-xs font-medium text-theme-muted">Enable</span>
         </label>
     </div>
@@ -28,7 +39,7 @@
                     <input type="range" id="goalSeekRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
                     <input type="number" id="goalSeekRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
-                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Allowed spending shortfall vs. plan at the failure percentile (100% − Desired Success % — e.g. P5 at 95%). 0% = that path stays on plan; higher = bigger plan, more belt-tightening in bad markets. The first 0–20% also opens how deep dynamic adjustments can go.</p>
+                <p class="text-[10px] text-theme-faint mt-0.5 leading-tight">Depth of dynamic ajustments and allowed spending shortfall vs. plan - 0% = stay on plan; higher = bigger plan, more belt-tightening in bad markets.</p>
             </div>
         </div>
 

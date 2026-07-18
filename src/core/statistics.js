@@ -230,23 +230,30 @@ export function weightedScheduleScore(yearlyAmounts, weighting) {
 // bad early spending (classic sequence risk) sinks toward the low percentiles.
 // Median/yr only applies at strength 0; with weighting we use the weighted sum
 // (same path as total) so there is one clear early-weighted primary.
-export function perRunWithdrawalMetric(summary, metric, weighting = null) {
-  if (!isEarlyWeightingActive(weighting) || !summary.allYearsWithdrawals) {
-    if (isMedianYearlyMetric(metric)) return summary.medianYearlyWithdrawal;
+export function perRunWithdrawalMetric(summary, metric, weighting = null, { useGross = false } = {}) {
+  // Prefer net spending (ex modeled withdrawal tax) for ranking / on-plan when
+  // present so tax gross-up does not inflate "spending success." Pass useGross
+  // to score portfolio outflows instead (pre-tax note twin of the net headline).
+  const yearlyMatrix = (!useGross && summary.allYearsNetSpend) || summary.allYearsWithdrawals;
+  const totalSeries = (!useGross && summary.totalNetSpend) || summary.totalWithdrawn;
+  const medianSeries = (!useGross && summary.medianYearlyNetSpend) || summary.medianYearlyWithdrawal;
+
+  if (!isEarlyWeightingActive(weighting) || !yearlyMatrix) {
+    if (isMedianYearlyMetric(metric)) return medianSeries;
     if (isMeanYearlyMetric(metric)) {
-      return meanYearlyWithdrawals(summary.totalWithdrawn, summary.horizonYears);
+      return meanYearlyWithdrawals(totalSeries, summary.horizonYears);
     }
-    return summary.totalWithdrawn;
+    return totalSeries;
   }
 
   const n = summary.numSimulations;
-  const maxYears = summary.allYearsWithdrawals.length / n;
+  const maxYears = yearlyMatrix.length / n;
   const out = new Float64Array(n);
   const { horizonYears } = summary;
   for (let i = 0; i < n; i++) {
     const horizon = horizonYears[i];
     const weightedTotal = weightedWithdrawalScore(
-      summary.allYearsWithdrawals,
+      yearlyMatrix,
       maxYears,
       i,
       horizon,
@@ -265,11 +272,12 @@ export function rankByWithdrawn(summary, metric = 'total', weighting = null) {
   const n = summary.numSimulations;
   const idx = new Int32Array(n);
   for (let i = 0; i < n; i++) idx[i] = i;
-  const { totalWithdrawn, finalBalance } = summary;
+  const tieBreakTotal = summary.totalNetSpend || summary.totalWithdrawn;
+  const { finalBalance } = summary;
   const primary = perRunWithdrawalMetric(summary, metric, weighting);
   return Array.prototype.sort.call(idx, (a, b) => {
     if (primary[a] !== primary[b]) return primary[a] - primary[b];
-    if (totalWithdrawn[a] !== totalWithdrawn[b]) return totalWithdrawn[a] - totalWithdrawn[b];
+    if (tieBreakTotal[a] !== tieBreakTotal[b]) return tieBreakTotal[a] - tieBreakTotal[b];
     return finalBalance[a] - finalBalance[b];
   });
 }

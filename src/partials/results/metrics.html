@@ -1,50 +1,58 @@
 <!-- Headline metrics -->
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
     <div class="bg-theme-accent-subtle border border-theme-accent/40 rounded-lg p-4 text-center">
-        <div class="text-[10px] uppercase tracking-wider text-theme-accent-text/70">Success Rate (not depleted)</div>
+        <div class="text-xs uppercase tracking-wider text-theme-accent-text/70">Success Rate (not depleted)</div>
         <div id="successRate" class="text-2xl font-bold text-theme-accent-text"></div>
-        <div id="withdrawalTargetSuccessRateLabel" class="text-[10px] uppercase tracking-wider text-theme-accent-text/70 mt-2">Success Rate (on plan)</div>
+        <div id="withdrawalTargetSuccessRateLabel" class="text-xs uppercase tracking-wider text-theme-accent-text/70 mt-2">Success Rate (on plan)</div>
         <div id="withdrawalTargetSuccessRate" class="text-sm font-semibold text-theme-accent-text"></div>
+        <div id="onPlanTaxNote" class="hidden text-xs text-theme-accent-text/60 mt-1">on plan after taxes</div>
     </div>
     <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
-        <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median End Balance</div>
+        <div class="text-xs uppercase tracking-wider text-theme-faint">Median End Balance</div>
         <div id="medianBalance" class="text-2xl font-bold text-theme-heading"></div>
+        <div id="medianBalanceTaxNote" class="hidden text-xs text-theme-faint mt-0.5">after fees &amp; taxes</div>
         <div class="grid grid-cols-2 gap-2 mt-2">
             <div>
-                <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median Return</div>
+                <div class="text-xs uppercase tracking-wider text-theme-faint">Median Return</div>
                 <div id="medianReturn" class="text-sm font-semibold text-theme-muted"></div>
             </div>
             <div title="Median money-weighted return (IRR): accounts for withdrawal timing">
-                <div class="text-[10px] uppercase tracking-wider text-theme-faint">Median IRR</div>
+                <div class="text-xs uppercase tracking-wider text-theme-faint">Median IRR</div>
                 <div id="medianIrr" class="text-sm font-semibold text-theme-muted"></div>
             </div>
         </div>
     </div>
     <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center">
-        <div id="medianWithdrawnLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Median Total Withdrawn</div>
+        <div id="medianWithdrawnLabel" class="text-xs uppercase tracking-wider text-theme-faint">Median Total Withdrawn</div>
         <div id="medianWithdrawn" class="text-2xl font-bold text-theme-heading"></div>
+        <div id="medianWithdrawnGrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
         <div class="grid grid-cols-2 gap-2 mt-2">
             <div>
-                <div id="medianWithdrawnSecondaryLabel" class="text-[10px] uppercase tracking-wider text-theme-faint"></div>
+                <div id="medianWithdrawnSecondaryLabel" class="text-xs uppercase tracking-wider text-theme-faint"></div>
                 <div id="medianWithdrawnSecondary" class="text-sm font-semibold text-theme-muted"></div>
+                <div id="medianWithdrawnSecondaryGrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
             </div>
             <div>
-                <div id="medianWithdrawnSecondary2Label" class="text-[10px] uppercase tracking-wider text-theme-faint"></div>
+                <div id="medianWithdrawnSecondary2Label" class="text-xs uppercase tracking-wider text-theme-faint"></div>
                 <div id="medianWithdrawnSecondary2" class="text-sm font-semibold text-theme-muted"></div>
+                <div id="medianWithdrawnSecondary2GrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
             </div>
         </div>
     </div>
     <div class="bg-theme-muted border border-theme-border rounded-lg p-4 text-center" title="Total of the base withdrawal schedule, before any dynamic adjustments">
-        <div id="plannedWithdrawnLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Planned Total Withdrawal</div>
+        <div id="plannedWithdrawnLabel" class="text-xs uppercase tracking-wider text-theme-faint">Planned Total Withdrawal</div>
         <div id="plannedWithdrawn" class="text-2xl font-bold text-theme-heading"></div>
+        <div id="plannedWithdrawnGrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
         <div class="grid grid-cols-2 gap-2 mt-2">
             <div>
-                <div id="plannedWithdrawnSecondaryLabel" class="text-[10px] uppercase tracking-wider text-theme-faint"></div>
+                <div id="plannedWithdrawnSecondaryLabel" class="text-xs uppercase tracking-wider text-theme-faint"></div>
                 <div id="plannedWithdrawnSecondary" class="text-sm font-semibold text-theme-muted"></div>
+                <div id="plannedWithdrawnSecondaryGrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
             </div>
             <div>
-                <div id="plannedWithdrawnSecondary2Label" class="text-[10px] uppercase tracking-wider text-theme-faint"></div>
+                <div id="plannedWithdrawnSecondary2Label" class="text-xs uppercase tracking-wider text-theme-faint"></div>
                 <div id="plannedWithdrawnSecondary2" class="text-sm font-semibold text-theme-muted"></div>
+                <div id="plannedWithdrawnSecondary2GrossNote" class="hidden text-xs text-theme-faint mt-0.5"></div>
             </div>
         </div>
     </div>
@@ -59,8 +67,8 @@
 </div>
 
 <div class="space-y-4">
-    <h3 class="text-lg font-semibold text-theme-body"
-    >Simulation Outcomes</h3>
+    <h3 class="text-lg font-semibold text-theme-body flex items-center gap-2 flex-wrap"
+    >Simulation Outcomes<span id="outcomesTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span></h3>
     <p id="outcomesDescription" class="text-sm text-theme-faint mb-4"
         ><!-- filled by results applyMetricLabels --></p>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

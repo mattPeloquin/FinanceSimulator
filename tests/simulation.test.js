@@ -1634,9 +1634,128 @@ describe('withdrawal breakdown attribution', () => {
       majorEventOutflow: 0,
       balanceShortfall: 0,
       gift: 0,
+      tax: 0,
       actual: 80_000,
     });
     expect(line).toContain('Plan 100');
     expect(line).toContain('Adj -20');
+  });
+
+  it('includes tax in the breakdown tooltip line', () => {
+    const line = formatWithdrawalBreakdownLine({
+      plan: 100_000,
+      dynamicAdj: 0,
+      scaleDelta: 0,
+      glideExtra: 0,
+      floorLift: 0,
+      majorEventOutflow: 0,
+      balanceShortfall: 0,
+      gift: 0,
+      tax: 20_000,
+      actual: 120_000,
+    });
+    expect(line).toContain('Tax +20');
+  });
+});
+
+describe('advisor fee and withdrawal tax', () => {
+  function cashParams(portfolioOverrides = {}) {
+    return lognormalParams({
+      numYears: 5,
+      numSimulations: 1,
+      allocation: { usLgGrowth: 0, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 1 },
+      logNormal: {
+        ...logNormalProfiles,
+        cash: { mean: 0.05, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+      },
+      dynConfig: {
+        enabled: false,
+        low: { ret: -15, bal: null, adj: 0 },
+        med: { ret: 5, bal: null, adj: 0 },
+        high: { ret: 20, bal: null, adj: 0 },
+      },
+      portfolio: {
+        start: 1_000_000,
+        base: 40_000,
+        floorBalance: 0,
+        floorPenalty: 0,
+        ceilingBalance: Infinity,
+        ceilingBonus: 0,
+        spendingOverTimeSeries: spendingSeries(5, [{ changePct: 0, extra: 0 }]),
+        withdrawalFloorSeries: [0, 0, 0, 0, 0],
+        advisorFeeRate: 0,
+        withdrawalTaxSeries: null,
+        ...portfolioOverrides,
+      },
+    });
+  }
+
+  it('advisor fee lowers terminal wealth without changing recorded market returns', () => {
+    const base = cashParams();
+    const withFee = cashParams({ advisorFeeRate: 0.01 });
+    const a = simulatePath(base, createRng(deriveSeed(7, 0)), true);
+    const b = simulatePath(withFee, createRng(deriveSeed(7, 0)), true);
+    expect(b.finalBalance).toBeLessThan(a.finalBalance);
+    expect(b.path.returns).toEqual(a.path.returns);
+  });
+
+  it('withdrawal tax increases portfolio outflow vs the same net plan', () => {
+    const flatTax = Array.from({ length: 5 }, () => ({
+      taxRate: 0.25,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const base = cashParams();
+    const taxed = cashParams({ withdrawalTaxSeries: flatTax });
+    const a = simulatePath(base, createRng(deriveSeed(11, 0)), true);
+    const b = simulatePath(taxed, createRng(deriveSeed(11, 0)), true);
+    expect(b.totalWithdrawn).toBeGreaterThan(a.totalWithdrawn);
+    expect(b.totalNetSpend).toBeCloseTo(a.totalNetSpend, 3);
+    expect(b.path.withdrawalBreakdown[0].tax).toBeCloseTo(10_000, 3);
+    expect(sumWithdrawalBreakdown(b.path.withdrawalBreakdown[0])).toBeCloseTo(
+      b.path.withdrawalBreakdown[0].actual,
+      3,
+    );
+  });
+
+  it('skips gift gross-up when applyToGifts is false', () => {
+    const giftSeries = Array.from({ length: 5 }, () => ({
+      amount: 10_000,
+      balanceThreshold: 0,
+      triggerPct: null,
+      targetPct: null,
+    }));
+    const taxNoGifts = Array.from({ length: 5 }, () => ({
+      taxRate: 0.2,
+      applyToGifts: false,
+      spendBrackets: [],
+    }));
+    const taxWithGifts = Array.from({ length: 5 }, () => ({
+      taxRate: 0.2,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const off = cashParams({
+      giftingSeries: giftSeries,
+      withdrawalTaxSeries: taxNoGifts,
+    });
+    const on = cashParams({
+      giftingSeries: giftSeries,
+      withdrawalTaxSeries: taxWithGifts,
+    });
+    // Neutral dyn so gifts can meet plan without market cuts.
+    off.dynConfig = {
+      enabled: true,
+      low: { ret: -15, bal: null, adj: 0 },
+      med: { ret: 5, bal: null, adj: 0 },
+      high: { ret: 20, bal: null, adj: 0 },
+    };
+    on.dynConfig = off.dynConfig;
+    const a = simulatePath(off, createRng(deriveSeed(13, 0)), true);
+    const b = simulatePath(on, createRng(deriveSeed(13, 0)), true);
+    expect(b.path.withdrawalBreakdown[0].tax).toBeGreaterThan(a.path.withdrawalBreakdown[0].tax);
+    expect(a.path.withdrawalBreakdown[0].gift).toBeCloseTo(10_000, 3);
+    expect(b.path.withdrawalBreakdown[0].gift).toBeCloseTo(10_000, 3);
   });
 });

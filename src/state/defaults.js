@@ -159,6 +159,11 @@ export const BASE_DEFAULTS = {
   // (blank = one-time). Positive = inflow; negative = extra payment out.
   majorEvents: [],
 
+  // Optional annual advisor / fund expense as % of portfolio (0 = off).
+  advisorFeePct: 0,
+
+  // withdrawalTaxTiers comes from Easy Mode presets (scenario.withdrawalTaxTiers).
+
   // Year-by-year withdrawal list. Used when withdrawalStrategy is 'specific'.
   // Paste-friendly text; negative = deposit. Leave empty when using 'base'.
   specificWithdrawals: '',

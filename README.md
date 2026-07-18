@@ -102,7 +102,7 @@ flowchart TD
 - **Charts** — Results land in metric cards and charts (`src/ui/results.js`, `src/ui/charts/`): timelines for percentile paths (5th–65th), a 3D surface of about 200 paths (adjustable Show from/to window, default P5–P65; double-click a column to drill into nearby runs), a withdrawal heatmap built from every run (full P0–P100 source; same Show from/to window), and a sequence-risk scatter. Chart controls and color modes are documented in the app.
 - **Find Best Plan** — Instead of guessing a withdrawal amount, this mode searches for the highest sustainable headline spending plan given a target ending balance, desired success %, and risk tolerance (`src/core/goalSeek.js`). When it finishes, it fills the winning numbers into your inputs and shows a full confirmation run. Details and search options are in the app.
 
-**Assumptions:** All withdrawal amounts are in today’s dollars (constant purchasing power). The simulator works in real returns everywhere, so you don’t need to build inflation into your numbers. Withdrawals are assumed to cover capital gains and income taxes (net spendable income is lower). Other income such as a pension or Social Security is not modeled.
+**Assumptions:** All spending amounts are in today’s dollars (constant purchasing power). The simulator works in real returns everywhere, so you don’t need to build inflation into your numbers. Optional Fees & Taxes knobs model a simple annual portfolio fee and rough withdrawal-tax tiers (not tax advice and not current tax law); leave them at zero if you already bake taxes into your plan. Other income such as a pension or Social Security is not modeled.
 
 ### Where to look when vibe-coding
 
@@ -112,6 +112,7 @@ flowchart TD
 | Find Best Plan's search logic       | `src/core/goalSeek.js`                                                                              |
 | The historical dataset              | `src/data/historicalData.js`                                                                        |
 | An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
+| Fees & taxes (AUM fee / withdrawal tax) | `src/partials/inputs/feesTaxes.html`, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
 | The Risk Level slider presets       | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)              |
 | A chart's look or behavior          | `src/ui/charts/` (one file per chart)                                                               |
 | 3D drilldown / Show from–to window  | `src/core/surfaceDrilldown.js`, `src/ui/charts/outcomeWindow.js`                                    |

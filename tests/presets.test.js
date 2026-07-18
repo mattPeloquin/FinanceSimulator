@@ -64,8 +64,18 @@ describe('preset files', () => {
     for (const preset of PRESETS) {
       for (const key of Object.keys(preset.scenario)) {
         expect(PRESET_SCENARIO_KEYS, `${preset.name}: ${key}`).toContain(key);
-        expect(FIELD_BY_KEY.has(key) || key === 'distMethod', `${preset.name}: ${key}`).toBe(true);
+        expect(
+          FIELD_BY_KEY.has(key) || key === 'distMethod' || key === 'withdrawalTaxTiers',
+          `${preset.name}: ${key}`,
+        ).toBe(true);
       }
+    }
+  });
+
+  it('leaves Fees & Taxes off with blank tax tiers at every Easy Mode level', () => {
+    for (const preset of PRESETS) {
+      expect(preset.scenario.enableFeesTaxes, preset.name).toBe(false);
+      expect(preset.scenario.withdrawalTaxTiers, preset.name).toEqual([]);
     }
   });
 

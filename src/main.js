@@ -47,6 +47,7 @@ import {
   renderYearLabels,
   toggleWithdrawalStrategy,
   toggleDynamicAdjustments,
+  toggleFeesTaxes,
   toggleGoalSeekMode,
   refreshDynamicAdjustmentPreviews,
   syncEarlyWeightPreview,
@@ -777,6 +778,7 @@ function applyScenario(scenario) {
   toggleDistMethod(merged.distMethod);
   toggleWithdrawalStrategy(merged.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
+  toggleFeesTaxes(merged.enableFeesTaxes ?? false);
   toggleGoalSeekMode(merged.goalSeekMode ?? false);
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
@@ -821,6 +823,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
     toggleDistMethod(initial.distMethod);
     toggleWithdrawalStrategy(initial.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
     toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
+    toggleFeesTaxes(initial.enableFeesTaxes ?? false);
     toggleGoalSeekMode(initial.goalSeekMode ?? false);
 
     setupInputBehaviors({

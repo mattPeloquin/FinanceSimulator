@@ -584,6 +584,7 @@ export function formatWithdrawalBreakdownLine(breakdown) {
     ['Glide', breakdown.glideExtra],
     ['Floor', breakdown.floorLift],
     ['Event', breakdown.majorEventOutflow],
+    ['Tax', breakdown.tax],
   ];
   for (const [label, amount] of components) {
     if (Math.abs(amount) > 1e-6) {

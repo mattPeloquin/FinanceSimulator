@@ -33,8 +33,14 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await page.locator('#details-allocation-over-time').evaluate((el) => { el.open = true; });
   await expect(page.locator('#allocationOverTimePreviewChart')).toBeAttached();
   await expect(page.locator('#addAllocationOverTimeTier')).toBeVisible();
-  // Find Best Plan sits above Investment Planning in the primary inputs column
+  // Outcome ranking sits above Find Best Plan; Find Best Plan above Investment Planning
+  await expect(page.locator('#earlyWeightSlot')).toBeVisible();
   await expect(page.locator('#goalSeekMode')).toBeVisible();
+  const earlyWeightBeforeGoalSeek = await page.locator('#earlyWeightSlot').evaluate((el) => {
+    const goalSeek = document.getElementById('goalSeekMode');
+    return !!(goalSeek && el.compareDocumentPosition(goalSeek) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(earlyWeightBeforeGoalSeek).toBe(true);
   const goalSeekBeforeInvestment = await page.locator('#goalSeekMode').evaluate((el) => {
     const investment = document.getElementById('section-investment');
     return !!(investment && el.compareDocumentPosition(investment) & Node.DOCUMENT_POSITION_FOLLOWING);

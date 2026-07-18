@@ -44,6 +44,10 @@ Each file has two sections:
     to the plan for that many years. Steps up from Conservative (2 / 2) to
     Aggressive (4 / 2) — higher risk levels tolerate longer belt-tightening;
     either 0 turns the feature off
+  - `enableFeesTaxes` / `withdrawalTaxTiers` (in `scenario`) — Fees & Taxes
+    section master switch and tax stages (each tier may nest progressive
+    `spendBrackets`). Currently off (`false`) with blank tiers (`[]`) at every
+    level — too situation-specific to preset. Editing detaches Easy Mode.
   - **Spending plan (Easy Mode + Find Best Plan off):** `baseWithdrawalPctOfStart`
     (4.0–6.0% in 0.5 steps), `floorPenalty`, `ceilingBonus`,
     `dynAdjPctOfBase.low/med/high` (% of base withdrawal), `spendingExtraPctOfBase`

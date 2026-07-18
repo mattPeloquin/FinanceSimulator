@@ -9,6 +9,7 @@
 
 import { plannedYearlySchedule } from './goalSeek.js';
 import { isMedianYearlyMetric, isMeanYearlyMetric } from './statistics.js';
+import { withdrawalTaxSeriesActive } from './feesTaxes.js';
 
 /** Classic Bengen / Trinity first-year withdrawal rate. */
 export const CLASSIC_FOUR_PERCENT_RATE = 0.04;
@@ -52,6 +53,10 @@ function giftSeriesIsOff(series) {
  * Clone engine params into a Trinity-style fixed real 4% withdrawal policy.
  * Market / horizon / seed / samples stay identical so path-by-path comparison
  * is fair; only the withdrawal side is forced.
+ *
+ * Advisor fee and withdrawal-tax tiers are inherited from the user portfolio
+ * so both plans face the same costs. The 4% `base` is net spending under that
+ * shared tax model (portfolio pays more when tax tiers are set).
  */
 export function buildClassicFourPercentParams(params) {
   const numYears = maxHorizonYears(params);
@@ -66,7 +71,7 @@ export function buildClassicFourPercentParams(params) {
     portfolio: {
       ...params.portfolio,
       strategy: 'base',
-      // Year-1 withdrawal = 4% of start; flat real schedule thereafter.
+      // Year-1 net spending = 4% of start; flat real schedule thereafter.
       base: startBalance * CLASSIC_FOUR_PERCENT_RATE,
       // Specific-list amounts are unused under strategy 'base', but clear them
       // so a clone never accidentally inherits a typed list if strategy changes.
@@ -83,6 +88,7 @@ export function buildClassicFourPercentParams(params) {
       majorEventsSeries: new Array(numYears).fill(0),
       maxConsecutiveMinWithdrawals: 0,
       minWithdrawalPlanRecoveryYears: 0,
+      // advisorFeeRate + withdrawalTaxSeries inherited via ...params.portfolio
     },
     dynConfig: {
       ...(params.dynConfig || {}),
@@ -119,19 +125,31 @@ export function isClassicFourPercentEquivalent(params) {
   if (!giftSeriesIsOff(portfolio.giftingSeries)) return false;
   if (!seriesIsAllZeros(portfolio.majorEventsSeries)) return false;
   if ((portfolio.maxConsecutiveMinWithdrawals ?? 0) > 0) return false;
+  // Fee/tax are shared with the classic clone — they do not break equivalence.
 
   return true;
 }
 
-function primaryWithdrawn(result, metric) {
-  if (isMedianYearlyMetric(metric)) return result.medianYearlyWithdrawn;
-  if (isMeanYearlyMetric(metric)) return result.meanYearlyWithdrawn;
-  return result.medianWithdrawn;
+/** Spending side for deltas/headlines: net when tax is modeled, else withdrawn. */
+function primarySpend(result, metric, taxActive) {
+  if (!taxActive) {
+    if (isMedianYearlyMetric(metric)) return result.medianYearlyWithdrawn;
+    if (isMeanYearlyMetric(metric)) return result.meanYearlyWithdrawn;
+    return result.medianWithdrawn;
+  }
+  if (isMedianYearlyMetric(metric)) {
+    return result.medianYearlyNetSpend ?? result.medianYearlyWithdrawn;
+  }
+  if (isMeanYearlyMetric(metric)) {
+    return result.meanYearlyNetSpend ?? result.meanYearlyWithdrawn;
+  }
+  return result.medianNetSpend ?? result.medianWithdrawn;
 }
 
 /**
  * Pure comparison metrics for the results verdict strip.
  * Headline leftover = classic median end balance (money the rule never spent).
+ * When tax is active, spending figures are net on both sides (apples-to-apples).
  */
 export function buildFourPercentComparison(userResult, classicResult, params) {
   const startBalance = params.portfolio?.start ?? 0;
@@ -141,32 +159,53 @@ export function buildFourPercentComparison(userResult, classicResult, params) {
   const userYear1Rate = startBalance > 0 ? userPlanYear1 / startBalance : 0;
 
   const metric = userResult.withdrawalMetric ?? params.withdrawalMetric ?? 'total';
-  const userPrimaryWithdrawn = primaryWithdrawn(userResult, metric);
-  const classicPrimaryWithdrawn = primaryWithdrawn(classicResult, metric);
+  const taxActive = withdrawalTaxSeriesActive(params.portfolio?.withdrawalTaxSeries)
+    || !!userResult.withdrawalTaxActive
+    || !!classicResult.withdrawalTaxActive;
+  const feeActive = (params.portfolio?.advisorFeeRate ?? 0) > 0
+    || !!userResult.advisorFeeActive;
+  const userPrimarySpend = primarySpend(userResult, metric, taxActive);
+  const classicPrimarySpend = primarySpend(classicResult, metric, taxActive);
+  const userMedianSpend = taxActive
+    ? (userResult.medianNetSpend ?? userResult.medianWithdrawn ?? 0)
+    : (userResult.medianWithdrawn ?? 0);
+  const classicMedianSpend = taxActive
+    ? (classicResult.medianNetSpend ?? classicResult.medianWithdrawn ?? 0)
+    : (classicResult.medianWithdrawn ?? 0);
+  const userMeanYearlySpend = taxActive
+    ? (userResult.meanYearlyNetSpend ?? userResult.meanYearlyWithdrawn ?? 0)
+    : (userResult.meanYearlyWithdrawn ?? 0);
+  const classicMeanYearlySpend = taxActive
+    ? (classicResult.meanYearlyNetSpend ?? classicResult.meanYearlyWithdrawn ?? 0)
+    : (classicResult.meanYearlyWithdrawn ?? 0);
 
   return {
     equivalent: isClassicFourPercentEquivalent(params),
     classicRate: CLASSIC_FOUR_PERCENT_RATE,
     userYear1Rate,
+    withdrawalTaxActive: taxActive,
+    advisorFeeActive: feeActive,
+    sharedCostsActive: taxActive || feeActive,
     // Money left unspent under the classic rule (median ending balance).
     classicLeftover: classicResult.medianBalance ?? 0,
     userLeftover: userResult.medianBalance ?? 0,
     // Positive => classic left more behind than the user's plan.
     leftoverDelta: (classicResult.medianBalance ?? 0) - (userResult.medianBalance ?? 0),
     userMedianWithdrawn: userResult.medianWithdrawn ?? 0,
-    classicMedianWithdrawn: classicResult.medianWithdrawn ?? 0,
+    userMedianNetSpend: userResult.medianNetSpend ?? userResult.medianWithdrawn ?? 0,
+    // Headline classic spending (net when tax on).
+    classicMedianWithdrawn: classicMedianSpend,
+    classicMedianNetSpend: classicResult.medianNetSpend ?? classicResult.medianWithdrawn ?? 0,
     userMeanYearlyWithdrawn: userResult.meanYearlyWithdrawn ?? 0,
-    classicMeanYearlyWithdrawn: classicResult.meanYearlyWithdrawn ?? 0,
-    userPrimaryWithdrawn,
-    classicPrimaryWithdrawn,
-    // Positive => user's plan withdrew more than the classic rule.
-    withdrawnDelta: userPrimaryWithdrawn - classicPrimaryWithdrawn,
-    // Positive => user's plan withdrew more lifetime total than classic.
-    totalWithdrawnDelta:
-      (userResult.medianWithdrawn ?? 0) - (classicResult.medianWithdrawn ?? 0),
-    // Positive => user's plan had higher mean yearly spending than classic.
-    meanYearlyDelta:
-      (userResult.meanYearlyWithdrawn ?? 0) - (classicResult.meanYearlyWithdrawn ?? 0),
+    userMeanYearlyNetSpend: userResult.meanYearlyNetSpend ?? userResult.meanYearlyWithdrawn ?? 0,
+    classicMeanYearlyWithdrawn: classicMeanYearlySpend,
+    classicMeanYearlyNetSpend: classicResult.meanYearlyNetSpend ?? classicResult.meanYearlyWithdrawn ?? 0,
+    userPrimaryWithdrawn: userPrimarySpend,
+    classicPrimaryWithdrawn: classicPrimarySpend,
+    // Positive => user's plan spent more than the classic rule.
+    withdrawnDelta: userPrimarySpend - classicPrimarySpend,
+    totalWithdrawnDelta: userMedianSpend - classicMedianSpend,
+    meanYearlyDelta: userMeanYearlySpend - classicMeanYearlySpend,
     userSuccessRate: userResult.successRate ?? 0,
     classicSuccessRate: classicResult.successRate ?? 0,
     withdrawalMetric: metric,

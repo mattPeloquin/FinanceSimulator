@@ -53,6 +53,9 @@ export const PRESET_SCENARIO_KEYS = [
   // and how many years that recovery stretch lasts (0 = off).
   'maxConsecutiveMinWithdrawals',
   'minWithdrawalPlanRecoveryYears',
+  // Fees & Taxes section master switch + tax tiers (blank by default).
+  'enableFeesTaxes',
+  'withdrawalTaxTiers',
 ];
 
 // Scalar scenario keys whose values are computed from the derived formulas
@@ -94,6 +97,7 @@ export const PRESET_CONTROLLED_KEYS = [
   'specificWithdrawalFloors',
   'giftingTiers',
   'spendingOverTimeTiers',
+  'withdrawalTaxTiers',
 ];
 
 function clampLevel(level) {

@@ -90,7 +90,57 @@ function setSecondaryMetric(id, value) {
   el.textContent = formatK(value);
 }
 
-function applyMetricLabels(metric, horizonVariable, weighting = null) {
+function setNoteVisible(id, visible, text = null) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (text != null) el.textContent = text;
+  el.classList.toggle('hidden', !visible);
+}
+
+function preTaxWithdrawalNote(value) {
+  return `${formatK(value)} pre tax`;
+}
+
+/** Pick net vs gross spending figures for summary / outcome cards. */
+export function spendingCardValues(result, { taxActive, forOutcomes = false } = {}) {
+  const useNet = !!taxActive;
+  return {
+    total: useNet ? (result.medianNetSpend ?? result.medianWithdrawn) : result.medianWithdrawn,
+    medianYearly: useNet
+      ? (result.medianYearlyNetSpend ?? result.medianYearlyWithdrawn)
+      : result.medianYearlyWithdrawn,
+    meanYearly: useNet
+      ? (result.meanYearlyNetSpend ?? result.meanYearlyWithdrawn)
+      : result.meanYearlyWithdrawn,
+    // Gross counterparts for top-card sublines (outcomes stay net-only).
+    grossTotal: result.medianWithdrawn,
+    grossMedianYearly: result.medianYearlyWithdrawn,
+    grossMeanYearly: result.meanYearlyWithdrawn,
+    plannedGrossTotal: result.plannedGrossTotal ?? result.plannedWithdrawn,
+    plannedGrossMedianYearly: result.plannedGrossMedianYearly ?? result.plannedMedianYearly,
+    plannedGrossMeanYearly: result.plannedGrossMeanYearly ?? result.plannedMeanYearly,
+    forOutcomes,
+  };
+}
+
+/** Percentile card spending metrics; net when tax is active. */
+export function percentileSpendingValues(percentile, { taxActive } = {}) {
+  const useNet = !!taxActive;
+  const totalGross = percentile.totalWithdrawn;
+  const medianGross = percentile.medianYearlyWithdrawal
+    ?? percentileWithdrawal(percentile.path);
+  const meanGross = percentile.horizonYears > 0 ? totalGross / percentile.horizonYears : 0;
+  const totalNet = percentile.totalNetSpend ?? totalGross;
+  const medianNet = percentile.medianYearlyNetSpend ?? medianGross;
+  const meanNet = percentile.horizonYears > 0 ? totalNet / percentile.horizonYears : 0;
+  return {
+    total: useNet ? totalNet : totalGross,
+    medianYearly: useNet ? medianNet : medianGross,
+    meanYearly: useNet ? meanNet : meanGross,
+  };
+}
+
+function applyMetricLabels(metric, horizonVariable, weighting = null, { taxActive = false } = {}) {
   const earlyWeighted = isEarlyWeightingActive(weighting);
   const useMedianYearly = !earlyWeighted && isMedianYearlyMetric(metric);
   const useMeanYearly = isMeanYearlyMetric(metric);
@@ -120,19 +170,24 @@ function applyMetricLabels(metric, horizonVariable, weighting = null) {
   );
   setText('plannedWithdrawnSecondaryLabel', METRIC_SHORT_LABELS[secondary1]);
   setText('plannedWithdrawnSecondary2Label', METRIC_SHORT_LABELS[secondary2]);
+  const taxDesc = taxActive
+    ? ' Spending figures are net of modeled withdrawal tax.'
+    : '';
   setText(
     'outcomesDescription',
-    earlyWeighted
+    (earlyWeighted
       ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by early-weighted spending.'
       : useMedianYearly
         ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by median withdrawal per year.'
         : useMeanYearly
           ? 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by mean withdrawal per year.'
-          : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.',
+          : 'Shows the combined outcomes of the 10th to 60th percentile paths, ranked by total withdrawn.')
+      + taxDesc,
   );
   const horizonNote = horizonVariable ? ' Horizons vary across runs.' : '';
   const descEl = document.getElementById('outcomesDescription');
   if (descEl && horizonNote) descEl.textContent += horizonNote;
+  setNoteVisible('outcomesTaxNote', taxActive);
 
   const deltaTitle = earlyWeighted
     ? 'Difference from the planned early-weighted spending'
@@ -230,12 +285,16 @@ function setFourPercentVerdict(comparison) {
 
   const userSuccess = formatPercent(comparison.userSuccessRate, 0);
   const userRate = formatRatePct(comparison.userYear1Rate);
+  const sharedCostsNote = comparison.sharedCostsActive
+    ? ' Both plans use your fee and withdrawal-tax settings.'
+    : '';
 
   body.textContent =
     `${spendFact} ` +
     `Survival: your plan ${userSuccess} vs ${classicSuccess}. ` +
     `Your plan starts at ${userRate}; the rule always uses 4.0%. ` +
-    `${unspentFact}`;
+    `${unspentFact}` +
+    sharedCostsNote;
 }
 
 export function renderResults(result, params, { goalSeekWarning, fourPercentComparison, classicResult } = {}) {
@@ -250,26 +309,56 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   const earlyWeighted = isEarlyWeightingActive(rankingWeighting);
   const useMedianYearly = !earlyWeighted && isMedianYearlyMetric(metric);
   const useMeanYearly = isMeanYearlyMetric(metric);
+  const taxActive = !!result.withdrawalTaxActive;
+  const feeOrTaxActive = taxActive || !!result.advisorFeeActive;
   const plannedBenchmark = result.onPlanBenchmark
     ?? (useMedianYearly ? result.plannedMedianYearly : useMeanYearly ? result.plannedMeanYearly : result.plannedWithdrawn);
+  const cardSpend = spendingCardValues(result, { taxActive });
   const medianActual = earlyWeighted
-    ? (result.medianEarlyWeightedWithdrawn ?? result.medianWithdrawn)
+    ? (result.medianEarlyWeightedWithdrawn ?? cardSpend.total)
     : useMedianYearly
-      ? result.medianYearlyWithdrawn
+      ? cardSpend.medianYearly
       : useMeanYearly
-        ? result.meanYearlyWithdrawn
-        : result.medianWithdrawn;
+        ? cardSpend.meanYearly
+        : cardSpend.total;
+  // Pre-tax subline must use the same metric family as the headline (including
+  // early-weighted mean/year), not lifetime total gross.
+  const medianActualGross = earlyWeighted
+    ? (result.medianEarlyWeightedGrossWithdrawn ?? result.medianWithdrawn)
+    : useMedianYearly
+      ? cardSpend.grossMedianYearly
+      : useMeanYearly
+        ? cardSpend.grossMeanYearly
+        : cardSpend.grossTotal;
+  const plannedGrossBenchmark = earlyWeighted
+    ? (result.onPlanGrossBenchmark
+      ?? (useMeanYearly ? cardSpend.plannedGrossMeanYearly : cardSpend.plannedGrossTotal))
+    : useMedianYearly
+      ? cardSpend.plannedGrossMedianYearly
+      : useMeanYearly
+        ? cardSpend.plannedGrossMeanYearly
+        : cardSpend.plannedGrossTotal;
   // Same slotting as the outcome cards: the two non-primary metrics share
   // one line, median left of total.
   const actualValues = {
-    total: result.medianWithdrawn,
-    medianYearly: result.medianYearlyWithdrawn,
-    meanYearly: result.meanYearlyWithdrawn,
+    total: cardSpend.total,
+    medianYearly: cardSpend.medianYearly,
+    meanYearly: cardSpend.meanYearly,
+  };
+  const actualGrossValues = {
+    total: cardSpend.grossTotal,
+    medianYearly: cardSpend.grossMedianYearly,
+    meanYearly: cardSpend.grossMeanYearly,
   };
   const plannedValues = {
     total: result.plannedWithdrawn,
     medianYearly: result.plannedMedianYearly,
     meanYearly: result.plannedMeanYearly,
+  };
+  const plannedGrossValues = {
+    total: cardSpend.plannedGrossTotal,
+    medianYearly: cardSpend.plannedGrossMedianYearly,
+    meanYearly: cardSpend.plannedGrossMeanYearly,
   };
   const chartYears = result.maxYears ?? result.numYears;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
@@ -288,7 +377,7 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
           : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
   }
 
-  applyMetricLabels(metric, result.horizonVariable, rankingWeighting);
+  applyMetricLabels(metric, result.horizonVariable, rankingWeighting, { taxActive });
 
   // Whole percents only: a tenth of a percent of runs is Monte Carlo noise, not signal.
   setText('successRate', formatPercent(result.successRate, 0));
@@ -296,25 +385,53 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
     'withdrawalTargetSuccessRate',
     result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 0),
   );
+  setNoteVisible('onPlanTaxNote', taxActive);
   setText('medianBalance', formatK(result.medianBalance));
+  setNoteVisible('medianBalanceTaxNote', feeOrTaxActive);
   setText('medianReturn', formatPercent(result.returnSummary.median));
   setText('medianIrr', formatPercent(result.irrSummary.median) || '—');
   const [secondarySlot1, secondarySlot2] = secondaryMetricSlots(metric);
   setText('medianWithdrawn', formatK(medianActual));
+  setNoteVisible(
+    'medianWithdrawnGrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(medianActualGross) : '',
+  );
   setSecondaryMetric('medianWithdrawnSecondary', actualValues[secondarySlot1]);
   setSecondaryMetric('medianWithdrawnSecondary2', actualValues[secondarySlot2]);
+  setNoteVisible(
+    'medianWithdrawnSecondaryGrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(actualGrossValues[secondarySlot1]) : '',
+  );
+  setNoteVisible(
+    'medianWithdrawnSecondary2GrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(actualGrossValues[secondarySlot2]) : '',
+  );
   setText('plannedWithdrawn', formatK(plannedBenchmark));
+  setNoteVisible(
+    'plannedWithdrawnGrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(plannedGrossBenchmark) : '',
+  );
   setSecondaryMetric('plannedWithdrawnSecondary', plannedValues[secondarySlot1]);
   setSecondaryMetric('plannedWithdrawnSecondary2', plannedValues[secondarySlot2]);
+  setNoteVisible(
+    'plannedWithdrawnSecondaryGrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(plannedGrossValues[secondarySlot1]) : '',
+  );
+  setNoteVisible(
+    'plannedWithdrawnSecondary2GrossNote',
+    taxActive,
+    taxActive ? preTaxWithdrawalNote(plannedGrossValues[secondarySlot2]) : '',
+  );
   for (const key of PERCENTILE_KEYS) {
     const p = result.percentiles[key];
-    const metricValues = {
-      total: p.totalWithdrawn,
-      medianYearly: p.medianYearlyWithdrawal ?? percentileWithdrawal(p.path),
-      meanYearly: p.horizonYears > 0 ? p.totalWithdrawn / p.horizonYears : 0,
-    };
+    const metricValues = percentileSpendingValues(p, { taxActive });
     const actual = earlyWeighted
-      ? (p.earlyWeightedWithdrawn ?? p.totalWithdrawn)
+      ? (p.earlyWeightedWithdrawn ?? metricValues.total)
       : useMedianYearly
         ? metricValues.medianYearly
         : useMeanYearly

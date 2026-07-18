@@ -98,6 +98,20 @@
     right: 0.5rem;
   }
 
+  /* Enable toggles: peer checkbox + .toggle-track sibling. Off-state uses a
+     muted fill + explicit border so the frame stays visible on accent-subtle
+     panels (plain bg-theme-border alone can blend until a class change). */
+  .toggle-track {
+    @apply relative box-border w-9 h-5 shrink-0 rounded-full border border-theme-input bg-theme-muted transition-colors;
+    @apply after:content-[''] after:absolute after:top-1/2 after:start-0.5 after:h-3.5 after:w-3.5;
+    @apply after:-translate-y-1/2 after:rounded-full after:border after:border-theme-input after:bg-theme-surface after:transition-all;
+    @apply peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-theme-accent/30;
+    @apply peer-checked:border-theme-accent peer-checked:bg-theme-accent;
+    /* start-0.5 (2px) + 1rem travel ≈ equal inset on the right when on */
+    @apply peer-checked:after:translate-x-4 peer-checked:after:-translate-y-1/2 peer-checked:after:border-white;
+    @apply rtl:peer-checked:after:-translate-x-4;
+  }
+
   /* Range sliders: h-2 on the input squashes the thumb off the track when
      appearance-none is used. Give the control room for the thumb and style
      the track/thumb explicitly so they stay vertically centered. */

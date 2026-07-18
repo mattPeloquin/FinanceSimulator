@@ -95,6 +95,9 @@ describe('migrateScenario', () => {
       earlyWeightSlot: SCENARIO_DEFAULTS.earlyWeightSlot,
       earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
       earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
+      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
     });
   });
   it('adds an empty allocation-over-time schedule when migrating pre-v7 saves', () => {
@@ -108,18 +111,25 @@ describe('migrateScenario', () => {
       earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
       earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
     };
+    const feesTaxesDefaults = {
+      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
+    };
     expect(migrateScenario(s, 5)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
       ...earlyWeightDefaults,
+      ...feesTaxesDefaults,
     });
     expect(migrateScenario(s, 6)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
       ...earlyWeightDefaults,
+      ...feesTaxesDefaults,
     });
   });
-  it('leaves fully-migrated v8 scenarios untouched when already current', () => {
+  it('adds fees/taxes defaults when migrating pre-v9 saves', () => {
     const s = {
       startBalance: 4000,
       presetActive: true,
@@ -129,7 +139,69 @@ describe('migrateScenario', () => {
       earlyWeightEmphasisPct: 30,
       earlyWeightLateFloorPct: 40,
     };
-    expect(migrateScenario(s, 8)).toEqual(s);
+    expect(migrateScenario(s, 8)).toEqual({
+      ...s,
+      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
+    });
+  });
+  it('adds enableFeesTaxes when migrating pre-v10 saves', () => {
+    const off = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 2,
+      advisorFeePct: 0,
+      withdrawalTaxTiers: [],
+    };
+    expect(migrateScenario(off, 9)).toEqual({
+      ...off,
+      enableFeesTaxes: false,
+    });
+    const on = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 2,
+      advisorFeePct: 0.5,
+      withdrawalTaxTiers: [{ taxPct: 12, applyToGifts: true, spendBrackets: [] }],
+    };
+    expect(migrateScenario(on, 9).enableFeesTaxes).toBe(true);
+  });
+  it('migrates legacy highSpendAbove into spendBrackets on pre-v11 saves', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 2,
+      enableFeesTaxes: true,
+      advisorFeePct: 0,
+      withdrawalTaxTiers: [{
+        taxPct: 12,
+        applyToGifts: true,
+        highSpendAbove: 200,
+        highTaxPct: 18,
+      }],
+    };
+    const migrated = migrateScenario(s, 10);
+    expect(migrated.withdrawalTaxTiers).toEqual([{
+      taxPct: 12,
+      applyToGifts: true,
+      spendBrackets: [{ above: 200, taxPct: 18 }],
+    }]);
+  });
+  it('leaves fully-migrated v11 scenarios untouched when already current', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 4,
+      allocationOverTimeTiers: [],
+      earlyWeightSlot: 0,
+      earlyWeightEmphasisPct: 30,
+      earlyWeightLateFloorPct: 40,
+      advisorFeePct: 0,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
+    };
+    expect(migrateScenario(s, 11)).toEqual(s);
   });
   it('maps legacy earlyWeightStrengthPct to a 5-stop slot and drops shape', () => {
     const s = {
@@ -184,6 +256,21 @@ describe('buildSimParams', () => {
     expect(p.allocationSeries[p.allocationSeries.length - 1].usLgGrowth).toBeCloseTo(
       p.allocation.usLgGrowth,
     );
+  });
+
+  it('gates advisor fee and withdrawal tax behind enableFeesTaxes', () => {
+    const s = simScenario();
+    s.enableFeesTaxes = false;
+    s.advisorFeePct = 1;
+    s.withdrawalTaxTiers = [{ taxPct: 20, applyToGifts: true, spendBrackets: [] }];
+    const off = buildSimParams(s, { years: [] });
+    expect(off.portfolio.advisorFeeRate).toBe(0);
+    expect(off.portfolio.withdrawalTaxSeries.every((y) => y.taxRate === 0)).toBe(true);
+
+    s.enableFeesTaxes = true;
+    const on = buildSimParams(s, { years: [] });
+    expect(on.portfolio.advisorFeeRate).toBeCloseTo(0.01, 6);
+    expect(on.portfolio.withdrawalTaxSeries[0].taxRate).toBeCloseTo(0.2, 6);
   });
 
   it('builds an interpolated allocationSeries when over-time tiers are set', () => {
@@ -660,7 +747,7 @@ describe('validateScenario', () => {
     s.giftingTiers = [{ amount: 0, balance: 0, years: 5 }, { amount: 25, balance: 2000 }];
     expect(validateScenario(s, range)).toEqual([]);
     s.giftingTiers = [{ amount: 25, balance: 0 }];
-    expect(validateScenario(s, range).some((e) => e.includes('positive balance threshold'))).toBe(true);
+    expect(validateScenario(s, range).some((e) => e.includes('Balance > threshold'))).toBe(true);
   });
 
   it('allows a zero balance threshold when Trigger or Target % is set', () => {

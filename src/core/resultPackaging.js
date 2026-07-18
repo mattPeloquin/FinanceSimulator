@@ -16,6 +16,9 @@ import {
   buildHistogram,
   summarizeReturns,
   irrFromPath,
+  isMeanYearlyMetric,
+  isMedianYearlyMetric,
+  weightedScheduleScore,
 } from './statistics.js';
 import {
   plannedScheduleTotal,
@@ -26,6 +29,10 @@ import {
   buildPerRunPlanBenchmarks,
 } from './goalSeek.js';
 import { CLASSIC_FOUR_PERCENT_RATE } from './fourPercentComparison.js';
+import {
+  withdrawalTaxSeriesActive,
+  grossUpPlanSchedule,
+} from './feesTaxes.js';
 
 const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65];
 const SURFACE_SAMPLES = 200;
@@ -225,18 +232,25 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
 
   let maxLen = 0;
   let totalWithdrawn = 0;
+  let totalNetSpend = 0;
   let earlyWeightedWithdrawn = 0;
   let finalBalance = 0;
   let avgReturn = 0;
   let irr = 0;
   let irrWSum = 0;
   let medianYearlyWithdrawal = 0;
+  let medianYearlyNetSpend = 0;
   let horizonYearsWeighted = 0;
   let wSum = 0;
+  const hasNet = result.totalNetSpend != null && result.medianYearlyNetSpend != null;
 
   for (const e of entries) {
     maxLen = Math.max(maxLen, e.path.balances.length);
     totalWithdrawn += e.w * result.totalWithdrawn[e.simIndex];
+    if (hasNet) {
+      totalNetSpend += e.w * result.totalNetSpend[e.simIndex];
+      medianYearlyNetSpend += e.w * result.medianYearlyNetSpend[e.simIndex];
+    }
     if (rankedMetric) earlyWeightedWithdrawn += e.w * rankedMetric[e.simIndex];
     finalBalance += e.w * result.finalBalance[e.simIndex];
     avgReturn += e.w * result.avgReturn[e.simIndex];
@@ -281,10 +295,14 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
     }
   }
 
+  const totalWd = totalWithdrawn / wSum;
+  const medianYrWd = medianYearlyWithdrawal / wSum;
   return {
-    totalWithdrawn: totalWithdrawn / wSum,
-    earlyWeightedWithdrawn: rankedMetric ? earlyWeightedWithdrawn / wSum : totalWithdrawn / wSum,
-    medianYearlyWithdrawal: medianYearlyWithdrawal / wSum,
+    totalWithdrawn: totalWd,
+    totalNetSpend: hasNet ? totalNetSpend / wSum : totalWd,
+    earlyWeightedWithdrawn: rankedMetric ? earlyWeightedWithdrawn / wSum : totalWd,
+    medianYearlyWithdrawal: medianYrWd,
+    medianYearlyNetSpend: hasNet ? medianYearlyNetSpend / wSum : medianYrWd,
     finalBalance: finalBalance / wSum,
     avgReturn: avgReturn / wSum,
     irr: irrWSum > 0 ? irr / irrWSum : NaN,
@@ -413,12 +431,41 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const plannedWithdrawn = plannedScheduleTotal(params.portfolio, endpointYears);
   const plannedMedianYearly = plannedScheduleMedianYearly(params.portfolio, endpointYears);
   const plannedMeanYearly = plannedScheduleMeanYearly(params.portfolio, endpointYears);
+  const taxSeries = params.portfolio?.withdrawalTaxSeries;
+  const taxActive = withdrawalTaxSeriesActive(taxSeries);
+  const advisorFeeActive = (params.portfolio?.advisorFeeRate ?? 0) > 0;
+  const netPlanSchedule = plannedYearlySchedule(params.portfolio, endpointYears);
+  const grossPlanSchedule = taxActive
+    ? grossUpPlanSchedule(netPlanSchedule, taxSeries)
+    : netPlanSchedule;
+  let plannedGrossTotal = 0;
+  for (const amount of grossPlanSchedule) plannedGrossTotal += amount;
+  const plannedGrossMedianYearly = median(grossPlanSchedule);
+  const plannedGrossMeanYearly = endpointYears > 0 ? plannedGrossTotal / endpointYears : 0;
   const onPlanBenchmark = weightedPlannedBenchmark(
     params.portfolio,
     endpointYears,
     withdrawalMetric,
     rankingWeighting,
   );
+  // Gross twin of onPlanBenchmark (same metric / early-weighting), for the
+  // pre-tax subline under the planned card when tax is active.
+  const onPlanGrossBenchmark = (() => {
+    if (!taxActive) return onPlanBenchmark;
+    const schedule = grossPlanSchedule;
+    if (!earlyWeightingActive) {
+      if (isMedianYearlyMetric(withdrawalMetric)) return plannedGrossMedianYearly;
+      if (isMeanYearlyMetric(withdrawalMetric)) return plannedGrossMeanYearly;
+      return plannedGrossTotal;
+    }
+    const weightedTotal = weightedScheduleScore(schedule, rankingWeighting);
+    return isMeanYearlyMetric(withdrawalMetric) && endpointYears > 0
+      ? weightedTotal / endpointYears
+      : weightedTotal;
+  })();
+  const rankedMetricGross = taxActive
+    ? perRunWithdrawalMetric(result, withdrawalMetric, rankingWeighting, { useGross: true })
+    : rankedMetric;
   const onPlanActuals = rankedMetric;
   const perRunBenchmarks = buildPerRunPlanBenchmarks(
     params.portfolio,
@@ -426,6 +473,9 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     withdrawalMetric,
     rankingWeighting,
   );
+
+  const totalNet = result.totalNetSpend ?? result.totalWithdrawn;
+  const medianYearlyNet = result.medianYearlyNetSpend ?? result.medianYearlyWithdrawal;
 
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
   // 1 = below plan (within horizon but short of the benchmark), 2 = ran out.
@@ -469,11 +519,21 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
     meanYearlyWithdrawn: median(meanYearlyWithdrawals(result.totalWithdrawn, result.horizonYears)),
+    medianNetSpend: median(totalNet),
+    medianYearlyNetSpend: median(medianYearlyNet),
+    meanYearlyNetSpend: median(meanYearlyWithdrawals(totalNet, result.horizonYears)),
     medianEarlyWeightedWithdrawn: median(onPlanActuals),
+    medianEarlyWeightedGrossWithdrawn: median(rankedMetricGross),
     plannedWithdrawn,
     plannedMedianYearly,
     plannedMeanYearly,
+    plannedGrossTotal,
+    plannedGrossMedianYearly,
+    plannedGrossMeanYearly,
+    withdrawalTaxActive: taxActive,
+    advisorFeeActive,
     onPlanBenchmark,
+    onPlanGrossBenchmark,
     percentiles,
     surfacePaths,
     surfaceMeta: {

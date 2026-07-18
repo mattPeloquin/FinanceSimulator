@@ -22,7 +22,9 @@
     "dynHighRet": 25,
     "glideRate": 0,
     "maxConsecutiveMinWithdrawals": 3,
-    "minWithdrawalPlanRecoveryYears": 1
+    "minWithdrawalPlanRecoveryYears": 1,
+    "enableFeesTaxes": false,
+    "withdrawalTaxTiers": []
   },
   "derived": {
     "minWithdrawalLifetimePctOfStart": 60,

@@ -38,7 +38,9 @@ export function stitchMonteCarloResults(params, chunkResults) {
   const irr = new Float64Array(totalSims);
   const finalBalance = new Float64Array(totalSims);
   const totalWithdrawn = new Float64Array(totalSims);
+  const totalNetSpend = new Float64Array(totalSims);
   const medianYearlyWithdrawal = new Float64Array(totalSims);
+  const medianYearlyNetSpend = new Float64Array(totalSims);
   const earlyWithdrawn = new Float64Array(totalSims);
   const depletionYear = new Float64Array(totalSims);
   const horizonYears = new Int32Array(totalSims);
@@ -46,14 +48,34 @@ export function stitchMonteCarloResults(params, chunkResults) {
   allYearsReturns.fill(NaN);
   const allYearsWithdrawals = new Float64Array(totalSims * maxYears);
   allYearsWithdrawals.fill(NaN);
+  const allYearsNetSpend = new Float64Array(totalSims * maxYears);
+  allYearsNetSpend.fill(NaN);
 
   for (const chunk of chunkResults) {
-    const { startIndex, numSimulations, avgReturn: a, irr: ir, finalBalance: fb, totalWithdrawn: tw, medianYearlyWithdrawal: myw, earlyWithdrawn: ew, depletionYear: dy, horizonYears: hy, allYearsReturns: yr, allYearsWithdrawals: yw } = chunk;
+    const {
+      startIndex,
+      numSimulations,
+      avgReturn: a,
+      irr: ir,
+      finalBalance: fb,
+      totalWithdrawn: tw,
+      totalNetSpend: tns,
+      medianYearlyWithdrawal: myw,
+      medianYearlyNetSpend: myns,
+      earlyWithdrawn: ew,
+      depletionYear: dy,
+      horizonYears: hy,
+      allYearsReturns: yr,
+      allYearsWithdrawals: yw,
+      allYearsNetSpend: yn,
+    } = chunk;
     avgReturn.set(a, startIndex);
     irr.set(ir, startIndex);
     finalBalance.set(fb, startIndex);
     totalWithdrawn.set(tw, startIndex);
+    totalNetSpend.set(tns, startIndex);
     medianYearlyWithdrawal.set(myw, startIndex);
+    medianYearlyNetSpend.set(myns, startIndex);
     earlyWithdrawn.set(ew, startIndex);
     depletionYear.set(dy, startIndex);
     horizonYears.set(hy, startIndex);
@@ -66,6 +88,10 @@ export function stitchMonteCarloResults(params, chunkResults) {
         yw.subarray(i * maxYears, (i + 1) * maxYears),
         (startIndex + i) * maxYears,
       );
+      allYearsNetSpend.set(
+        yn.subarray(i * maxYears, (i + 1) * maxYears),
+        (startIndex + i) * maxYears,
+      );
     }
   }
 
@@ -76,12 +102,15 @@ export function stitchMonteCarloResults(params, chunkResults) {
     irr,
     finalBalance,
     totalWithdrawn,
+    totalNetSpend,
     medianYearlyWithdrawal,
+    medianYearlyNetSpend,
     earlyWithdrawn,
     depletionYear,
     horizonYears,
     allYearsReturns,
     allYearsWithdrawals,
+    allYearsNetSpend,
   };
 }
 
@@ -92,7 +121,21 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
       if (msg.type === 'chunkDone') {
         port.removeEventListener('message', onMessage);
         port.removeEventListener('messageerror', onError);
-        const { avgReturn, irr, finalBalance, totalWithdrawn, medianYearlyWithdrawal, earlyWithdrawn, depletionYear, horizonYears, allYearsReturns, allYearsWithdrawals } = msg.buffers;
+        const {
+          avgReturn,
+          irr,
+          finalBalance,
+          totalWithdrawn,
+          totalNetSpend,
+          medianYearlyWithdrawal,
+          medianYearlyNetSpend,
+          earlyWithdrawn,
+          depletionYear,
+          horizonYears,
+          allYearsReturns,
+          allYearsWithdrawals,
+          allYearsNetSpend,
+        } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
           numSimulations: msg.numSimulations,
@@ -100,12 +143,15 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
           irr: new Float64Array(irr),
           finalBalance: new Float64Array(finalBalance),
           totalWithdrawn: new Float64Array(totalWithdrawn),
+          totalNetSpend: new Float64Array(totalNetSpend),
           medianYearlyWithdrawal: new Float64Array(medianYearlyWithdrawal),
+          medianYearlyNetSpend: new Float64Array(medianYearlyNetSpend),
           earlyWithdrawn: new Float64Array(earlyWithdrawn),
           depletionYear: new Float64Array(depletionYear),
           horizonYears: new Int32Array(horizonYears),
           allYearsReturns: new Float64Array(allYearsReturns),
           allYearsWithdrawals: new Float64Array(allYearsWithdrawals),
+          allYearsNetSpend: new Float64Array(allYearsNetSpend),
         });
       } else if (msg.type === 'error') {
         port.removeEventListener('message', onMessage);

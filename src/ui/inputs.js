@@ -18,8 +18,13 @@ import {
   writeAllocationOverTimeTiersToDom,
   readStaticAllocationFromDom,
   refreshAllocationOverTimeTierTotals,
+  readWithdrawalTaxTiersFromDom,
+  writeWithdrawalTaxTiersToDom,
+  normalizeWithdrawalTaxTiers,
+  MONEY_SCALE,
 } from '../state/scenario.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
+import { buildWithdrawalTaxSeries, grossUpNet } from '../core/feesTaxes.js';
 import { normalizeYearRange } from '../data/historicalData.js';
 import { Chart } from './charts/chartSetup.js';
 import { syncWithdrawalPreview, syncWithdrawalPreviewFromForm, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
@@ -367,6 +372,20 @@ export function toggleDynamicAdjustments(enabled) {
   }
 }
 
+/** Show/hide Fees & Taxes controls (same pattern as Find Best Plan). */
+export function toggleFeesTaxes(enabled) {
+  const wrapper = document.getElementById('fees-taxes-wrapper');
+  if (wrapper) wrapper.classList.toggle('hidden', !enabled);
+  if (enabled) syncWithdrawalTaxPreview();
+  else {
+    const preview = document.getElementById('withdrawalTaxPreview');
+    if (preview) {
+      preview.classList.add('hidden');
+      preview.textContent = '';
+    }
+  }
+}
+
 export function refreshDynamicAdjustmentPreviews() {
   syncGuardrailPreview();
   syncWithdrawalAdjPreview();
@@ -528,6 +547,144 @@ export function setupAllocationOverTimeTierList({ onChange }) {
     notify();
   });
   list.addEventListener('change', notify);
+}
+
+/** Year-1 spend → portfolio readout when withdrawal tax tiers are active. */
+export function syncWithdrawalTaxPreview() {
+  const el = document.getElementById('withdrawalTaxPreview');
+  if (!el) return;
+  if (!document.getElementById('enableFeesTaxes')?.checked) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  const tiers = normalizeWithdrawalTaxTiers(readWithdrawalTaxTiersFromDom());
+  if (tiers.length === 0) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  const series = buildWithdrawalTaxSeries(tiers, 1, (k) => parseCurrency(k) * MONEY_SCALE);
+  const yearTax = series[0];
+  const hasTax = (yearTax?.taxRate > 0)
+    || (Array.isArray(yearTax?.spendBrackets) && yearTax.spendBrackets.some((b) => b?.rate > 0));
+  if (!hasTax) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  const spendK = parseCurrency(document.getElementById('baseWithdrawal')?.value);
+  const spend = spendK * MONEY_SCALE;
+  if (!(spend > 0)) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  const { tax, gross } = grossUpNet(spend, 0, yearTax);
+  const fmt = (d) => Math.round(d / MONEY_SCALE).toLocaleString('en-US');
+  el.textContent = `Year 1 example: spend $${fmt(spend)}k → portfolio ~$${fmt(gross)}k (tax ~$${fmt(tax)}k).`;
+  el.classList.remove('hidden');
+}
+
+export function setupWithdrawalTaxTiersList({ onChange }) {
+  const list = document.getElementById('withdrawalTaxTiersList');
+  const addBtn = document.getElementById('addWithdrawalTaxTier');
+  if (!list || !addBtn) return;
+
+  const notify = typeof onChange === 'function' ? onChange : () => {};
+
+  addBtn.addEventListener('click', () => {
+    const tiers = readWithdrawalTaxTiersFromDom();
+    if (tiers.length === 0) {
+      writeWithdrawalTaxTiersToDom([{
+        taxPct: 0,
+        applyToGifts: true,
+        spendBrackets: [],
+      }]);
+      syncWithdrawalTaxPreview();
+      notify();
+      return;
+    }
+    const last = tiers.pop();
+    tiers.push({
+      taxPct: last.taxPct,
+      applyToGifts: last.applyToGifts !== false,
+      spendBrackets: Array.isArray(last.spendBrackets) ? last.spendBrackets.map((b) => ({ ...b })) : [],
+      years: 1,
+    });
+    tiers.push(last);
+    writeWithdrawalTaxTiersToDom(tiers);
+    syncWithdrawalTaxPreview();
+    notify();
+  });
+
+  list.addEventListener('click', (e) => {
+    const removeTier = e.target.closest('.remove-withdrawal-tax-tier');
+    if (removeTier) {
+      const tiers = readWithdrawalTaxTiersFromDom();
+      tiers.splice(Number(removeTier.closest('[data-withdrawal-tax-tier-row]')?.dataset.withdrawalTaxTierRow), 1);
+      writeWithdrawalTaxTiersToDom(tiers);
+      syncWithdrawalTaxPreview();
+      notify();
+      return;
+    }
+
+    const addBracket = e.target.closest('.add-tax-spend-bracket');
+    if (addBracket) {
+      const tierRow = addBracket.closest('[data-withdrawal-tax-tier-row]');
+      const tierIndex = Number(tierRow?.dataset.withdrawalTaxTierRow);
+      const tiers = readWithdrawalTaxTiersFromDom();
+      if (!Number.isFinite(tierIndex) || !tiers[tierIndex]) return;
+      const brackets = Array.isArray(tiers[tierIndex].spendBrackets)
+        ? [...tiers[tierIndex].spendBrackets]
+        : [];
+      const lastAbove = brackets.length > 0 ? brackets[brackets.length - 1].above : null;
+      brackets.push({
+        above: lastAbove != null ? lastAbove + 50 : 100,
+        taxPct: tiers[tierIndex].taxPct ?? 0,
+      });
+      tiers[tierIndex] = { ...tiers[tierIndex], spendBrackets: brackets };
+      writeWithdrawalTaxTiersToDom(tiers);
+      syncWithdrawalTaxPreview();
+      notify();
+      return;
+    }
+
+    const removeBracket = e.target.closest('.remove-tax-spend-bracket');
+    if (removeBracket) {
+      const tierRow = removeBracket.closest('[data-withdrawal-tax-tier-row]');
+      const bracketRow = removeBracket.closest('[data-tax-spend-bracket-row]');
+      const tierIndex = Number(tierRow?.dataset.withdrawalTaxTierRow);
+      const bracketIndex = Number(bracketRow?.dataset.taxSpendBracketRow);
+      const tiers = readWithdrawalTaxTiersFromDom();
+      if (!Number.isFinite(tierIndex) || !tiers[tierIndex]) return;
+      const brackets = Array.isArray(tiers[tierIndex].spendBrackets)
+        ? [...tiers[tierIndex].spendBrackets]
+        : [];
+      brackets.splice(bracketIndex, 1);
+      tiers[tierIndex] = { ...tiers[tierIndex], spendBrackets: brackets };
+      writeWithdrawalTaxTiersToDom(tiers);
+      syncWithdrawalTaxPreview();
+      notify();
+    }
+  });
+
+  list.addEventListener('change', () => {
+    syncWithdrawalTaxPreview();
+    notify();
+  });
+  list.addEventListener('input', () => {
+    syncWithdrawalTaxPreview();
+    notify();
+  });
+
+  list.addEventListener('blur', (e) => {
+    if (e.target.matches('[data-tax-bracket-above]')) {
+      formatWithdrawalFloorCurrencyInput(e.target);
+      syncWithdrawalTaxPreview();
+      notify();
+    }
+  }, true);
 }
 
 export function setupGiftingTierList({ onChange }) {
@@ -774,6 +931,14 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
+  const feesTaxesCheck = document.getElementById('enableFeesTaxes');
+  if (feesTaxesCheck) {
+    feesTaxesCheck.addEventListener('change', (e) => {
+      toggleFeesTaxes(e.target.checked);
+      notify();
+    });
+  }
+
   const goalSeekModeCheck = document.getElementById('goalSeekMode');
   if (goalSeekModeCheck) {
     goalSeekModeCheck.addEventListener('change', (e) => {
@@ -891,6 +1056,14 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   });
   setupGiftingTierList({ onChange: notify });
   setupMajorEventsList({ onChange: notify });
+  setupWithdrawalTaxTiersList({ onChange: notify });
+
+  const baseWithdrawalEl = document.getElementById('baseWithdrawal');
+  if (baseWithdrawalEl) {
+    baseWithdrawalEl.addEventListener('change', syncWithdrawalTaxPreview);
+    baseWithdrawalEl.addEventListener('blur', syncWithdrawalTaxPreview);
+  }
+  syncWithdrawalTaxPreview();
 
   const numYearsEl = document.getElementById('numYears');
   if (numYearsEl) {

@@ -39,6 +39,8 @@ import {
   toggleDistMethod,
   refreshDynamicAdjustmentPreviews,
   updateAllocationTotal,
+  syncWithdrawalTaxPreview,
+  toggleFeesTaxes,
 } from './inputs.js';
 import { syncBaseWithdrawalPreview } from './charts/basePreview.js';
 import { syncWithdrawalPreviewFromForm } from './charts/withdrawalPreview.js';
@@ -117,6 +119,8 @@ function refreshDependentUi(patch) {
   syncWithdrawalPreviewFromForm();
   syncGlidePreview();
   syncAllocationPreview();
+  if (patch.enableFeesTaxes != null) toggleFeesTaxes(!!patch.enableFeesTaxes);
+  else syncWithdrawalTaxPreview();
 }
 
 function buildPresetPatch(level) {
@@ -247,6 +251,10 @@ function isSliderManagedTierEdit(target) {
       return row === '0' && !goalSeekEnabled();
     }
   }
+
+  // Easy Mode writes the full withdrawal-tax list; any edit detaches.
+  if (target.closest('[data-withdrawal-tax-tier-row]')) return true;
+
   return false;
 }
 
@@ -310,6 +318,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'glideTarget',
     'maxConsecutiveMinWithdrawals', 'maxConsecutiveMinWithdrawalsSpecific',
     'minWithdrawalPlanRecoveryYears', 'minWithdrawalPlanRecoveryYearsSpecific',
+    'enableFeesTaxes',
   ];
   for (const id of detachIds) {
     const input = el(id);
@@ -349,7 +358,13 @@ export function setupRiskPresetControl({ onChange } = {}) {
     input.addEventListener('input', maybeDetach);
   });
 
-  for (const listId of ['withdrawalFloorsList', 'specificWithdrawalFloorsList', 'giftingTiersList', 'spendingOverTimeTiersList']) {
+  for (const listId of [
+    'withdrawalFloorsList',
+    'specificWithdrawalFloorsList',
+    'giftingTiersList',
+    'spendingOverTimeTiersList',
+    'withdrawalTaxTiersList',
+  ]) {
     const list = el(listId);
     if (!list) continue;
     const handler = (e) => {
@@ -362,4 +377,11 @@ export function setupRiskPresetControl({ onChange } = {}) {
     list.addEventListener('input', handler);
     list.addEventListener('change', handler);
   }
+
+  // Add/remove on the tax list also detaches (preset owns the whole list).
+  el('addWithdrawalTaxTier')?.addEventListener('click', maybeDetach);
+  el('withdrawalTaxTiersList')?.addEventListener('click', (e) => {
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest('.remove-withdrawal-tax-tier')) maybeDetach();
+  });
 }

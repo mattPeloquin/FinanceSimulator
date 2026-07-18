@@ -12,10 +12,19 @@ import {
   glideSpendAmount,
   scaledGiftAmount,
 } from './withdrawal.js';
+import {
+  ZERO_WITHDRAWAL_TAX,
+  grossUpNet,
+  grossUpPlanSchedule,
+} from './feesTaxes.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
 
 const DEPLETION_EPSILON = 1e-6;
 const MAX_HORIZON_YEARS = 100;
+
+function yearTaxAt(portfolio, yearIndex) {
+  return portfolio.withdrawalTaxSeries?.[yearIndex] ?? ZERO_WITHDRAWAL_TAX;
+}
 
 // Estimate dollars that leave the portfolio for one year with a given market
 // boost, stopping before glide surplus. Used only to size the max-boost
@@ -52,16 +61,17 @@ function estimateSpendingExGlide({
   let balance = postGrowthBalance;
   let targetWithdrawal = unadjustedTarget + boost;
   const plan = unadjustedTarget;
+  const yearTax = yearTaxAt(portfolio, yearIndex);
 
   if (dynConfigEnabled && targetWithdrawal > 0) {
     targetWithdrawal *= balanceScaleMultiplier(balance, portfolio);
   }
   if (baseVal >= 0 && targetWithdrawal < 0) targetWithdrawal = 0;
 
-  let actualWithdrawal;
+  let netPlanPaid = 0;
+  let taxableNetSoFar = 0;
   if (targetWithdrawal < 0) {
-    actualWithdrawal = targetWithdrawal;
-    balance -= actualWithdrawal;
+    balance -= targetWithdrawal;
   } else {
     // Forced "stay on plan" years raise this year's floor to the plan amount.
     if (minRecoveryEnabled && forcedPlanYearsRemaining > 0) {
@@ -69,11 +79,20 @@ function estimateSpendingExGlide({
     } else if (yearFloor > 0) {
       targetWithdrawal = Math.max(targetWithdrawal, yearFloor);
     }
+    let majorEventOutflow = 0;
     if (strategy !== 'specific' && eventAmount < 0) {
-      targetWithdrawal += -eventAmount;
+      majorEventOutflow = -eventAmount;
+      targetWithdrawal += majorEventOutflow;
     }
-    actualWithdrawal = Math.min(balance, targetWithdrawal);
-    balance -= actualWithdrawal;
+    // Net spending (ex major events) is grossed up for withdrawal tax; events stay untaxed.
+    const netSpendTarget = Math.max(0, targetWithdrawal - majorEventOutflow);
+    const { gross } = grossUpNet(netSpendTarget, taxableNetSoFar, yearTax);
+    taxableNetSoFar += netSpendTarget;
+    const grossTarget = gross + majorEventOutflow;
+    const paidGross = Math.min(balance, grossTarget);
+    balance -= paidGross;
+    const scale = grossTarget > 0 ? paidGross / grossTarget : 0;
+    netPlanPaid = netSpendTarget * scale;
   }
 
   let prospectiveGlideExtra = 0;
@@ -85,17 +104,26 @@ function estimateSpendingExGlide({
       portfolio.glideTarget,
     );
   }
+  // On-plan uses net spending delivered (tax is not lifestyle spend).
   const metPlan =
     targetWithdrawal < 0
-    || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
+    || netPlanPaid + prospectiveGlideExtra >= unadjustedTarget;
   if (gift && gift.amount > 0 && metPlan) {
-    // Gifts leave the portfolio too; only the balance reduction matters here.
+    const planGrossForNeed = unadjustedTarget > 0
+      ? grossUpNet(unadjustedTarget, 0, yearTax).gross
+      : unadjustedTarget;
     const remainingNeed = remainingPlanNeedAfterWithdrawal(
       planFundedNeed,
-      unadjustedTarget,
+      planGrossForNeed,
       yearIndex,
     );
-    balance -= Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
+    const giftNet = Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
+    if (yearTax.applyToGifts !== false) {
+      const g = grossUpNet(giftNet, taxableNetSoFar, yearTax);
+      balance -= Math.min(balance, g.gross);
+    } else {
+      balance -= giftNet;
+    }
   }
 
   return { spendingExGlide: postGrowthBalance - balance };
@@ -191,7 +219,15 @@ function buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears
 // Run a single simulation deterministically from `rng`.
 // When `collectPath` is true the full per-year arrays are returned (used only
 // for the handful of paths we actually chart); otherwise only summary stats.
-export function simulatePath(params, rng, collectPath = false, outRealReturns = null, outOffset = 0, outWithdrawals = null) {
+export function simulatePath(
+  params,
+  rng,
+  collectPath = false,
+  outRealReturns = null,
+  outOffset = 0,
+  outWithdrawals = null,
+  outNetSpend = null,
+) {
   const {
     numYears: endpointYears,
     maxYears: maxYearsParam,
@@ -224,6 +260,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 
   let balance = portfolio.start;
   let totalWithdrawn = 0;
+  let totalNetSpend = 0;
   let earlyWithdrawn = 0;
   let depletionYear = Infinity;
 
@@ -233,8 +270,10 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
   const unadjustedWithdrawals = collectPath ? [] : null;
   // Per-year dollar attribution of actual withdrawal vs plan (chart tooltips only).
   const withdrawalBreakdown = collectPath ? [] : null;
-  // Per-year actual withdrawals — used to score each run by median yearly spending.
+  // Per-year actual portfolio outflows (gross) — heatmap / IRR cash flows.
   const yearlyWithdrawals = new Array(horizonYears);
+  // Per-year net spending delivered (ex tax, ex major-event outflows) — on-plan.
+  const yearlyNetSpend = new Array(horizonYears);
 
   // Parallel IRR-only track: same market returns, but major-event inflows never
   // land on the balance and event outflows are stripped from cash flows so IRR
@@ -255,13 +294,15 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       ? buildBaseWithdrawalSchedule(portfolio.base, portfolio.spendingOverTimeSeries, horizonYears)
       : null;
 
-  // Unadjusted withdrawal plan for this run's horizon — shared by glide-path
-  // required balances and by %-mode gifting (funded need of remaining plan).
+  // Unadjusted NET withdrawal plan for this run's horizon. Glide funding and
+  // %-mode gifting remaining-need use the GROSS schedule (net plan + modeled
+  // withdrawal tax) so required balances cover tax as well as spending.
   const glidePlan = buildGlidePlan(portfolio, baseSchedule, fittedWithdrawals, horizonYears);
+  const grossGlidePlan = grossUpPlanSchedule(glidePlan, portfolio.withdrawalTaxSeries);
 
   // Gifting % bands compare post-withdrawal balance to the undiscounted
   // funded need of remaining planned withdrawals (ending target 0, rate 0).
-  const planFundedNeed = buildGlideRequiredBalances(glidePlan, 0, 0);
+  const planFundedNeed = buildGlideRequiredBalances(grossGlidePlan, 0, 0);
 
   // Glide-path spend-down (optional; glideTarget null/blank = off, engine
   // behaves exactly as before). Precompute the per-year balance required to
@@ -276,11 +317,13 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     && Number.isFinite(portfolio.glideTarget)
     && glideFraction > 0
       ? buildGlideRequiredBalances(
-          glidePlan,
+          grossGlidePlan,
           portfolio.glideTarget,
           portfolio.glideRate ?? 0,
         )
       : null;
+
+  const advisorFeeRate = Math.max(0, Math.min(0.99, portfolio.advisorFeeRate ?? 0));
 
   // Consecutive-min → force-plan recovery: after X years at the minimum
   // backstop, spend at least the plan for the next Y years (still balance-capped).
@@ -417,15 +460,24 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     balance = balance * (1 + realReturn);
     irrBalance *= 1 + realReturn;
 
-    // Major events: inflows land on the portfolio after growth, before the
-    // year's withdrawal is computed. Outflows are applied later (after the
-    // minimum floor) so known payments sit on top of the spending plan.
+    // Advisor / fund expense: percent of portfolio after growth, every year
+    // (including down markets). Does not change realReturn used for charts
+    // or market guardrails.
+    if (advisorFeeRate > 0) {
+      balance *= 1 - advisorFeeRate;
+      irrBalance *= 1 - advisorFeeRate;
+    }
+
+    // Major events: inflows land on the portfolio after growth (and fee),
+    // before the year's withdrawal is computed. Outflows are applied later
+    // (after the minimum floor) so known payments sit on top of the spending plan.
     const eventAmount = portfolio.majorEventsSeries?.[j] ?? 0;
     if (portfolio.strategy !== 'specific' && eventAmount > 0) {
       balance += eventAmount;
     }
 
     const postGrowthBalance = balance;
+    const yearTax = yearTaxAt(portfolio, j);
 
     // Market/balance guardrail add-on before the balance-scale ramp. Curve is
     // keyed off real return (%). Positive boosts may be trimmed below by the
@@ -535,10 +587,16 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     let floorLift = 0;
     let majorEventOutflow = 0;
     let balanceShortfall = 0;
-    let giftPaid = 0;
-    let glideExtra = 0;
+    let giftPaid = 0; // net gift delivered
+    let giftPaidGross = 0;
+    let glideExtra = 0; // net glide delivered
+    let taxPaid = 0;
+    let netSpendDelivered = 0;
+    let taxableNetSoFar = 0;
+    let netPlanPaid = 0;
+
     if (targetWithdrawal < 0) {
-      // Negative target = deposit (adds to balance); floor and min-recovery do not apply.
+      // Negative target = deposit (adds to balance); floor, tax, and min-recovery do not apply.
       actualWithdrawal = targetWithdrawal;
       balance -= actualWithdrawal;
     } else {
@@ -571,14 +629,24 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         }
       }
       // Known large payments from major events (negative amounts) are mandatory
-      // on top of the plan and floor — still capped by balance below.
+      // on top of the plan and floor — still capped by balance below. Untaxed.
       if (portfolio.strategy !== 'specific' && eventAmount < 0) {
         majorEventOutflow = -eventAmount;
         targetWithdrawal += majorEventOutflow;
       }
-      actualWithdrawal = Math.min(balance, targetWithdrawal);
-      balanceShortfall = targetWithdrawal - actualWithdrawal;
-      balance -= actualWithdrawal;
+      // Net lifestyle spend for this step (ex major events), then gross-up for tax.
+      const netSpendTarget = Math.max(0, targetWithdrawal - majorEventOutflow);
+      const planGrossUp = grossUpNet(netSpendTarget, taxableNetSoFar, yearTax);
+      taxableNetSoFar += netSpendTarget;
+      const grossPlanTarget = planGrossUp.gross + majorEventOutflow;
+      const planPaidGross = Math.min(balance, grossPlanTarget);
+      balanceShortfall = grossPlanTarget - planPaidGross;
+      balance -= planPaidGross;
+      const planScale = grossPlanTarget > 0 ? planPaidGross / grossPlanTarget : 0;
+      netPlanPaid = netSpendTarget * planScale;
+      taxPaid += planGrossUp.tax * planScale;
+      netSpendDelivered += netPlanPaid;
+      actualWithdrawal = planPaidGross;
     }
 
     // Tiered gifting: give only when this year's non-gift spending fully meets
@@ -597,32 +665,59 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         portfolio.glideTarget,
       );
     }
+    // Compare net spending to the net plan (tax is not part of lifestyle delivered).
     const metPlan =
       targetWithdrawal < 0
-      || actualWithdrawal + prospectiveGlideExtra >= unadjustedTarget;
+      || netPlanPaid + prospectiveGlideExtra >= unadjustedTarget;
     if (gift && gift.amount > 0 && metPlan) {
+      const planGrossForNeed = unadjustedTarget > 0
+        ? grossUpNet(unadjustedTarget, 0, yearTax).gross
+        : unadjustedTarget;
       const remainingNeed = remainingPlanNeedAfterWithdrawal(
         planFundedNeed,
-        unadjustedTarget,
+        planGrossForNeed,
         j,
       );
-      giftPaid = Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
-      balance -= giftPaid;
-      actualWithdrawal += giftPaid;
+      const giftNetDesired = Math.min(balance, scaledGiftAmount(gift, balance, remainingNeed));
+      if (giftNetDesired > 0 && yearTax.applyToGifts !== false) {
+        const g = grossUpNet(giftNetDesired, taxableNetSoFar, yearTax);
+        taxableNetSoFar += giftNetDesired;
+        giftPaidGross = Math.min(balance, g.gross);
+        const gScale = g.gross > 0 ? giftPaidGross / g.gross : 0;
+        giftPaid = giftNetDesired * gScale;
+        taxPaid += g.tax * gScale;
+      } else {
+        giftPaid = giftNetDesired;
+        giftPaidGross = giftNetDesired;
+      }
+      balance -= giftPaidGross;
+      actualWithdrawal += giftPaidGross;
+      netSpendDelivered += giftPaid;
     }
 
     // Glide-path spend-down: after gifting, recycle a fraction of any surplus
     // still above this year's required glide balance. Surplus is measured from
-    // the pre-withdrawal balance; gifts already paid reduce what glide may take.
+    // the pre-withdrawal balance; gifts already paid (gross) reduce what glide
+    // may take. Glide net spend is always grossed up for withdrawal tax.
     // Skipped on deposit years so surplus recycling never fights a deposit.
-    // glideSpendAmount also stops the recycle at the glide target itself, so
-    // glide spending can never be the reason a run ends below the target.
     if (glideRequired && targetWithdrawal >= 0) {
-      const glideSurplus = balanceBeforeYearWithdrawals - glideRequired[j] - giftPaid;
-      glideExtra = glideSpendAmount(glideSurplus, balance, glideFraction, portfolio.glideTarget);
-      if (glideExtra > 0) {
-        balance -= glideExtra;
-        actualWithdrawal += glideExtra;
+      const glideSurplus = balanceBeforeYearWithdrawals - glideRequired[j] - giftPaidGross;
+      const glideNetDesired = glideSpendAmount(
+        glideSurplus,
+        balance,
+        glideFraction,
+        portfolio.glideTarget,
+      );
+      if (glideNetDesired > 0) {
+        // Last taxable slice this year — no later gross-up needs taxableNetSoFar.
+        const g = grossUpNet(glideNetDesired, taxableNetSoFar, yearTax);
+        const glideGross = Math.min(balance, g.gross);
+        const gScale = g.gross > 0 ? glideGross / g.gross : 0;
+        glideExtra = glideNetDesired * gScale;
+        taxPaid += g.tax * gScale;
+        balance -= glideGross;
+        actualWithdrawal += glideGross;
+        netSpendDelivered += glideExtra;
       }
     }
 
@@ -636,17 +731,19 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
         majorEventOutflow,
         balanceShortfall,
         gift: giftPaid,
+        tax: taxPaid,
         actual: actualWithdrawal,
       });
     }
 
     totalWithdrawn += actualWithdrawal;
+    totalNetSpend += netSpendDelivered;
     yearlyWithdrawals[j] = actualWithdrawal;
-    // Every run's per-year actual spending (after all adjustments, gifts and
-    // glide extras) feeds the Withdrawal Heatmap — unlike the sampled chart
-    // paths, this captures all simulations. Depleted years record their true
-    // ~$0 withdrawal; only years past the run's horizon get NaN (below).
+    yearlyNetSpend[j] = netSpendDelivered;
+    // Every run's per-year actual portfolio outflow (gross, after tax) feeds the
+    // Withdrawal Heatmap. Net spend feeds on-plan / ranking metrics separately.
     if (outWithdrawals) outWithdrawals[outOffset + j] = actualWithdrawal;
+    if (outNetSpend) outNetSpend[outOffset + j] = netSpendDelivered;
 
     // Shadow IRR cash flows: strip major-event outflows; inflows never entered
     // actualWithdrawal and are not added to irrBalance above.
@@ -663,7 +760,8 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     irrYearlyWithdrawals[j] = irrWithdrawal;
 
     if (earlyWindow > 0 && j < earlyWindow) {
-      earlyWithdrawn += actualWithdrawal;
+      // Goal Seek early-years objective tracks net spending delivered.
+      earlyWithdrawn += netSpendDelivered;
     }
 
     if (depletionYear === Infinity && balance <= DEPLETION_EPSILON) {
@@ -688,6 +786,11 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
       outWithdrawals[outOffset + j] = NaN;
     }
   }
+  if (outNetSpend && maxYears > horizonYears) {
+    for (let j = horizonYears; j < maxYears; j++) {
+      outNetSpend[outOffset + j] = NaN;
+    }
+  }
 
   const avgReturn = horizonYears > 0 ? totalRealGrowthFactor ** (1 / horizonYears) - 1 : 0;
   const irr = irrFromPath(portfolio.start, irrYearlyWithdrawals, irrBalance, avgReturn);
@@ -697,7 +800,9 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
     irr,
     finalBalance: balance,
     totalWithdrawn,
+    totalNetSpend,
     medianYearlyWithdrawal: median(yearlyWithdrawals),
+    medianYearlyNetSpend: median(yearlyNetSpend),
     earlyWithdrawn,
     depletionYear,
     horizonYears,
@@ -711,6 +816,7 @@ export function simulatePath(params, rng, collectPath = false, outRealReturns = 
 }
 
 // Sum the per-year attribution fields; should equal `actual` for withdrawal years.
+// `tax` is the extra portfolio outflow above net plan/gift/glide pieces.
 export function sumWithdrawalBreakdown(b) {
   return (
     b.plan
@@ -721,6 +827,7 @@ export function sumWithdrawalBreakdown(b) {
     + b.majorEventOutflow
     - b.balanceShortfall
     + b.gift
+    + (b.tax || 0)
   );
 }
 
@@ -737,7 +844,9 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   const irr = new Float64Array(numSimulations);
   const finalBalance = new Float64Array(numSimulations);
   const totalWithdrawn = new Float64Array(numSimulations);
+  const totalNetSpend = new Float64Array(numSimulations);
   const medianYearlyWithdrawal = new Float64Array(numSimulations);
+  const medianYearlyNetSpend = new Float64Array(numSimulations);
   const earlyWithdrawn = new Float64Array(numSimulations);
   const depletionYear = new Float64Array(numSimulations);
   const horizonYears = new Int32Array(numSimulations);
@@ -747,18 +856,31 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   // Same layout as allYearsReturns: run i's years live at [i*maxYears, (i+1)*maxYears).
   const allYearsWithdrawals = new Float64Array(numSimulations * maxYears);
   allYearsWithdrawals.fill(NaN);
+  // Net spending delivered (ex tax) — on-plan / ranking metrics.
+  const allYearsNetSpend = new Float64Array(numSimulations * maxYears);
+  allYearsNetSpend.fill(NaN);
 
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
   for (let i = 0; i < numSimulations; i++) {
     const globalIndex = startIndex + i;
     const rng = createRng(deriveSeed(baseSeed, globalIndex));
-    const s = simulatePath(params, rng, false, allYearsReturns, i * maxYears, allYearsWithdrawals);
+    const s = simulatePath(
+      params,
+      rng,
+      false,
+      allYearsReturns,
+      i * maxYears,
+      allYearsWithdrawals,
+      allYearsNetSpend,
+    );
     avgReturn[i] = s.avgReturn;
     irr[i] = s.irr;
     finalBalance[i] = s.finalBalance;
     totalWithdrawn[i] = s.totalWithdrawn;
+    totalNetSpend[i] = s.totalNetSpend;
     medianYearlyWithdrawal[i] = s.medianYearlyWithdrawal;
+    medianYearlyNetSpend[i] = s.medianYearlyNetSpend;
     earlyWithdrawn[i] = s.earlyWithdrawn;
     horizonYears[i] = s.horizonYears;
     depletionYear[i] = s.depletionYear === Infinity ? s.horizonYears + 1 : s.depletionYear;
@@ -777,12 +899,15 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     irr,
     finalBalance,
     totalWithdrawn,
+    totalNetSpend,
     medianYearlyWithdrawal,
+    medianYearlyNetSpend,
     earlyWithdrawn,
     depletionYear,
     horizonYears,
     allYearsReturns,
     allYearsWithdrawals,
+    allYearsNetSpend,
   };
 }
 

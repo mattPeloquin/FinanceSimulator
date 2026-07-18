@@ -8,6 +8,7 @@
 import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries, buildMajorEventsSeries } from '../core/withdrawal.js';
+import { buildWithdrawalTaxSeries } from '../core/feesTaxes.js';
 import { buildAllocationOverTimeSeries } from '../core/allocation.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 import {
@@ -17,7 +18,7 @@ import {
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 11;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -62,6 +63,9 @@ const FIELDS = [
   field('exUsAllocation', 'exUsAllocation', 'float'),
   field('bondAllocation', 'bondAllocation', 'float'),
   field('cashAllocation', 'cashAllocation', 'float'),
+
+  field('enableFeesTaxes', 'enableFeesTaxes', 'boolean'),
+  field('advisorFeePct', 'advisorFeePct', 'float'),
 
   // 'optionalCurrency' so the blank Easy Mode default survives a session
   // save/restore instead of coming back as "0" (0 is never a valid start —
@@ -294,6 +298,57 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
     }
     delete migrated.earlyWeightStrengthPct;
     delete migrated.rankWeightingShape;
+  }
+
+  if (schemaVersion < 9) {
+    if (migrated.advisorFeePct == null) migrated.advisorFeePct = SCENARIO_DEFAULTS.advisorFeePct;
+    if (migrated.withdrawalTaxTiers == null) migrated.withdrawalTaxTiers = [];
+  }
+
+  if (schemaVersion < 10) {
+    // Explicit section toggle. Preserve prior behavior: turn on when a save
+    // already had a non-zero fee or any tax-tier rate configured.
+    if (migrated.enableFeesTaxes == null) {
+      const feeOn = (migrated.advisorFeePct ?? 0) > 0;
+      const taxOn = Array.isArray(migrated.withdrawalTaxTiers)
+        && migrated.withdrawalTaxTiers.some((t) => (t?.taxPct ?? 0) > 0
+          || (t?.highTaxPct ?? 0) > 0
+          || (Array.isArray(t?.spendBrackets) && t.spendBrackets.some((b) => (b?.taxPct ?? 0) > 0)));
+      migrated.enableFeesTaxes = feeOn || taxOn;
+    }
+  }
+
+  if (schemaVersion < 11) {
+    // Nested progressive spend brackets replace the single highSpendAbove/highTaxPct pair.
+    if (Array.isArray(migrated.withdrawalTaxTiers)) {
+      migrated.withdrawalTaxTiers = migrated.withdrawalTaxTiers.map((tier) => {
+        let spendBrackets = Array.isArray(tier?.spendBrackets)
+          ? tier.spendBrackets.map((b) => ({ ...b }))
+          : [];
+        if (
+          spendBrackets.length === 0
+          && tier?.highSpendAbove != null
+          && tier.highSpendAbove !== ''
+        ) {
+          const above = typeof tier.highSpendAbove === 'number'
+            ? tier.highSpendAbove
+            : parseCurrency(tier.highSpendAbove);
+          if (above > 0) {
+            spendBrackets = [{
+              above,
+              taxPct: parseOptionalTaxPct(tier.highTaxPct),
+            }];
+          }
+        }
+        const next = {
+          taxPct: tier?.taxPct,
+          applyToGifts: tier?.applyToGifts,
+          spendBrackets,
+        };
+        if (tier?.years != null) next.years = tier.years;
+        return next;
+      });
+    }
   }
 
   return migrated;
@@ -623,6 +678,200 @@ export function writeGiftingTiersToDom(tiers, doc = document) {
     removeBtn.className = 'remove-gifting-tier text-xs text-theme-muted hover:text-theme-danger px-2 py-1 mb-0.5';
     removeBtn.textContent = 'Remove';
     row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  });
+}
+
+function parseOptionalTaxPct(value) {
+  if (value == null || value === '') return 0;
+  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/%/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseOptionalHighSpend(value) {
+  if (value == null || value === '') return null;
+  const n = parseCurrency(value);
+  return n > 0 ? n : null;
+}
+
+/** Normalize progressive spend brackets; drop blank/invalid; sort by above. */
+export function normalizeSpendBrackets(brackets) {
+  if (!Array.isArray(brackets) || brackets.length === 0) return [];
+  return brackets
+    .map((b) => ({
+      above: parseOptionalHighSpend(b?.above),
+      taxPct: parseOptionalTaxPct(b?.taxPct),
+    }))
+    .filter((b) => b.above != null)
+    .sort((a, b) => a.above - b.above);
+}
+
+/** Normalize withdrawal-tax tiers; empty array means tax modeling off. */
+export function normalizeWithdrawalTaxTiers(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    return [];
+  }
+  return tiers.map((tier, index, arr) => {
+    const taxPct = parseOptionalTaxPct(tier?.taxPct);
+    const applyToGifts = tier?.applyToGifts !== false;
+    let spendBrackets = normalizeSpendBrackets(tier?.spendBrackets);
+    // Legacy single high-spend pair → one nested bracket.
+    if (spendBrackets.length === 0) {
+      const highSpendAbove = parseOptionalHighSpend(tier?.highSpendAbove);
+      if (highSpendAbove != null) {
+        spendBrackets = [{
+          above: highSpendAbove,
+          taxPct: parseOptionalTaxPct(tier?.highTaxPct),
+        }];
+      }
+    }
+    const isLast = index === arr.length - 1;
+    const base = { taxPct, applyToGifts, spendBrackets };
+    if (isLast) return base;
+    const years = parseInt(tier?.years, 10);
+    return { ...base, years: Number.isFinite(years) && years >= 1 ? years : 1 };
+  });
+}
+
+export function readWithdrawalTaxTiersFromDom(doc = document) {
+  const list = doc.getElementById('withdrawalTaxTiersList');
+  if (!list) return normalizeWithdrawalTaxTiers(SCENARIO_DEFAULTS.withdrawalTaxTiers);
+
+  const rows = list.querySelectorAll('[data-withdrawal-tax-tier-row]');
+  if (rows.length === 0) return [];
+
+  const tiers = [];
+  rows.forEach((row, index) => {
+    const taxInput = row.querySelector('[data-tax-pct]');
+    const giftsInput = row.querySelector('[data-tax-apply-gifts]');
+    const yearsInput = row.querySelector('[data-tax-years]');
+    const taxPct = parseOptionalTaxPct(taxInput?.value);
+    const applyToGifts = !!giftsInput?.checked;
+    const spendBrackets = [];
+    row.querySelectorAll('[data-tax-spend-bracket-row]').forEach((bRow) => {
+      const aboveInput = bRow.querySelector('[data-tax-bracket-above]');
+      const pctInput = bRow.querySelector('[data-tax-bracket-pct]');
+      spendBrackets.push({
+        above: parseOptionalHighSpend(aboveInput?.value),
+        taxPct: parseOptionalTaxPct(pctInput?.value),
+      });
+    });
+    const isLast = index === rows.length - 1;
+    if (isLast) {
+      tiers.push({ taxPct, applyToGifts, spendBrackets });
+    } else {
+      const years = parseInt(yearsInput?.value, 10);
+      tiers.push({
+        taxPct,
+        applyToGifts,
+        spendBrackets,
+        years: Number.isFinite(years) ? years : null,
+      });
+    }
+  });
+  return tiers;
+}
+
+export function writeWithdrawalTaxTiersToDom(tiers, doc = document) {
+  const list = doc.getElementById('withdrawalTaxTiersList');
+  if (!list) return;
+
+  const normalized = normalizeWithdrawalTaxTiers(tiers);
+  list.innerHTML = '';
+
+  normalized.forEach((tier, index) => {
+    const isLast = index === normalized.length - 1;
+    const row = doc.createElement('div');
+    row.className = 'relative space-y-2 mb-3 p-2 pr-16 rounded border border-theme-border';
+    row.dataset.withdrawalTaxTierRow = String(index);
+
+    const removeBtn = doc.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-withdrawal-tax-tier absolute top-1.5 right-1.5 text-xs text-theme-muted hover:text-theme-danger px-1.5 py-0.5';
+    removeBtn.textContent = 'Remove';
+    row.appendChild(removeBtn);
+
+    const top = doc.createElement('div');
+    top.className = 'flex flex-wrap items-end gap-2';
+
+    const taxWrap = doc.createElement('div');
+    taxWrap.className = 'w-24';
+    taxWrap.innerHTML = `
+      <label class="block text-[10px] uppercase text-theme-faint font-semibold">Tax</label>
+      <div class="input-adorned has-suffix mt-1">
+        <input type="number" step="0.5" min="0" max="99" data-tax-pct class="w-full rounded input-theme p-1 text-sm text-center" value="${tier.taxPct ?? 0}">
+        <span class="input-adorn-suffix">%</span>
+      </div>`;
+    top.appendChild(taxWrap);
+
+    if (!isLast) {
+      const yearsWrap = doc.createElement('div');
+      yearsWrap.className = 'w-20';
+      yearsWrap.innerHTML = `
+        <label class="block text-[10px] uppercase text-theme-faint font-semibold">Years</label>
+        <input type="number" data-tax-years min="1" class="w-full rounded input-theme p-1 text-sm text-center mt-1" value="${tier.years ?? 1}">`;
+      top.appendChild(yearsWrap);
+    } else if (normalized.length > 1) {
+      const labelWrap = doc.createElement('div');
+      labelWrap.className = 'pb-1 text-[10px] text-theme-faint';
+      labelWrap.textContent = 'remaining years';
+      top.appendChild(labelWrap);
+    }
+
+    const giftsWrap = doc.createElement('div');
+    giftsWrap.className = 'ml-6';
+    giftsWrap.innerHTML = `
+      <span class="block text-[10px] font-semibold leading-tight invisible" aria-hidden="true">Tax</span>
+      <label class="inline-flex items-center gap-1.5 mt-1 h-8 text-[10px] text-theme-faint cursor-pointer">
+        <input type="checkbox" data-tax-apply-gifts class="h-3 w-3 rounded input-theme"${tier.applyToGifts !== false ? ' checked' : ''}>
+        <span>Also apply to gifts</span>
+      </label>`;
+    top.appendChild(giftsWrap);
+
+    row.appendChild(top);
+
+    const bracketsWrap = doc.createElement('div');
+    bracketsWrap.className = 'space-y-1.5 pt-1 border-t border-theme-border/60';
+    bracketsWrap.innerHTML = `
+      <p class="text-[10px] uppercase text-theme-faint font-semibold">Spending levels</p>
+      <p class="text-xs text-theme-faint leading-tight">Higher rates apply only to net spending above each threshold (not a cliff on the whole amount). Base Tax % covers spending below the first level.</p>`;
+    const bracketsList = doc.createElement('div');
+    bracketsList.dataset.taxSpendBracketsList = '';
+    bracketsList.className = 'space-y-1.5';
+
+    const brackets = Array.isArray(tier.spendBrackets) ? tier.spendBrackets : [];
+    brackets.forEach((bracket, bIndex) => {
+      const bRow = doc.createElement('div');
+      bRow.className = 'flex flex-wrap items-end gap-2';
+      bRow.dataset.taxSpendBracketRow = String(bIndex);
+      const aboveVal = bracket.above != null ? formatCurrency(bracket.above) : '';
+      bRow.innerHTML = `
+        <div class="flex-1 min-w-[7rem]">
+          <label class="block text-[10px] uppercase text-theme-faint font-semibold">Above</label>
+          <div class="input-adorned has-suffix mt-1">
+            <input type="text" data-tax-bracket-above class="currency-input w-full rounded input-theme p-1 text-sm" value="${aboveVal}" placeholder="000s">
+            <span class="input-adorn-suffix">000s</span>
+          </div>
+        </div>
+        <div class="w-24">
+          <label class="block text-[10px] uppercase text-theme-faint font-semibold">Tax</label>
+          <div class="input-adorned has-suffix mt-1">
+            <input type="number" step="0.5" min="0" max="99" data-tax-bracket-pct class="w-full rounded input-theme p-1 text-sm text-center" value="${bracket.taxPct ?? 0}">
+            <span class="input-adorn-suffix">%</span>
+          </div>
+        </div>
+        <button type="button" class="remove-tax-spend-bracket text-xs text-theme-muted hover:text-theme-danger px-1.5 py-0.5 mb-0.5">Remove</button>`;
+      bracketsList.appendChild(bRow);
+    });
+
+    bracketsWrap.appendChild(bracketsList);
+    const addBracketBtn = doc.createElement('button');
+    addBracketBtn.type = 'button';
+    addBracketBtn.className = 'add-tax-spend-bracket text-xs font-medium text-theme-accent hover:underline';
+    addBracketBtn.textContent = 'Add spending level';
+    bracketsWrap.appendChild(addBracketBtn);
+    row.appendChild(bracketsWrap);
 
     list.appendChild(row);
   });
@@ -1057,6 +1306,7 @@ export function readScenarioFromDom(doc = document) {
   scenario.spendingOverTimeTiers = readSpendingOverTimeTiersFromDom(doc);
   scenario.allocationOverTimeTiers = readAllocationOverTimeTiersFromDom(doc);
   scenario.majorEvents = readMajorEventsFromDom(doc);
+  scenario.withdrawalTaxTiers = readWithdrawalTaxTiersFromDom(doc);
 
   return scenario;
 }
@@ -1086,6 +1336,7 @@ const TIER_WRITERS = {
   spendingOverTimeTiers: writeSpendingOverTimeTiersToDom,
   allocationOverTimeTiers: writeAllocationOverTimeTiersToDom,
   majorEvents: writeMajorEventsToDom,
+  withdrawalTaxTiers: writeWithdrawalTaxTiersToDom,
 };
 
 // Write only the scenario keys present in `patch` back into the DOM. Handles
@@ -1351,6 +1602,19 @@ export function buildSimParams(scenario, samples) {
           ),
       maxConsecutiveMinWithdrawals: Math.max(0, parseInt(scenario.maxConsecutiveMinWithdrawals, 10) || 0),
       minWithdrawalPlanRecoveryYears: Math.max(0, parseInt(scenario.minWithdrawalPlanRecoveryYears, 10) || 0),
+      // Advisor / fund expense as a fraction of portfolio each year (0 = off).
+      // Master section toggle gates both fee and tax so "Off" is unambiguous.
+      advisorFeeRate: scenario.enableFeesTaxes
+        ? Math.max(0, num(scenario.advisorFeePct ?? 0) / 100)
+        : 0,
+      // Per-year withdrawal-tax config (empty tiers → all-zero series).
+      withdrawalTaxSeries: scenario.enableFeesTaxes
+        ? buildWithdrawalTaxSeries(
+          normalizeWithdrawalTaxTiers(scenario.withdrawalTaxTiers),
+          maxYears,
+          toDollars,
+        )
+        : buildWithdrawalTaxSeries([], maxYears, toDollars),
     },
     dynConfig: readDynConfigFromScenario(scenario),
     logNormal: {
@@ -1690,6 +1954,44 @@ export function validateScenario(scenario, { minYear, maxYear }) {
         errors.push('Major event duration must be blank (one-time) or at least 1 year.');
         break;
       }
+    }
+  }
+
+  if (scenario.enableFeesTaxes) {
+    const advisorFeePct = scenario.advisorFeePct ?? 0;
+    if (!Number.isFinite(advisorFeePct) || advisorFeePct < 0 || advisorFeePct > 5) {
+      errors.push('Annual advisor / investment fee must be between 0% and 5%.');
+    }
+
+    const withdrawalTaxTiers = normalizeWithdrawalTaxTiers(scenario.withdrawalTaxTiers);
+    if (Number.isFinite(minHorizon) && withdrawalTaxTiers.length > 1) {
+      for (let i = 0; i < withdrawalTaxTiers.length - 1; i++) {
+        const years = withdrawalTaxTiers[i].years;
+        if (!Number.isFinite(years) || years < 1) {
+          errors.push('Each withdrawal-tax tier (except the last) must span at least 1 year.');
+          break;
+        }
+      }
+    }
+    for (const tier of withdrawalTaxTiers) {
+      if (!Number.isFinite(tier.taxPct) || tier.taxPct < 0 || tier.taxPct >= 100) {
+        errors.push('Each withdrawal-tax rate must be between 0% and 99%.');
+        break;
+      }
+      let badBracket = false;
+      for (const bracket of tier.spendBrackets || []) {
+        if (!Number.isFinite(bracket.above) || bracket.above <= 0) {
+          errors.push('Each spending-level threshold must be a positive amount.');
+          badBracket = true;
+          break;
+        }
+        if (!Number.isFinite(bracket.taxPct) || bracket.taxPct < 0 || bracket.taxPct >= 100) {
+          errors.push('Each spending-level tax rate must be between 0% and 99%.');
+          badBracket = true;
+          break;
+        }
+      }
+      if (badBracket) break;
     }
   }
 

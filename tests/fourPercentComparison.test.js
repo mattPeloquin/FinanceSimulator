@@ -105,6 +105,24 @@ describe('buildClassicFourPercentParams', () => {
     expect(classic.numSimulations).toBe(params.numSimulations);
     expect(classic.numYears).toBe(params.numYears);
   });
+
+  it('inherits advisor fee and withdrawal tax from the user portfolio', () => {
+    const taxSeries = Array.from({ length: 30 }, () => ({
+      taxRate: 0.2,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const params = baseParams({
+      portfolio: {
+        advisorFeeRate: 0.01,
+        withdrawalTaxSeries: taxSeries,
+      },
+    });
+    const classic = buildClassicFourPercentParams(params);
+    expect(classic.portfolio.advisorFeeRate).toBe(0.01);
+    expect(classic.portfolio.withdrawalTaxSeries).toBe(taxSeries);
+    expect(classic.portfolio.withdrawalTaxSeries[0].taxRate).toBe(0.2);
+  });
 });
 
 describe('isClassicFourPercentEquivalent', () => {
@@ -118,6 +136,58 @@ describe('isClassicFourPercentEquivalent', () => {
     const almost = buildClassicFourPercentParams(baseParams());
     almost.portfolio.base = almost.portfolio.start * 0.05;
     expect(isClassicFourPercentEquivalent(almost)).toBe(false);
+  });
+
+  it('still treats flat 4% as equivalent when fee or tax are set', () => {
+    const withFee = flatFourPercentParams(2_000_000, 25);
+    withFee.portfolio.advisorFeeRate = 0.01;
+    expect(isClassicFourPercentEquivalent(withFee)).toBe(true);
+
+    const withTax = flatFourPercentParams(2_000_000, 25);
+    withTax.portfolio.withdrawalTaxSeries = Array.from({ length: 25 }, () => ({
+      taxRate: 0.15,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    expect(isClassicFourPercentEquivalent(withTax)).toBe(true);
+  });
+});
+
+describe('buildFourPercentComparison with withdrawal tax', () => {
+  it('compares net spend on both sides when tax is active', () => {
+    const params = flatFourPercentParams(1_000_000, 20);
+    params.portfolio.withdrawalTaxSeries = Array.from({ length: 20 }, () => ({
+      taxRate: 0.25,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const userResult = {
+      withdrawalMetric: 'total',
+      medianBalance: 100_000,
+      medianWithdrawn: 1_250_000,
+      medianNetSpend: 1_000_000,
+      meanYearlyWithdrawn: 62_500,
+      meanYearlyNetSpend: 50_000,
+      successRate: 0.9,
+      withdrawalTaxActive: true,
+    };
+    const classicResult = {
+      medianBalance: 200_000,
+      medianWithdrawn: 1_000_000,
+      medianNetSpend: 800_000,
+      meanYearlyWithdrawn: 50_000,
+      meanYearlyNetSpend: 40_000,
+      successRate: 0.95,
+      withdrawalTaxActive: true,
+    };
+    const comparison = buildFourPercentComparison(userResult, classicResult, params);
+    expect(comparison.withdrawalTaxActive).toBe(true);
+    expect(comparison.sharedCostsActive).toBe(true);
+    // Net vs net: 1_000_000 - 800_000
+    expect(comparison.totalWithdrawnDelta).toBeCloseTo(200_000, 3);
+    expect(comparison.meanYearlyDelta).toBeCloseTo(10_000, 3);
+    // Headline classic figure is net when tax is on
+    expect(comparison.classicMedianWithdrawn).toBe(800_000);
   });
 });
 
