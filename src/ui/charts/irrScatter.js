@@ -8,7 +8,13 @@
 // tens of thousands of paths, which is far past what Chart.js scatters handle.
 import { Chart } from './chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
-import { getChartTheme, chartJsCartesianScales, sampleRunTooltipOptions } from './chartTheme.js';
+import {
+  getChartTheme,
+  chartJsCartesianScales,
+  sampleRunTooltipOptions,
+  applySampleRunDomTooltipStyle,
+  SAMPLE_RUN_TOOLTIP_STYLE,
+} from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
 import { formatPercent, formatK } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
@@ -80,14 +86,39 @@ function simTitleLabel(simIndex) {
   return pctLabel ? `Simulation #${simIndex + 1} · ${pctLabel}` : `Simulation #${simIndex + 1}`;
 }
 
-function pathSummaryItems({ outcomeIndex, avgReturn, irr, totalWithdrawn, finalBalance, ranOutNote = '' }) {
-  return [
-    `${OUTCOME_LABELS[outcomeIndex]}${ranOutNote}`,
+// Outcome prefixes for the path meta line: skip "Met plan" / "Ran out" (the
+// legend already carries those colors). Keep "Below plan", and for depleted
+// paths keep the useful "ran out year N" note without the "Ran out" label.
+function pathOutcomePrefix(outcomeIndex, ranOutNote = '') {
+  if (outcomeIndex === 1) return 'Below plan';
+  if (outcomeIndex === 2) {
+    const note = String(ranOutNote).replace(/^\s*·\s*/, '').trim();
+    return note || '';
+  }
+  return '';
+}
+
+function pathSummaryItems({
+  outcomeIndex,
+  avgReturn,
+  irr,
+  totalWithdrawn,
+  finalBalance,
+  horizonYears = 0,
+  ranOutNote = '',
+}) {
+  const meanYr = horizonYears > 0 ? totalWithdrawn / horizonYears : 0;
+  const items = [];
+  const outcomePrefix = pathOutcomePrefix(outcomeIndex, ranOutNote);
+  if (outcomePrefix) items.push(outcomePrefix);
+  items.push(
     `Avg Return ${formatPercent(avgReturn)}`,
     `IRR ${formatPercent(irr) || '—'}`,
-    `Total Withdrawn ${formatK(totalWithdrawn)}`,
+    `Total ${formatK(totalWithdrawn)}`,
+    `Mean / Year ${formatK(meanYr)}`,
     `End Balance ${formatK(finalBalance)}`,
-  ];
+  );
+  return items;
 }
 
 function pathSummaryLine(details) {
@@ -641,21 +672,20 @@ function showTooltip(ev, i) {
     state.tooltipSide = null;
     return;
   }
-  const { avgReturn, irr, outcome, totalWithdrawn, finalBalance } = state.scatter;
-  const theme = getChartTheme();
+  const { avgReturn, irr, outcome, totalWithdrawn, finalBalance, horizonYears } = state.scatter;
   const summaryRows = pathSummaryItems({
     outcomeIndex: outcome[i],
     avgReturn: avgReturn[i],
     irr: irr[i],
     totalWithdrawn: totalWithdrawn[i],
     finalBalance: finalBalance[i],
+    horizonYears: horizonYears?.[i] ?? 0,
   });
   tip.innerHTML =
-    `<div style="font-weight:600;color:${theme.tooltipTitle}">${simTitleLabel(i)}</div>` +
+    `<div style="font-weight:600;color:${SAMPLE_RUN_TOOLTIP_STYLE.titleColor}">${simTitleLabel(i)}</div>` +
     summaryRows.map((row) => `<div>${row}</div>`).join('') +
-    `<div style="color:${theme.floatMutedText}">Click to see this path</div>`;
-  tip.style.background = theme.tooltipBg;
-  tip.style.color = theme.tooltipBody;
+    `<div style="color:${SAMPLE_RUN_TOOLTIP_STYLE.mutedColor}">Click to see this path</div>`;
+  applySampleRunDomTooltipStyle(tip);
   tip.style.display = 'block';
   if (!state.extents || !state.geom) return;
 
@@ -688,6 +718,7 @@ function renderPathChart(i) {
       irr: re.irr,
       totalWithdrawn: re.totalWithdrawn,
       finalBalance: re.finalBalance,
+      horizonYears: re.horizonYears,
       ranOutNote,
     });
   }

@@ -55,6 +55,26 @@ export function chartJsTooltip(theme) {
   };
 }
 
+// Black translucent tooltip used by 3D sample-run charts (Chart.js default
+// look) and by the heatmap / IRR scatter HTML tips so every simulation
+// drill-down tooltip reads the same.
+export const SAMPLE_RUN_TOOLTIP_STYLE = {
+  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  titleColor: '#ffffff',
+  bodyColor: '#ffffff',
+  mutedColor: 'rgba(255, 255, 255, 0.72)',
+  borderColor: 'transparent',
+};
+
+/** Apply SAMPLE_RUN_TOOLTIP_STYLE to a positioned HTML tooltip element. */
+export function applySampleRunDomTooltipStyle(el) {
+  if (!el) return;
+  el.style.background = SAMPLE_RUN_TOOLTIP_STYLE.backgroundColor;
+  el.style.color = SAMPLE_RUN_TOOLTIP_STYLE.bodyColor;
+  el.style.borderColor = SAMPLE_RUN_TOOLTIP_STYLE.borderColor;
+  el.style.boxShadow = 'none';
+}
+
 /** Pick left vs right tooltip placement from the active point's x position. */
 export function sampleRunTooltipXAlign(caretX, chartArea) {
   if (caretX == null || !chartArea) return 'right';
@@ -63,14 +83,22 @@ export function sampleRunTooltipXAlign(caretX, chartArea) {
 }
 
 // Sample-run withdrawal charts (3D float, large dialog, IRR drill-down) share
-// the compact float-panel tooltip look. yAlign 'center' with a forced side
-// xAlign keeps the tooltip beside the hovered point instead of above it.
+// the compact black-translucent tooltip look. yAlign 'center' with a forced
+// side xAlign keeps the tooltip beside the hovered point instead of above it.
 export function sampleRunTooltipOptions(callbacks, { large = false } = {}) {
   return {
     displayColors: false,
-    titleFont: { size: 10 },
-    bodyFont: { size: 10 },
-    padding: 4,
+    backgroundColor: SAMPLE_RUN_TOOLTIP_STYLE.backgroundColor,
+    titleColor: SAMPLE_RUN_TOOLTIP_STYLE.titleColor,
+    bodyColor: SAMPLE_RUN_TOOLTIP_STYLE.bodyColor,
+    footerColor: SAMPLE_RUN_TOOLTIP_STYLE.mutedColor,
+    borderColor: SAMPLE_RUN_TOOLTIP_STYLE.borderColor,
+    borderWidth: 0,
+    // Zoom (large) and compact float tips share one size step above the old 10px.
+    titleFont: { size: 11 },
+    bodyFont: { size: 11 },
+    footerFont: { size: 11 },
+    padding: large ? 6 : 4,
     yAlign: 'center',
     xAlign: (ctx) => sampleRunTooltipXAlign(ctx.tooltip.caretX, ctx.chart.chartArea),
     caretPadding: large ? 8 : 6,

@@ -124,9 +124,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   }
   await expect(drilldown).toBeVisible();
   await expect(page.locator('#irrScatterDrilldownTitle')).toContainText(/Simulation #\d+ · P\d+/);
-  await expect(page.locator('#irrScatterDrilldownMeta')).toContainText(/Met plan|Below plan|Ran out/);
-  await expect(page.locator('#irrScatterDrilldownMeta')).toContainText('Total Withdrawn');
+  await expect(page.locator('#irrScatterDrilldownMeta')).toContainText('Total');
+  await expect(page.locator('#irrScatterDrilldownMeta')).toContainText('Mean / Year');
   await expect(page.locator('#irrScatterDrilldownMeta')).toContainText('End Balance');
+  // Outcome color is in the legend; met-plan paths no longer prefix the meta line.
+  await expect(page.locator('#irrScatterDrilldownMeta')).not.toContainText('Met plan');
+  await expect(page.locator('#irrScatterDrilldownMeta')).not.toContainText('Total Withdrawn');
   await expect(page.locator('#irrScatterPathCanvas')).toBeVisible();
   await expect(page.locator('#irrScatterBalanceCanvas')).toBeVisible();
 

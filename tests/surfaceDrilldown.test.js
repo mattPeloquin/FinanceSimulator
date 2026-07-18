@@ -42,9 +42,16 @@ describe('rankForOverviewColumn', () => {
 describe('ranksForPercentileWindow', () => {
   it('matches percentileIndex for slider endpoints', () => {
     const n = 1000;
-    const { loRank, hiRank } = ranksForPercentileWindow(n, 5, 90);
+    const { loRank, hiRank } = ranksForPercentileWindow(n, 5, 65);
     expect(loRank).toBe(percentileIndex(n, 0.05));
-    expect(hiRank).toBe(percentileIndex(n, 0.9));
+    expect(hiRank).toBe(percentileIndex(n, 0.65));
+  });
+
+  it('clamps P100 to the last valid rank', () => {
+    const n = 1000;
+    const { loRank, hiRank } = ranksForPercentileWindow(n, 0, 100);
+    expect(loRank).toBe(0);
+    expect(hiRank).toBe(n - 1);
   });
 });
 

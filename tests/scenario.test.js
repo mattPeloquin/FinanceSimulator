@@ -38,6 +38,9 @@ describe('currency helpers', () => {
   it('formats numbers with separators', () => {
     expect(formatCurrency(4000)).toBe('4,000');
   });
+  it('rounds fractional $000s to whole thousands for display', () => {
+    expect(formatCurrency(2833.05)).toBe('2,833');
+  });
   it('treats blank or zero balance overrides as disabled', () => {
     expect(optionalBalanceThreshold('')).toBeNull();
     expect(optionalBalanceThreshold(0)).toBeNull();

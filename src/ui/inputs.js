@@ -3,6 +3,7 @@
 import {
   ALLOCATION_KEYS,
   parseCurrency,
+  formatCurrency,
   readWithdrawalFloorsFromDom,
   writeWithdrawalFloorsToDom,
   readSpecificWithdrawalFloorsFromDom,
@@ -139,7 +140,7 @@ function formatCurrencyInputValue(input) {
     input.value = '';
     return;
   }
-  if (!Number.isNaN(val)) input.value = val.toLocaleString('en-US');
+  if (!Number.isNaN(val)) input.value = formatCurrency(val);
 }
 
 function formatPctInputValue(input) {

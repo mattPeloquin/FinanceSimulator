@@ -1,8 +1,9 @@
 // Withdrawal Heatmap: how the distribution of simulation outcomes shapes
 // spending over time. Each COLUMN is one simulation (or a narrow band of
-// adjacent ones) placed by its lifetime-withdrawal rank from P5 to P65 — the
-// same run-coherent ordering as the 3D surface — so a lean year inside an
-// otherwise-good run stays visible as an off-color cell in its column. Each
+// adjacent ones) placed by its lifetime-withdrawal rank across the Show from/to
+// window (default P5–P65) — the same run-coherent ordering as the 3D surface —
+// so a lean year inside an otherwise-good run stays visible as an off-color
+// cell in its column. Each
 // ROW is a year, year 1 at the BOTTOM (time reads upward, like the balance
 // axis on the other charts); an "Early years" slider stretches the first rows
 // taller for emphasis. Cell color is a diverging orange↔teal spectrum
@@ -22,13 +23,27 @@
 import { bandWithdrawalHeatmap } from '../../core/resultPackaging.js';
 import { Chart } from './chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
-import { getChartTheme, chartJsCartesianScales, sampleRunTooltipOptions } from './chartTheme.js';
+import {
+  getChartTheme,
+  chartJsCartesianScales,
+  sampleRunTooltipOptions,
+  applySampleRunDomTooltipStyle,
+  SAMPLE_RUN_TOOLTIP_STYLE,
+} from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
 import { formatK, formatPercent } from '../format.js';
 import { regeneratePath } from '../../core/simulation.js';
 import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, EMPHASIS_DEFAULT } from './yearEmphasis.js';
+import {
+  OUTCOME_LOWER_DEFAULT,
+  OUTCOME_UPPER_DEFAULT,
+  getOutcomeWindow,
+  setOutcomeLowerPct,
+  setOutcomeUpperPct,
+  onOutcomeWindowChange,
+} from './outcomeWindow.js';
 
 export { heatmapRowLayout, EMPHASIS_DEFAULT, EMPHASIS_MAX_RATIO } from './yearEmphasis.js';
 
@@ -242,7 +257,7 @@ export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, cl
 }
 
 const state = {
-  source: null, // per-run P5..P90 source from resultPackaging (immutable per run)
+  source: null, // per-run P0..P100 source from resultPackaging (immutable per run)
   heatmap: null, // width-aware band for the active from/to window
   bandKey: null, // cache key: loRank:hiRank:maxCols
   params: null,
@@ -255,8 +270,8 @@ const state = {
   tick: 0, // replay tick counter (busts the offscreen cache per tick)
   animTimer: null,
   emphasis: EMPHASIS_DEFAULT, // early-year row-height emphasis slider (0..100); default biases early years
-  lowerPct: 5, // "show from" lower axis percentile (5..30); view pref, survives runs
-  upperPct: 65, // "show to" upper axis percentile (65..90); view pref, survives runs
+  lowerPct: OUTCOME_LOWER_DEFAULT, // shared with 3D surface via outcomeWindow
+  upperPct: OUTCOME_UPPER_DEFAULT,
   windowAnchors: null, // cached windowAnchorSeries for the visible range
   windowAnchorsKey: null,
   windowDomain: null, // cached windowDeltaDomain for encoding + visible range
@@ -272,6 +287,7 @@ const state = {
   balanceBars: null,
   resizeObserver: null,
   eventsBound: false,
+  outcomeWindowBound: false,
 };
 
 function isPlaying() {
@@ -317,7 +333,7 @@ export function windowAnchorSeries(values, colRunCount, numYears, start, end) {
 // centered on zero — both arms therefore use mirrored tails (|P2| and P98)
 // instead of the outcome-axis "show to" percentile. (Coupling hi to that
 // slider used to clip indigo at ~P68 whenever the axis sat at P65, so the
-// spectrum only looked centered at the full P5–P90 window.) Each side guards
+// spectrum only looked centered at the full P0–P100 window.) Each side guards
 // against a degenerate spread so the renderer never divides by zero.
 // Exported pure for unit tests.
 export function windowDeltaDomain(values, anchor, numYears, start, end) {
@@ -380,10 +396,13 @@ export function windowAbsoluteDomain(values, numYears, start, end) {
 }
 
 // The rank a given outcome percentile maps to, clamped to the built source window.
+// P100 uses the last valid rank (n − 1), not n.
 function rankAtPct(pct) {
   const src = state.source;
   if (!src) return 0;
-  return Math.max(src.p5Rank, Math.min(src.hiRank, Math.floor((src.numSimulations * pct) / 100)));
+  const n = src.numSimulations;
+  const raw = pct >= 100 ? n - 1 : Math.floor((n * pct) / 100);
+  return Math.max(src.p5Rank, Math.min(src.hiRank, raw));
 }
 
 // Reband the source to fill the plot for the current from/to window. Skips
@@ -925,20 +944,28 @@ function afterWindowChange() {
   draw();
 }
 
-function setLowerPct(v) {
-  if (!state.source) return;
-  const next = Math.max(5, Math.min(30, Math.round(v) || 5));
-  if (state.lowerPct === next) return;
-  state.lowerPct = next;
+// Apply the shared from/to window (keeps heatmap in lockstep with the 3D surface).
+function applyOutcomeWindow({ lowerPct, upperPct }) {
+  const changed = state.lowerPct !== lowerPct || state.upperPct !== upperPct;
+  state.lowerPct = lowerPct;
+  state.upperPct = upperPct;
+  if (!changed) {
+    syncControlUi();
+    return;
+  }
+  if (!state.source) {
+    syncControlUi();
+    return;
+  }
   afterWindowChange();
 }
 
+function setLowerPct(v) {
+  if (!setOutcomeLowerPct(v)) syncControlUi();
+}
+
 function setUpperPct(v) {
-  const cap = state.source?.hiPercentile ?? 90;
-  const next = Math.max(65, Math.min(cap, Math.round(v) || 65));
-  if (state.upperPct === next) return;
-  state.upperPct = next;
-  afterWindowChange();
+  if (!setOutcomeUpperPct(v)) syncControlUi();
 }
 
 function hitTest(ev) {
@@ -973,7 +1000,6 @@ function showTooltip(ev, cell) {
     return;
   }
   const hm = state.heatmap;
-  const theme = getChartTheme();
   const showingRuns = isPlaying() || state.frame > 0;
   const anchors = windowAnchors();
   const { title, rows, footer } = formatHeatmapTooltip({
@@ -989,11 +1015,10 @@ function showTooltip(ev, cell) {
     runCount: showingRuns ? 1 : hm.colRunCount[cell.col],
   });
   tip.innerHTML =
-    `<div style="font-weight:600;color:${theme.tooltipTitle}">${title}</div>` +
+    `<div style="font-weight:600;color:${SAMPLE_RUN_TOOLTIP_STYLE.titleColor}">${title}</div>` +
     rows.map((row) => `<div>${row}</div>`).join('') +
-    `<div style="color:${theme.floatMutedText}">${footer}</div>`;
-  tip.style.background = theme.tooltipBg;
-  tip.style.color = theme.tooltipBody;
+    `<div style="color:${SAMPLE_RUN_TOOLTIP_STYLE.mutedColor}">${footer}</div>`;
+  applySampleRunDomTooltipStyle(tip);
   tip.style.display = 'block';
 
   // Park the tip beside the cursor, flipping to the other side near the edges.
@@ -1010,8 +1035,6 @@ function showTooltip(ev, cell) {
   canvas.style.cursor = 'pointer';
 }
 
-const OUTCOME_LABELS = ['Met plan', 'Below plan', 'Ran out'];
-
 // Drill into the column's representative run: same withdrawal-vs-plan line
 // chart + linked balance bars as the 3D surface and IRR scatter popups.
 function renderPathChart(col, simIndex) {
@@ -1026,14 +1049,22 @@ function renderPathChart(col, simIndex) {
   const re = regeneratePath(state.params, state.seed, simIndex);
   const outcomeIndex = state.outcome ? state.outcome[simIndex] : 0;
   const pctLabel = percentileLabelForRank(hm.colCenterRank[col], hm.numSimulations);
-  const ranOutNote = re.depletionYear !== Infinity ? ` · ran out year ${re.depletionYear}` : '';
+  const meanYr = re.horizonYears > 0 ? re.totalWithdrawn / re.horizonYears : 0;
+  // Skip "Met plan" / "Ran out" prefixes (legend/color already signal outcome).
+  // Keep "Below plan", and the depleted-year note without a "Ran out" label.
+  const outcomeBits = [];
+  if (outcomeIndex === 1) outcomeBits.push('Below plan');
+  if (outcomeIndex === 2 && re.depletionYear !== Infinity) {
+    outcomeBits.push(`ran out year ${re.depletionYear}`);
+  }
 
   if (titleEl) titleEl.textContent = `Simulation #${simIndex + 1} · ${pctLabel}`;
   if (metaEl) {
     metaEl.textContent = [
-      `${OUTCOME_LABELS[outcomeIndex]}${ranOutNote}`,
+      ...outcomeBits,
       `Avg Return ${formatPercent(re.avgReturn)}`,
-      `Total Withdrawn ${formatK(re.totalWithdrawn)}`,
+      `Total ${formatK(re.totalWithdrawn)}`,
+      `Mean / Year ${formatK(meanYr)}`,
       `End Balance ${formatK(re.finalBalance)}`,
     ].join(' · ');
   }
@@ -1157,6 +1188,10 @@ function bindEvents(canvas) {
     ?.addEventListener('input', (ev) => setLowerPct(Number(ev.target.value)));
   document.getElementById('withdrawalHeatmapUpper')
     ?.addEventListener('input', (ev) => setUpperPct(Number(ev.target.value)));
+  if (!state.outcomeWindowBound) {
+    onOutcomeWindowChange(applyOutcomeWindow);
+    state.outcomeWindowBound = true;
+  }
   state.resizeObserver = new ResizeObserver(() => {
     const rebanded = ensureBanded(canvas);
     if (rebanded) {
@@ -1178,6 +1213,11 @@ export function drawWithdrawalHeatmap(source, { params, seed, outcome } = {}) {
   state.params = params ?? null;
   state.seed = seed ?? null;
   state.outcome = outcome ?? null;
+  // Keep local state aligned with the shared from/to window (surface may have
+  // moved the sliders before this chart drew).
+  const sharedWindow = getOutcomeWindow();
+  state.lowerPct = sharedWindow.lowerPct;
+  state.upperPct = sharedWindow.upperPct;
   state.hovered = null;
   state.selectedCol = null;
   state.selectedSimIndex = null;

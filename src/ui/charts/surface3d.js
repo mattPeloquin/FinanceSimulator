@@ -16,7 +16,6 @@ import {
   isMeanYearlyMetric,
   isEarlyWeightingActive,
   weightedScheduleScore,
-  withdrawalMetricLabels,
 } from '../../core/statistics.js';
 import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
@@ -25,6 +24,14 @@ import { CLASSIC_FOUR_PERCENT_RATE } from '../../core/fourPercentComparison.js';
 import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, SURFACE_EMPHASIS_MAX_RATIO, yearAtDisplayCoord } from './yearEmphasis.js';
+import {
+  OUTCOME_LOWER_DEFAULT,
+  OUTCOME_UPPER_DEFAULT,
+  getOutcomeWindow,
+  setOutcomeLowerPct,
+  setOutcomeUpperPct,
+  onOutcomeWindowChange,
+} from './outcomeWindow.js';
 
 
 let echartsModule = null;
@@ -124,8 +131,9 @@ const surfaceState = {
   // View prefs (survive re-runs, like the heatmap controls)
   heightMode: HEIGHT_BALANCE, // 'balance' | 'withdrawal'
   emphasis: EMPHASIS_DEFAULT,
-  lowerPct: 5,
-  upperPct: 65,
+  lowerPct: OUTCOME_LOWER_DEFAULT,
+  upperPct: OUTCOME_UPPER_DEFAULT,
+  outcomeWindowBound: false,
 };
 
 async function loadEcharts() {
@@ -390,7 +398,7 @@ function zAxisLabel(formatter) {
   return { show: true, color: theme.axisName, fontSize: SURFACE_AXIS_TICK_FONT, margin: 4, formatter };
 }
 
-function largeWithdrawalLegendOptions(theme) {
+export function largeWithdrawalLegendOptions(theme) {
   return {
     position: 'top',
     labels: {
@@ -403,11 +411,14 @@ function largeWithdrawalLegendOptions(theme) {
       // Default Chart.js legend generation walks `_getSortedDatasetMetas()`,
       // which sorts by dataset.order (draw order). Build from the datasets
       // array instead so "4% rule" (appended last) stays last in the legend
-      // while still drawn behind other series.
+      // while still drawn behind other series. Chart.js paints legend text
+      // from each item's `fontColor` (not labels.color alone), so set it here.
       generateLabels(chart) {
+        const fontColor = chart.legend?.options?.labels?.color ?? theme.legend;
         return chart.data.datasets.map((dataset, datasetIndex) => ({
           text: dataset.label,
           fillStyle: 'transparent',
+          fontColor,
           strokeStyle: dataset.borderColor,
           lineWidth: Math.max(dataset.borderWidth ?? 2, 1.5),
           lineDash: dataset.borderDash ?? [],
@@ -524,7 +535,7 @@ function ensureFloatPanel() {
     'padding:5px 6px;z-index:10;pointer-events:auto;display:none;';
 
   floatTitle = document.createElement('div');
-  floatTitle.style.cssText = `font-size:10px;font-weight:600;color:${theme.floatTitleText};margin-bottom:3px;line-height:1.2;`;
+  floatTitle.style.cssText = `font-size:10px;font-weight:600;color:${theme.floatTitleText};margin-bottom:2px;line-height:1.15;`;
 
   const wrap = document.createElement('div');
   wrap.style.cssText = `height:${FLOAT_PANEL_CHART_HEIGHT}px;`;
@@ -860,27 +871,35 @@ function applyFloatChartTheme(series) {
   dsActual.pointBackgroundColor = theme.point;
 }
 
-function withdrawalAmounts(total, medianYr, horizonYears = 0) {
-  const metric = surfaceState.withdrawalMetric;
-  const { primary, secondary } = withdrawalMetricLabels(metric);
-  if (isMedianYearlyMetric(metric)) {
-    return { primaryLabel: primary, primaryValue: medianYr, secondaryLabel: secondary, secondaryValue: total };
-  }
-  if (isMeanYearlyMetric(metric)) {
-    const meanYr = horizonYears > 0 ? total / horizonYears : 0;
-    return { primaryLabel: primary, primaryValue: meanYr, secondaryLabel: secondary, secondaryValue: total };
-  }
-  return { primaryLabel: primary, primaryValue: total, secondaryLabel: secondary, secondaryValue: medianYr };
+// Lifetime withdrawal summary for 3D sample-run charts: Total + Mean / Year
+// only (Median / Year stays on the results cards). Mean leads when that
+// metric ranks the runs; otherwise Total leads. Pure + exported for unit tests.
+export function withdrawalAmountRows(total, horizonYears, metric) {
+  const meanYr = horizonYears > 0 ? total / horizonYears : 0;
+  const totalRow = { label: 'Total', value: total };
+  const meanRow = { label: 'Mean / Year', value: meanYr };
+  return isMeanYearlyMetric(metric) ? [meanRow, totalRow] : [totalRow, meanRow];
 }
 
-function withdrawalSummaryHtml(total, medianYr, { includeHorizon = false, horizon = 0 } = {}) {
-  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } = withdrawalAmounts(total, medianYr, horizon);
-  const lines = [
-    `${primaryLabel}: <b>${formatK(primaryValue)}</b>`,
-    `${secondaryLabel}: <b>${formatK(secondaryValue)}</b>`,
-  ];
-  if (includeHorizon && surfaceState.horizonVariable && horizon > 0) {
-    lines.push(`Horizon: <b>${horizon} years</b>`);
+function withdrawalAmounts(total, horizonYears = 0) {
+  return withdrawalAmountRows(total, horizonYears, surfaceState.withdrawalMetric);
+}
+
+function formatAmountSummary(rows, { htmlBold = false, sep = ' · ' } = {}) {
+  return rows
+    .map((row) => (
+      htmlBold
+        ? `${row.label}: <b>${formatK(row.value)}</b>`
+        : `${row.label}: ${formatK(row.value)}`
+    ))
+    .join(sep);
+}
+
+function withdrawalSummaryHtml(total, horizonYears, { includeHorizon = false } = {}) {
+  const rows = withdrawalAmounts(total, horizonYears);
+  const lines = [formatAmountSummary(rows, { htmlBold: true })];
+  if (includeHorizon && surfaceState.horizonVariable && horizonYears > 0) {
+    lines.push(`Horizon: <b>${horizonYears} years</b>`);
   }
   return lines.join('<br>');
 }
@@ -892,26 +911,28 @@ function showFloatWithdrawal(col) {
 
   const status = pathStatusDisplay(series);
   const muted = getChartTheme().floatMutedText;
-  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
-    withdrawalAmounts(series.total, series.medianYearly, series.horizonYears);
-  const horizonNote = surfaceState.horizonVariable && series.horizonYears > 0
-    ? `<div style="font-weight:normal;color:${muted};margin-top:1px">Horizon: ${series.horizonYears} years</div>`
-    : '';
+  const amountSummary = formatAmountSummary(
+    withdrawalAmounts(series.total, series.horizonYears),
+  );
+  const planBit = `Plan: ${formatK(series.totalUnadjusted)}`;
+  const horizonPlanLine = surfaceState.horizonVariable && series.horizonYears > 0
+    ? `Horizon: ${series.horizonYears} years · ${planBit}`
+    : planBit;
+  // Tight header: title+status | Avg · IRR; then amounts; then Horizon · Plan.
   floatTitle.innerHTML = `
-    <div style="font-weight:700;margin-bottom:2px;">${sampleRunTitle(col)}</div>
-    <div style="display:flex; justify-content:space-between; align-items:flex-start;font-weight:normal;">
-      <div style="color:${status.color}">${status.text}</div>
-      <div style="color:${muted};text-align:right;">
-        <div>Avg Return: ${formatPercent(series.avg)}</div>
-        <div>IRR: ${formatPercent(series.irr) || '—'}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
+      <div style="font-weight:700;font-size:10px;line-height:1.15;">
+        ${sampleRunTitle(col)}
+        <span style="font-weight:normal;color:${status.color}"> · ${status.text}</span>
+      </div>
+      <div style="color:${muted};text-align:right;font-weight:normal;font-size:9px;line-height:1.15;white-space:nowrap;">
+        Avg: ${formatPercent(series.avg)} · IRR: ${formatPercent(series.irr) || '—'}
       </div>
     </div>
-    <div style="font-weight:normal;color:${muted};margin-top:2px">
-      <div>${primaryLabel}: ${formatK(primaryValue)}</div>
-      <div>${secondaryLabel}: ${formatK(secondaryValue)}</div>
-      <div style="margin-top:1px">Plan: ${formatK(series.totalUnadjusted)}</div>
+    <div style="font-weight:normal;color:${muted};font-size:9px;line-height:1.2;margin-top:1px">
+      <div>${amountSummary}</div>
+      <div>${horizonPlanLine}</div>
     </div>
-    ${horizonNote}
   `;
   floatTitle.style.color = '';
 
@@ -951,13 +972,10 @@ function openLargeWithdrawalChart(col) {
   if (title) title.textContent = sampleRunTitle(col);
   
   const subtitle = document.getElementById('withdrawalChartDialogSubtitle');
-  const { primaryLabel, primaryValue, secondaryLabel, secondaryValue } =
-    withdrawalAmounts(series.total, series.medianYearly, series.horizonYears);
   if (subtitle) {
     subtitle.innerHTML =
-      `${primaryLabel}: ${formatK(primaryValue)}<br>` +
-      `${secondaryLabel}: ${formatK(secondaryValue)}<br>` +
-      `Plan: ${formatK(series.totalUnadjusted)}`;
+      `${formatAmountSummary(withdrawalAmounts(series.total, series.horizonYears))}` +
+      `<br>Plan: ${formatK(series.totalUnadjusted)}`;
   }
   
   const avgReturnEl = document.getElementById('withdrawalChartDialogAvgReturn');
@@ -1036,15 +1054,11 @@ function tooltipFormatter(params) {
   const unadj = vals[8];
   const delta = wd - unadj;
   const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
-  const summary = withdrawalSummaryHtml(vals[6], vals[9], {
-    includeHorizon: true,
-    horizon: vals[10],
-  });
+  const summary = withdrawalSummaryHtml(vals[6], vals[10], { includeHorizon: true });
   return (
     `<b>${sampleRunTitle(col)}</b>` +
     `<br>${summary}` +
-    `<br>Avg Annual Return: <b>${formatPercent(avg)}</b>` +
-    `<br>IRR: <b>${formatPercent(irr) || '—'}</b>` +
+    `<br>Avg: <b>${formatPercent(avg)}</b> · IRR: <b>${formatPercent(irr) || '—'}</b>` +
     `<br>Year: ${y}` +
     `<br>Withdrawn: ${formatK(wd)}${deltaStr}` +
     `<br>Original Plan: ${formatK(unadj)}` +
@@ -1081,7 +1095,7 @@ function surfaceTooltipOptions(theme) {
     backgroundColor: theme.floatPanelBg,
     borderColor: theme.floatPanelBorder,
     padding: [5, 7],
-    textStyle: { fontSize: 11, color: theme.tooltipBody },
+    textStyle: { fontSize: 12, color: theme.tooltipBody },
   };
 }
 
@@ -1118,7 +1132,7 @@ function applyFocus() {
 
   // While pinned, only the lifted row responds to the cursor. This prevents the
   // tooltip from drifting onto neighbouring columns (a different simulation),
-  // so the per-row "Total Withdrawn" stays constant as you mouse along it.
+  // so the per-row lifetime Total stays constant as you mouse along it.
   chartInstance.setOption({
     zAxis3D: { max: zCap + lift },
     series: [
@@ -1583,28 +1597,24 @@ function rebuildOverviewFromWindow() {
   updateSurfaceChrome({ mode: 'overview' });
 }
 
-function setLowerPct(v) {
-  let next = Math.round(v / 5) * 5;
-  next = Math.max(5, Math.min(30, next));
-  if (surfaceState.lowerPct === next) {
-    syncSurfaceControlUi();
-    return;
-  }
-  surfaceState.lowerPct = next;
+// Apply the shared from/to window (keeps surface in lockstep with the heatmap).
+function applyOutcomeWindow({ lowerPct, upperPct }) {
+  const changed = surfaceState.lowerPct !== lowerPct || surfaceState.upperPct !== upperPct;
+  surfaceState.lowerPct = lowerPct;
+  surfaceState.upperPct = upperPct;
   syncSurfaceControlUi();
-  rebuildOverviewFromWindow();
+  if (!changed) return;
+  if (surfaceState.surfaceMeta && surfaceState.simParams) {
+    rebuildOverviewFromWindow();
+  }
+}
+
+function setLowerPct(v) {
+  if (!setOutcomeLowerPct(v)) syncSurfaceControlUi();
 }
 
 function setUpperPct(v) {
-  let next = Math.round(v / 5) * 5;
-  next = Math.max(65, Math.min(90, next));
-  if (surfaceState.upperPct === next) {
-    syncSurfaceControlUi();
-    return;
-  }
-  surfaceState.upperPct = next;
-  syncSurfaceControlUi();
-  rebuildOverviewFromWindow();
+  if (!setOutcomeUpperPct(v)) syncSurfaceControlUi();
 }
 
 function bindControlEvents() {
@@ -1619,6 +1629,10 @@ function bindControlEvents() {
     ?.addEventListener('input', (ev) => setLowerPct(Number(ev.target.value)));
   document.getElementById('surfaceUpper')
     ?.addEventListener('input', (ev) => setUpperPct(Number(ev.target.value)));
+  if (!surfaceState.outcomeWindowBound) {
+    onOutcomeWindowChange(applyOutcomeWindow);
+    surfaceState.outcomeWindowBound = true;
+  }
   surfaceState.controlsBound = true;
 }
 
@@ -1706,12 +1720,18 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.numYears = numYears;
   surfaceState.lastContext = { surfacePaths, numYears, context };
 
+  // Keep local state aligned with the shared from/to window (heatmap may have
+  // moved the sliders before this chart drew).
+  const sharedWindow = getOutcomeWindow();
+  surfaceState.lowerPct = sharedWindow.lowerPct;
+  surfaceState.upperPct = sharedWindow.upperPct;
+
   // If the user widened/narrowed the percentile window on a prior run, resample
   // so the chart matches the sliders instead of the packaged P5–P65 default.
   if (
     surfaceMeta &&
     params &&
-    (surfaceState.lowerPct !== 5 || surfaceState.upperPct !== 65)
+    (surfaceState.lowerPct !== OUTCOME_LOWER_DEFAULT || surfaceState.upperPct !== OUTCOME_UPPER_DEFAULT)
   ) {
     const { loRank, hiRank } = activeOverviewRanks();
     surfaceState.overviewPaths = enrichDrilldownPaths(

@@ -8,4 +8,5 @@ alwaysApply: true
 - Whenever adding new features, changing deployment steps, modifying setup requirements, or altering the core architecture, you MUST evaluate if the `README.md` needs to be updated.
 - The `README.md` is targeted at **non-technical users**. 
 - Ensure any updates to the documentation remain simple, clear, and focus on ease of deployment and use.
-- Avoid technical jargon. When documenting new capabilities, explain them in terms of how the user can interact with them or how they can use "vibe coding" to extend them.
+- Avoid technical jargon, focus on how user can use "vibe coding" to extend app.
+- The application is intended to have help text inline, in terms of features the readme should be a brief overview, not an instruction manual of how to use the software.  

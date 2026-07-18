@@ -72,9 +72,10 @@ const FIELDS = [
   field('floorPenalty', 'floorPenalty', 'float'),
   field('ceilingBalance', 'ceilingBalance', 'currency'),
   field('ceilingBonus', 'ceilingBonus', 'float'),
-  // 'string' (not 'currency'/'optionalCurrency') so blank stays distinct from
-  // a typed 0: blank disables the glide lever, 0 is a "land on zero" target.
-  field('glideTarget', 'glideTarget', 'string'),
+  // 'blankableCurrency' (not 'currency'/'optionalCurrency') so blank stays
+  // distinct from a typed 0: blank disables the glide lever, 0 is a
+  // "land on zero" target.
+  field('glideTarget', 'glideTarget', 'blankableCurrency'),
   field('glideFraction', 'glideFraction', 'float'),
   field('glideRate', 'glideRate', 'float'),
 
@@ -186,7 +187,9 @@ export function optionalSignedPctFraction(pct) {
 export function formatCurrency(val) {
   const n = parseCurrency(val);
   if (Number.isNaN(n)) return '';
-  return n.toLocaleString('en-US');
+  // All currency fields are whole $000s — round so RT-discounted glide targets
+  // and blur reformat never show fractional thousands.
+  return Math.round(n).toLocaleString('en-US');
 }
 
 /** Upgrade saved scenarios from older schema versions. */
@@ -1176,6 +1179,9 @@ function parseField(raw, type) {
       return parseCurrency(raw);
     case 'optionalCurrency':
       return parseCurrency(raw);
+    case 'blankableCurrency':
+      if (raw == null || String(raw).trim() === '') return '';
+      return parseCurrency(raw);
     case 'string':
     default:
       return raw == null ? '' : String(raw);
@@ -1185,8 +1191,11 @@ function parseField(raw, type) {
 function formatField(value, type) {
   if (value == null || value === '') return '';
   if (type === 'optionalCurrency' && parseCurrency(value) === 0) return '';
+  if (type === 'blankableCurrency' && (value == null || value === '')) return '';
   if (type === 'optionalPct' && (value == null || value === '')) return '';
-  if (type === 'currency' || type === 'optionalCurrency') return formatCurrency(value);
+  if (type === 'currency' || type === 'optionalCurrency' || type === 'blankableCurrency') {
+    return formatCurrency(value);
+  }
   if (type === 'pct1') return formatPct1(value);
   if (type === 'optionalPct') return String(value);
   return String(value);

@@ -381,6 +381,28 @@ describe('scaledGiftAmount', () => {
     expect(scaledGiftAmount(gift, 1_000_000, 1_000_000)).toBeCloseTo(20_000, 6);
     expect(scaledGiftAmount(gift, 1_200_000, 1_000_000)).toBe(40_000);
   });
+
+  it('still requires Balance > when trigger and target percent are met', () => {
+    // Target met (balance 2M ≥ target 1.6M) but Balance > 5M is not → no gift.
+    const gift = { amount: 40_000, balanceThreshold: 5_000_000, triggerPct: 20, targetPct: 60 };
+    expect(scaledGiftAmount(gift, 2_000_000, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(gift, 5_000_000, 1_000_000)).toBe(0);
+    // Clear Balance > while still above the target → full gift.
+    expect(scaledGiftAmount(gift, 5_000_001, 1_000_000)).toBe(40_000);
+  });
+
+  it('applies Balance > before percent scaling in the mid-band', () => {
+    // Mid-band would be half gift, but Balance > blocks first.
+    const gift = { amount: 40_000, balanceThreshold: 1_450_000, triggerPct: 0, targetPct: 100 };
+    expect(scaledGiftAmount(gift, 1_450_000, 1_000_000)).toBe(0);
+    expect(scaledGiftAmount(gift, 1_500_000, 1_000_000)).toBeCloseTo(20_000, 6);
+  });
+
+  it('requires Balance > when remaining plan need is zero', () => {
+    const gift = { amount: 25_000, balanceThreshold: 100_000, triggerPct: 10, targetPct: 50 };
+    expect(scaledGiftAmount(gift, 100_000, 0)).toBe(0);
+    expect(scaledGiftAmount(gift, 100_001, 0)).toBe(25_000);
+  });
 });
 
 describe('buildMajorEventsSeries', () => {

@@ -43,9 +43,9 @@ export function heatmapFrameMember(frame, bandSize, numFrames) {
   return Math.floor((frame * bandSize) / numFrames);
 }
 
-// The heatmap source is built out to this upper outcome percentile; the
-// renderer rebands the active Show from/to window to fill the plot width.
-const HEATMAP_MAX_PERCENTILE = 90;
+// The heatmap source spans the full outcome axis (P0–P100); the renderer
+// rebands the active Show from/to window to fill the plot width.
+const HEATMAP_MAX_PERCENTILE = 100;
 
 /** Flat real classic 4% schedule: start × 0.04 every year (today's dollars). */
 export function buildClassicFourPercentByYear(startBalance, maxYears) {
@@ -55,26 +55,28 @@ export function buildClassicFourPercentByYear(startBalance, maxYears) {
   return classicByYear;
 }
 
-// Compact per-run source for ranks P5..P90: one row per rank in the built
+// Compact per-run source for ranks P0..P100: one row per rank in the built
 // window. The renderer rebands this to fill the plot pixel width whenever
 // from/to or chart size changes — no worker round-trip.
+// `loRank` is still stored as `p5Rank` for payload compatibility with older
+// chart code that keyed offsets off that field name.
 export function buildWithdrawalHeatmapSource(
   result,
   rankW,
-  p5Rank,
+  loRank,
   hiRank,
   planByYear,
   maxYears,
   classicByYear = null,
 ) {
   const matrix = result.allYearsWithdrawals;
-  const span = Math.max(1, hiRank - p5Rank + 1);
+  const span = Math.max(1, hiRank - loRank + 1);
   const sourceValues = new Float32Array(span * maxYears);
   sourceValues.fill(NaN);
   const sourceSimIndex = new Int32Array(span);
 
   for (let i = 0; i < span; i++) {
-    const rank = p5Rank + i;
+    const rank = loRank + i;
     const simIndex = rankW[rank];
     sourceSimIndex[i] = simIndex;
     const srcBase = i * maxYears;
@@ -87,7 +89,7 @@ export function buildWithdrawalHeatmapSource(
   return {
     numYears: maxYears,
     numSimulations: result.numSimulations,
-    p5Rank,
+    p5Rank: loRank,
     hiRank,
     hiPercentile: HEATMAP_MAX_PERCENTILE,
     sourceSpan: span,
@@ -362,6 +364,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   }
 
   const benchmarkCache = new Map();
+  // Packaged overview matches the chart default Show from/to window (P5–P65).
   const p5i = percentileIndex(n, 0.05);
   const p65i = percentileIndex(n, 0.65);
   const step = Math.max(1, Math.floor((p65i - p5i) / SURFACE_SAMPLES));
@@ -387,13 +390,14 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const heatmapPlanByYear = Float64Array.from(plannedYearlySchedule(params.portfolio, maxYears));
   // Flat classic 4% of start — second baseline for the "vs 4%" delta encoding.
   const heatmapClassicByYear = buildClassicFourPercentByYear(params.portfolio?.start, maxYears);
-  // Heatmap and 3D "show to" sliders can widen past P65 up to P90 without a re-run.
-  const p90i = percentileIndex(n, 0.9);
+  // Full P0–P100 source so Show from/to can cover the whole outcome axis without a re-run.
+  const p0i = 0;
+  const p100i = Math.max(0, n - 1);
   const withdrawalHeatmap = buildWithdrawalHeatmapSource(
     result,
     rankW,
-    p5i,
-    p90i,
+    p0i,
+    p100i,
     heatmapPlanByYear,
     maxYears,
     heatmapClassicByYear,
@@ -480,9 +484,10 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       earlyWeightEmphasisPct: rankingWeighting.earlyEmphasisPct,
       earlyWeightLateFloorPct: rankingWeighting.lateFloorPct,
       maxYears,
+      // Legacy field names: packaged overview window is P5–P65 by default.
       p5Rank: p5i,
       p65Rank: p65i,
-      p90Rank: p90i,
+      p90Rank: p100i,
       surfaceSamples: SURFACE_SAMPLES,
       benchmarkCache: Object.fromEntries(benchmarkCache),
     },
@@ -490,6 +495,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       avgReturn: result.avgReturn,
       irr: result.irr,
       totalWithdrawn: result.totalWithdrawn,
+      horizonYears: result.horizonYears,
       finalBalance: result.finalBalance,
       outcome: scatterOutcome,
       requiredIrr: Number.isNaN(requiredIrr) ? null : requiredIrr,

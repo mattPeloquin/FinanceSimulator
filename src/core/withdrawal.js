@@ -278,29 +278,35 @@ export function giftingUsesPercentMode(gift) {
 
 // How much of the configured Gift to pay this year.
 //
-// Two modes:
-// 1. Legacy (both Trigger % and Target % blank): pay the full Gift when the
-//    post-withdrawal balance exceeds the tier's Balance > threshold.
-// 2. Percent mode (either % filled): ignore Balance >; compare the
-//    post-withdrawal balance to the funded need of remaining planned
-//    withdrawals (undiscounted, no ending-balance cushion). Percents may be
-//    negative (below that need) or positive (above it). Gift scales linearly
-//    from 0% at the trigger level to 100% at the target level; above the
-//    target, pay the full Gift only — never the surplus itself.
+// Balance > is always a hard gate in both modes: if the post-withdrawal
+// portfolio does not strictly exceed the tier's threshold, pay nothing.
+//
+// On top of that gate:
+// 1. Legacy (both Trigger % and Target % blank): pay the full Gift.
+// 2. Percent mode (either % filled): compare the post-withdrawal balance to
+//    the funded need of remaining planned withdrawals (undiscounted, no
+//    ending-balance cushion). Percents may be negative (below that need) or
+//    positive (above it). Gift scales linearly from 0% at the trigger level
+//    to 100% at the target level; above the target, pay the full Gift only —
+//    never the surplus itself.
 //
 // `remainingPlanNeed` is the dollars still needed after this year's regular
 // withdrawal to fund the rest of the plan (0 in the final year).
 export function scaledGiftAmount(gift, balance, remainingPlanNeed = 0) {
   if (!gift || !(gift.amount > 0)) return 0;
 
+  // Always require Balance > — even when trigger/target % scale the gift.
+  const balanceThreshold = gift.balanceThreshold ?? 0;
+  if (!(balance > balanceThreshold)) return 0;
+
   if (!giftingUsesPercentMode(gift)) {
-    return balance > gift.balanceThreshold ? gift.amount : 0;
+    return gift.amount;
   }
 
-  // No remaining plan left (last year, or only deposits ahead): any positive
-  // leftover is above every finite % band, so the full gift is available.
+  // No remaining plan left (last year, or only deposits ahead): any leftover
+  // that cleared Balance > is above every finite % band, so pay the full gift.
   if (!(remainingPlanNeed > 0)) {
-    return balance > 0 ? gift.amount : 0;
+    return gift.amount;
   }
 
   // Blank trigger → start scaling at plan (0% above). Blank target → step

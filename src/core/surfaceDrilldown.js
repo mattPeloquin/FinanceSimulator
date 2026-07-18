@@ -7,7 +7,7 @@ export const SURFACE_DRILLDOWN_SAMPLES = 200;
 export const SURFACE_OVERVIEW_SAMPLES = 200;
 
 // Evenly spaced rank for an overview column within [loRank, hiRank].
-// Defaults to meta.p5Rank / meta.p65Rank when lo/hi are omitted (legacy P5–P65).
+// Defaults to meta.p5Rank / meta.p65Rank when lo/hi are omitted (packaged overview window).
 export function rankForOverviewColumn(col, meta, loRank, hiRank) {
   const lo = loRank ?? meta.p5Rank;
   const hi = hiRank ?? meta.p65Rank;
@@ -96,9 +96,11 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
 }
 
 // Resolve percentile slider values to rank indices using the same formula as packaging.
+// P100 maps to the last valid rank (n − 1); percentileIndex(n, 1) would be n.
 export function ranksForPercentileWindow(n, lowerPct, upperPct) {
-  return {
-    loRank: percentileIndex(n, lowerPct / 100),
-    hiRank: percentileIndex(n, upperPct / 100),
-  };
+  if (!(n > 0)) return { loRank: 0, hiRank: 0 };
+  const clampRank = (pct) => Math.min(n - 1, Math.max(0, percentileIndex(n, pct / 100)));
+  const loRank = clampRank(lowerPct);
+  const hiRank = Math.max(loRank, clampRank(upperPct));
+  return { loRank, hiRank };
 }
