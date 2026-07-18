@@ -150,3 +150,38 @@
     background-color: rgb(var(--theme-accent));
   }
 }
+
+/* Plan Snapshot: print only the report page (browser Save as PDF). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #planReport,
+  #planReport * {
+    visibility: visible;
+  }
+  #planReport {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: none;
+    margin: 0;
+    max-width: none;
+  }
+  #planReport * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  #planReport .report-block {
+    break-inside: avoid;
+  }
+  /* Dark-mode theme vars would leave near-white text/swatches on paper;
+     charts are separately re-rendered light by report.js before printing. */
+  #planReport .report-median-swatch {
+    background: #111827 !important;
+  }
+  @page {
+    size: letter portrait;
+    margin: 0.5in;
+  }
+}

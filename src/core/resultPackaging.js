@@ -350,6 +350,71 @@ function buildSurfacePathEntry(
   };
 }
 
+// P5-increment levels used by the Plan Snapshot balance fan and future what-if lab.
+export const BALANCE_PERCENTILE_LEVELS = Object.freeze(
+  Array.from({ length: 21 }, (_, i) => i * 5),
+);
+
+// Linear-interpolation percentile of a sorted ascending array (p in 0..1).
+// Used for per-year balance/withdrawal envelopes so P0/P100 are true extremes.
+export function percentileLinear(sortedAscending, p) {
+  const n = sortedAscending.length;
+  if (n === 0) return NaN;
+  if (n === 1) return sortedAscending[0];
+  const clamped = Math.min(1, Math.max(0, p));
+  const idx = clamped * (n - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sortedAscending[lo];
+  const t = idx - lo;
+  return sortedAscending[lo] * (1 - t) + sortedAscending[hi] * t;
+}
+
+// Compact per-year balance percentiles at every P5 step (P0…P100).
+// Computed from the worker-side allYearsBalances matrix; the matrix itself is
+// never shipped to the main thread — only this few-KB series crosses the boundary.
+export function buildBalancePercentiles(allYearsBalances, numSimulations, numYears) {
+  const levels = BALANCE_PERCENTILE_LEVELS;
+  const series = levels.map(() => {
+    const row = new Float64Array(numYears);
+    row.fill(NaN);
+    return row;
+  });
+
+  const column = new Float64Array(numSimulations);
+  for (let year = 0; year < numYears; year++) {
+    let count = 0;
+    for (let sim = 0; sim < numSimulations; sim++) {
+      const value = allYearsBalances[sim * numYears + year];
+      if (!Number.isNaN(value)) column[count++] = value;
+    }
+    if (count === 0) continue;
+    const sorted = Array.from(column.subarray(0, count)).sort((a, b) => a - b);
+    for (let li = 0; li < levels.length; li++) {
+      series[li][year] = percentileLinear(sorted, levels[li] / 100);
+    }
+  }
+
+  return { numYears, levels: Array.from(levels), series };
+}
+
+// Exact depletion-year histogram from the per-run depletionYear array.
+// A run is depleted when depletionYear[i] <= horizonYears[i]; the year index
+// is 1-based (year 1 = first simulation year).
+export function buildDepletionByYear(depletionYear, horizonYears, maxYears) {
+  const counts = new Array(maxYears).fill(0);
+  const totalRuns = depletionYear.length;
+  let totalDepleted = 0;
+  for (let i = 0; i < totalRuns; i++) {
+    if (depletionYear[i] <= horizonYears[i]) {
+      totalDepleted++;
+      const yearIndex = Math.floor(depletionYear[i]) - 1;
+      if (yearIndex >= 0 && yearIndex < maxYears) counts[yearIndex]++;
+    }
+  }
+  return { counts, totalDepleted, totalRuns };
+}
+
 // Build the full chart-ready result package from a raw runMonteCarlo() output.
 export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const tolerance = shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
@@ -561,6 +626,12 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       requiredIrr: Number.isNaN(requiredIrr) ? null : requiredIrr,
     },
     withdrawalHeatmap,
+    // Compact P5-step balance envelopes for Plan Snapshot / what-if lab.
+    // Derived from result.allYearsBalances; the full matrix is not packaged.
+    balancePercentiles: result.allYearsBalances
+      ? buildBalancePercentiles(result.allYearsBalances, n, maxYears)
+      : null,
+    depletionByYear: buildDepletionByYear(result.depletionYear, result.horizonYears, maxYears),
     histogram,
     returnSummary,
     irrSummary,

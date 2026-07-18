@@ -56,6 +56,7 @@ import { setupRiskPresetControl, syncRiskPresetUi } from './ui/riskPreset.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { syncAllocationPreview } from './ui/charts/allocationPreview.js';
 import { renderResults } from './ui/results.js';
+import { initReport, onNewRun as onReportNewRun } from './ui/report.js';
 import { openDialog, showAlert } from './ui/dialogs.js';
 
 const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
@@ -239,8 +240,16 @@ function runSimulation() {
     } else if (msg.type === 'done') {
       setLoading(false);
       document.getElementById('resultsSection').classList.remove('hidden');
+      const fourPercentComparison = msg.fourPercentComparison ?? null;
+      onReportNewRun({
+        result: msg.result,
+        params,
+        scenario,
+        fourPercentComparison,
+        goalSeekWarning: null,
+      });
       renderResults(msg.result, params, {
-        fourPercentComparison: msg.fourPercentComparison,
+        fourPercentComparison,
         classicResult: msg.classicResult,
       });
       terminateWorkers();
@@ -341,9 +350,20 @@ function runGoalSeekSearch() {
       const goalSeekWarning = msg.goalSeekSummary.feasible
         ? null
         : msg.goalSeekSummary.reason || 'Find Best Plan could not find a plan meeting your target.';
-      renderResults(msg.result, msg.finalParams ?? params, {
+      const finalParams = msg.finalParams ?? params;
+      const fourPercentComparison = msg.fourPercentComparison ?? null;
+      // Post-seek DOM reflects tuned levers — capture that for the report.
+      const postSeekScenario = readScenarioFromDom();
+      onReportNewRun({
+        result: msg.result,
+        params: finalParams,
+        scenario: postSeekScenario,
+        fourPercentComparison,
         goalSeekWarning,
-        fourPercentComparison: msg.fourPercentComparison,
+      });
+      renderResults(msg.result, finalParams, {
+        goalSeekWarning,
+        fourPercentComparison,
         classicResult: msg.classicResult,
       });
     } else if (msg.type === 'error') {
@@ -830,6 +850,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
       onChange: scheduleAutosave,
       onDistMethodChange: () => {},
     });
+    initReport();
     syncEarlyWeightPreview();
 
     setupRiskPresetControl({ onChange: scheduleAutosave });

@@ -60,6 +60,7 @@ function postChunkResult(target, startIndex, numSimulations, result) {
         allYearsReturns: result.allYearsReturns.buffer,
         allYearsWithdrawals: result.allYearsWithdrawals.buffer,
         allYearsNetSpend: result.allYearsNetSpend.buffer,
+        allYearsBalances: result.allYearsBalances.buffer,
       },
     },
     [
@@ -76,6 +77,7 @@ function postChunkResult(target, startIndex, numSimulations, result) {
       result.allYearsReturns.buffer,
       result.allYearsWithdrawals.buffer,
       result.allYearsNetSpend.buffer,
+      result.allYearsBalances.buffer,
     ],
   );
 }

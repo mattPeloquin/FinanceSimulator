@@ -227,6 +227,7 @@ export function simulatePath(
   outOffset = 0,
   outWithdrawals = null,
   outNetSpend = null,
+  outBalances = null,
 ) {
   const {
     numYears: endpointYears,
@@ -744,6 +745,9 @@ export function simulatePath(
     // Withdrawal Heatmap. Net spend feeds on-plan / ranking metrics separately.
     if (outWithdrawals) outWithdrawals[outOffset + j] = actualWithdrawal;
     if (outNetSpend) outNetSpend[outOffset + j] = netSpendDelivered;
+    // End-of-year portfolio balance for this year (report fan / packaging).
+    // Once depleted the balance sits at ~0 for the rest of the active horizon.
+    if (outBalances) outBalances[outOffset + j] = balance;
 
     // Shadow IRR cash flows: strip major-event outflows; inflows never entered
     // actualWithdrawal and are not added to irrBalance above.
@@ -789,6 +793,12 @@ export function simulatePath(
   if (outNetSpend && maxYears > horizonYears) {
     for (let j = horizonYears; j < maxYears; j++) {
       outNetSpend[outOffset + j] = NaN;
+    }
+  }
+  // Same sentinel for balances: NaN = "this run's horizon ended".
+  if (outBalances && maxYears > horizonYears) {
+    for (let j = horizonYears; j < maxYears; j++) {
+      outBalances[outOffset + j] = NaN;
     }
   }
 
@@ -859,6 +869,10 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
   // Net spending delivered (ex tax) — on-plan / ranking metrics.
   const allYearsNetSpend = new Float64Array(numSimulations * maxYears);
   allYearsNetSpend.fill(NaN);
+  // End-of-year balances for every run (report / packaging source).
+  // Worker-side only — packaging derives compact percentile series and drops this.
+  const allYearsBalances = new Float64Array(numSimulations * maxYears);
+  allYearsBalances.fill(NaN);
 
   const progressEvery = Math.max(1, Math.floor(numSimulations / 100));
 
@@ -873,6 +887,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
       i * maxYears,
       allYearsWithdrawals,
       allYearsNetSpend,
+      allYearsBalances,
     );
     avgReturn[i] = s.avgReturn;
     irr[i] = s.irr;
@@ -908,6 +923,7 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
     allYearsReturns,
     allYearsWithdrawals,
     allYearsNetSpend,
+    allYearsBalances,
   };
 }
 

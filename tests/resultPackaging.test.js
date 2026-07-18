@@ -252,6 +252,44 @@ describe('buildRunResult withdrawal tax packaging', () => {
   });
 });
 
+describe('buildRunResult balancePercentiles and depletionByYear', () => {
+  const p = params({ numSimulations: 400, portfolio: { start: 400_000, base: 40_000 } });
+  const raw = runMonteCarlo(p);
+  const packaged = buildRunResult(p, raw);
+
+  it('packages 21 P5-step balance levels without shipping the full matrix', () => {
+    expect(packaged.balancePercentiles).toBeTruthy();
+    expect(packaged.balancePercentiles.levels).toHaveLength(21);
+    expect(packaged.balancePercentiles.levels[0]).toBe(0);
+    expect(packaged.balancePercentiles.levels[20]).toBe(100);
+    expect(packaged.balancePercentiles.series).toHaveLength(21);
+    for (const row of packaged.balancePercentiles.series) {
+      expect(row.length).toBe(p.numYears);
+    }
+    expect(packaged.allYearsBalances).toBeUndefined();
+  });
+
+  it('is monotonic across percentile levels for each year', () => {
+    const { series, numYears } = packaged.balancePercentiles;
+    for (let year = 0; year < numYears; year++) {
+      for (let li = 1; li < series.length; li++) {
+        const prev = series[li - 1][year];
+        const cur = series[li][year];
+        if (Number.isNaN(prev) || Number.isNaN(cur)) continue;
+        expect(cur).toBeGreaterThanOrEqual(prev - 1e-6);
+      }
+    }
+  });
+
+  it('keeps depletionByYear consistent with successRate', () => {
+    const dep = packaged.depletionByYear;
+    expect(dep.totalRuns).toBe(p.numSimulations);
+    expect(dep.counts).toHaveLength(p.numYears);
+    const fromHist = dep.totalDepleted / dep.totalRuns;
+    expect(fromHist).toBeCloseTo(1 - packaged.successRate, 10);
+  });
+});
+
 describe('heatmapFrameMember', () => {
   it('spreads frames evenly across the band', () => {
     // Band of 13 shown over 13 frames: one member per frame, in rank order.

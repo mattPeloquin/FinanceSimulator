@@ -50,6 +50,8 @@ export function stitchMonteCarloResults(params, chunkResults) {
   allYearsWithdrawals.fill(NaN);
   const allYearsNetSpend = new Float64Array(totalSims * maxYears);
   allYearsNetSpend.fill(NaN);
+  const allYearsBalances = new Float64Array(totalSims * maxYears);
+  allYearsBalances.fill(NaN);
 
   for (const chunk of chunkResults) {
     const {
@@ -68,6 +70,7 @@ export function stitchMonteCarloResults(params, chunkResults) {
       allYearsReturns: yr,
       allYearsWithdrawals: yw,
       allYearsNetSpend: yn,
+      allYearsBalances: yb,
     } = chunk;
     avgReturn.set(a, startIndex);
     irr.set(ir, startIndex);
@@ -92,6 +95,10 @@ export function stitchMonteCarloResults(params, chunkResults) {
         yn.subarray(i * maxYears, (i + 1) * maxYears),
         (startIndex + i) * maxYears,
       );
+      allYearsBalances.set(
+        yb.subarray(i * maxYears, (i + 1) * maxYears),
+        (startIndex + i) * maxYears,
+      );
     }
   }
 
@@ -111,6 +118,7 @@ export function stitchMonteCarloResults(params, chunkResults) {
     allYearsReturns,
     allYearsWithdrawals,
     allYearsNetSpend,
+    allYearsBalances,
   };
 }
 
@@ -135,6 +143,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
           allYearsReturns,
           allYearsWithdrawals,
           allYearsNetSpend,
+          allYearsBalances,
         } = msg.buffers;
         resolve({
           startIndex: msg.startIndex,
@@ -152,6 +161,7 @@ function runChunkOnPort(port, params, startIndex, numSimulations) {
           allYearsReturns: new Float64Array(allYearsReturns),
           allYearsWithdrawals: new Float64Array(allYearsWithdrawals),
           allYearsNetSpend: new Float64Array(allYearsNetSpend),
+          allYearsBalances: new Float64Array(allYearsBalances),
         });
       } else if (msg.type === 'error') {
         port.removeEventListener('message', onMessage);
