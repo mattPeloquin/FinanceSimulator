@@ -12,8 +12,7 @@ import {
   drawBalanceFan,
   drawSuccessDonut,
   renderSuccessHero,
-  drawFourPctBars,
-  fourPctLegendItems,
+  drawFourPctMetric,
   drawDepletionStrip,
   drawAllocationDonut,
   allocationLegendItems,
@@ -109,23 +108,31 @@ function clearChildren(el) {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
 
+/** Escape text for safe innerHTML insertion. */
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Wrap any whitespace-delimited token that contains a digit in <strong> so the
+ * numeric values (dollar amounts, percentages, counts) read as the emphasis. */
+function boldNumbers(text) {
+  return escapeHtml(text).replace(
+    /([\w$%.,+-]*\d[\w$%.,+-]*)/g,
+    '<strong class="font-bold text-theme-heading print:text-slate-900">$1</strong>',
+  );
+}
+
 function fillList(el, items) {
   if (!el) return;
   clearChildren(el);
   for (const text of items) {
     const li = document.createElement('li');
-    li.textContent = text;
+    li.className = 'report-bullet';
+    li.innerHTML = boldNumbers(text);
     el.appendChild(li);
-  }
-}
-
-function fillVerdict(el, sentences) {
-  if (!el) return;
-  clearChildren(el);
-  for (const sentence of sentences) {
-    const p = document.createElement('p');
-    p.textContent = sentence;
-    el.appendChild(p);
   }
 }
 
@@ -148,6 +155,7 @@ function fillLegend(el, items) {
 function successHeroEls() {
   return {
     number: document.getElementById('reportHeroSuccess'),
+    onPlanNumber: document.getElementById('reportHeroOnPlan'),
     pill: document.getElementById('reportVerdictPill'),
   };
 }
@@ -173,11 +181,11 @@ function renderFull({ forceLight = false } = {}) {
   const snap = buildSnap(pLow, pHigh);
 
   const h1 = document.getElementById('reportHeaderLine1');
-  const h2 = document.getElementById('reportHeaderLine2');
   if (h1) h1.textContent = snap.header.line1;
-  if (h2) h2.textContent = snap.header.line2;
 
-  fillVerdict(document.getElementById('reportVerdictText'), snap.verdict);
+  const footer = document.getElementById('reportFooterMeta');
+  if (footer) footer.textContent = snap.footerLine || '';
+
   fillList(document.getElementById('reportPlanBullets'), snap.planBullets);
 
   const bandLabel = document.getElementById('reportBandLabel');
@@ -203,8 +211,8 @@ function renderFull({ forceLight = false } = {}) {
 
   renderSuccessHero(successHeroEls(), snap.success, { dark });
   drawSuccessDonut(document.getElementById('reportSuccessDonut'), snap.success, { dark });
-  drawFourPctBars(document.getElementById('reportFourPctBars'), snap.fourPct, { dark });
-  fillLegend(document.getElementById('reportFourPctLegend'), fourPctLegendItems(dark));
+  drawFourPctMetric(document.getElementById('reportFourPctSpend'), 'spend', snap.fourPct, { dark });
+  drawFourPctMetric(document.getElementById('reportFourPctSurvival'), 'survival', snap.fourPct, { dark });
   if (snap.band) {
     drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, { dark });
   }

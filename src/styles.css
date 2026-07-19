@@ -164,6 +164,31 @@
   .report-legend-dot {
     @apply inline-flex items-center gap-1.5 text-[10px] text-theme-faint print:text-slate-500;
   }
+
+  /* Custom bullet for "Your plan" list items: a small accent-colored diamond
+     instead of the default round disc. */
+  #planReport .report-bullet {
+    position: relative;
+    padding-left: 0.85rem;
+  }
+  #planReport .report-bullet::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.42em;
+    width: 0.35rem;
+    height: 0.35rem;
+    background-color: rgb(var(--theme-accent));
+    border-radius: 1px;
+    transform: rotate(45deg);
+  }
+  @media print {
+    #planReport .report-bullet::before {
+      background-color: #1e293b;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
 }
 
 /* Plan Snapshot: print only the report page (browser Save as PDF). */

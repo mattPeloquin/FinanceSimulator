@@ -38,69 +38,119 @@
         </div>
 
         <div id="planReport" class="report-page bg-theme-page text-theme-body print:bg-white rounded-xl border border-theme-border print:border-0 mx-auto max-w-[820px] p-3 print:p-0 space-y-2.5">
-            <!-- Bento grid: each row below is its own mosaic band, mirroring the
-                 report's planned layout (verdict+gauges, then the withdrawal
-                 hero full-width, then balance/depletion, then plan/allocation). -->
+            <!-- Bento grid: verdict + gauges + 4% mini on top, the withdrawals
+                 hero full-width and visually dominant, then your plan (with
+                 allocation folded in), then balance/depletion, then a footer. -->
             <div class="space-y-2.5">
-                <!-- Row 1: Verdict (left, ~60%) + stacked gauges (right, ~40%) -->
-                <div class="grid grid-cols-1 md:grid-cols-12 print:grid-cols-12 gap-2.5 items-stretch">
-                    <div class="report-card md:col-span-7 print:col-span-7 !bg-theme-accent-subtle print:!bg-transparent flex flex-col">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="flex items-center gap-2">
-                                <span class="inline-block w-2 h-6 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
-                                <div>
-                                    <h3 class="text-base font-bold tracking-tight text-theme-heading print:text-slate-900 leading-tight">Plan Snapshot</h3>
-                                    <p id="reportHeaderLine1" class="text-[11px] font-medium text-theme-muted print:text-slate-600 leading-snug"></p>
-                                </div>
+                <!-- Row 1: Verdict card — header + two colored stats + pill, with the
+                     gauges donut folded in (no "Plan gauges" title, no donut labels).
+                     The 4% comparison moved to under the Your plan legend below. -->
+                <div id="reportVerdictCard" class="report-card !bg-theme-accent-subtle print:!bg-transparent flex flex-col md:flex-row gap-3 items-center md:items-stretch">
+                    <div class="flex-1 min-w-0 flex flex-col">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block w-2 h-10 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
+                            <div>
+                                <h3 class="text-xl font-bold tracking-tight text-theme-muted print:text-slate-900 leading-tight">Plan Snapshot</h3>
+                                <p id="reportHeaderLine1" class="text-sm font-semibold text-theme-heading print:text-slate-700 leading-snug"></p>
                             </div>
-                            <p id="reportHeaderLine2" class="text-[10px] text-theme-faint print:text-slate-500 text-right shrink-0"></p>
-                        </div>
-                        <h4 class="report-heading mt-2">Verdict</h4>
-                        <div class="flex items-baseline gap-1.5 mt-0.5">
-                            <span id="reportHeroSuccess" class="text-3xl leading-none font-extrabold text-theme-heading print:text-slate-900">—</span>
-                            <span class="text-[10px] text-theme-muted print:text-slate-600">not depleted</span>
+                            <!-- Pill sits between the heading and the donut (pushed right, just left of the donut). -->
                             <span id="reportVerdictPill" class="inline-flex ml-auto px-1.5 py-0.5 rounded-full border text-[10px] font-semibold"></span>
                         </div>
-
-                        <div id="reportVerdictText" class="text-[10.5px] text-theme-body print:text-slate-800 leading-snug space-y-1 mt-2"></div>
-                    </div>
-
-                    <div class="md:col-span-5 print:col-span-5 flex flex-col gap-2.5">
-                        <div class="report-card flex flex-col">
-                            <h4 class="report-heading mb-1">Plan gauges</h4>
-                            <div class="h-[0.9in] relative">
-                                <canvas id="reportSuccessDonut" class="w-full h-full"></canvas>
+                        <!-- Two equal-weight verdict stats, centered, colored to match the donut rings:
+                             not depleted = success (green), on plan = accent (purple). -->
+                        <div class="grid grid-cols-2 gap-3 mt-3 text-center">
+                            <div class="flex flex-col items-center">
+                                <span id="reportHeroSuccess" class="text-3xl leading-none font-extrabold">—</span>
+                                <span class="text-[10px] text-theme-muted print:text-slate-600 mt-1">not depleted</span>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <span id="reportHeroOnPlan" class="text-3xl leading-none font-extrabold">—</span>
+                                <span class="text-[10px] text-theme-muted print:text-slate-600 mt-1">on plan</span>
                             </div>
                         </div>
-                        <div class="report-card flex flex-col flex-1">
-                            <h4 class="report-heading mb-1">Your plan vs. the classic 4% rule</h4>
-                            <div class="h-[0.95in] relative">
-                                <canvas id="reportFourPctBars"></canvas>
-                            </div>
-                            <div id="reportFourPctLegend" class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5"></div>
+                    </div>
+                    <div class="shrink-0 flex items-center justify-center md:w-[1.4in]">
+                        <div class="h-[1.1in] w-[1.1in] relative">
+                            <canvas id="reportSuccessDonut" class="w-full h-full"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <!-- Row 2: withdrawals hero, full width -->
+                <!-- Row 2: withdrawals hero, full width and visually dominant -->
                 <div class="report-card flex flex-col">
-                    <div class="flex items-baseline justify-between gap-2 mb-1">
-                        <h4 class="report-heading">Withdrawals to expect</h4>
-                        <span class="text-[9px] text-theme-faint print:text-slate-500"><span id="reportBandLabel"></span><span id="reportBandTaxNote" class="hidden"> · gross (before taxes)</span></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <h4 class="flex items-center gap-2 text-lg font-bold tracking-tight text-theme-heading print:text-slate-900">
+                            <span class="inline-block w-1.5 h-5 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
+                            Withdrawals to expect
+                        </h4>
+                        <span class="inline-flex items-center rounded-full bg-theme-accent-subtle text-theme-accent-text print:bg-slate-100 print:text-slate-700 px-2 py-0.5 text-[10px] font-semibold"><span id="reportBandLabel"></span><span id="reportBandTaxNote" class="hidden"> · gross (before taxes)</span></span>
                     </div>
-                    <div class="h-[2.4in] w-full relative">
+                    <div class="h-[3.2in] w-full relative">
                         <canvas id="reportBandCanvas" class="w-full h-full"></canvas>
                     </div>
-                    <div id="reportBandLegend" class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-                        <span class="report-legend-dot"><span class="report-median-swatch inline-block w-4 h-0.5" style="background:rgb(var(--theme-text-heading))"></span> Median</span>
+                    <div id="reportBandLegend" class="flex flex-nowrap items-center gap-x-3 mt-1 overflow-x-auto">
+                        <span class="report-legend-dot"><span class="report-median-swatch inline-block w-4 h-0.5" style="background:rgb(var(--theme-success))"></span> Median</span>
                         <span class="report-legend-dot"><span class="inline-block w-4 h-0" style="border-top:2px dashed #9ca3af"></span> Planned</span>
+                        <span class="report-legend-dot"><span class="inline-block w-4 h-0" style="border-top:1px dotted rgb(var(--theme-p60))"></span> 4% rule</span>
                         <span class="report-legend-dot"><span class="inline-block w-8 h-3 rounded-sm" style="background:linear-gradient(90deg,#e66101,#9894b0,#0d9488)"></span> cut &lt; plan &lt; boost</span>
                         <span class="report-legend-dot"><span class="inline-block w-3 h-3 rounded-sm" style="background:rgb(220,38,38)"></span> depleted</span>
                         <span class="report-legend-dot">opacity = density</span>
                     </div>
                 </div>
 
-                <!-- Row 3: balance outlook (~55%) + depletion timing (~45%) -->
+                <!-- Row 3: your plan bullets (shaded left half, full-bleed to the card edge) + allocation folded in.
+                     The allocation legend lives on one full-width line at the
+                     bottom of the card so every sleeve label stays on a single row. -->
+                <div class="report-card !p-0 flex flex-col overflow-hidden">
+                    <div class="flex flex-col md:flex-row items-stretch">
+                        <!-- Left half: shaded, full-bleed to the card's left/top/bottom edges.
+                             No rounding so the fill meets the card border; overflow-hidden on the
+                             card clips it to the card's rounded corner. -->
+                        <div class="flex-1 min-w-0 flex flex-col bg-theme-accent-subtle print:bg-slate-50 p-3">
+                            <h4 class="flex items-center gap-2 text-lg font-bold tracking-tight text-theme-muted print:text-slate-900 mb-1.5">
+                                <span class="inline-block w-1.5 h-5 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
+                                Your plan
+                            </h4>
+                            <ul id="reportPlanBullets" class="text-xs text-theme-body print:text-slate-800 list-none pl-0 space-y-1 columns-1 sm:columns-2 gap-6"></ul>
+                        </div>
+                        <!-- Right: smaller allocation donut, with its own padding so it isn't flush to the edge. -->
+                        <div class="shrink-0 flex items-center justify-center md:w-[1.4in] p-3">
+                            <div class="h-[1in] w-[1in] relative">
+                                <canvas id="reportAllocationDonut" class="w-full h-full"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Allocation legend: one horizontal line, full width. Extra
+                         bottom padding gives it a wider band of space so the legend
+                         reads as centered between the donut row above and the 4%
+                         comparison strip below. -->
+                    <div id="reportAllocationLegend" class="flex flex-nowrap items-center justify-center gap-x-3 overflow-x-auto px-3 pt-2 pb-2"></div>
+
+                    <!-- 4% rule comparison, under the Your plan legend. Two minimized
+                         charts on honest scales (spend in $k, survival in %). The "4% rule"
+                         label lives next to the green (Classic 4%) bar via the y-axis tick,
+                         so no separate caption is needed. Full-bleed muted strip so the pair
+                         reads as a compact minimized tile. Tight vertical padding keeps the
+                         pair visually small. -->
+                    <div class="bg-theme-muted print:bg-slate-100">
+                        <div class="grid grid-cols-2 gap-3 px-3 py-1">
+                            <div class="flex flex-col">
+                                <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Median spend ($k)</span>
+                                <div class="h-[0.5in] relative">
+                                    <canvas id="reportFourPctSpend"></canvas>
+                                </div>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Survival %</span>
+                                <div class="h-[0.5in] relative">
+                                    <canvas id="reportFourPctSurvival"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 4: balance outlook (~55%) + depletion timing (~45%) -->
                 <div class="grid grid-cols-1 md:grid-cols-12 print:grid-cols-12 gap-2.5 items-stretch">
                     <div class="report-card md:col-span-7 print:col-span-7 flex flex-col">
                         <h4 class="report-heading mb-1">Balance outlook</h4>
@@ -116,22 +166,10 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Row 4: your plan bullets (~75%) + allocation (~25%) -->
-                <div class="grid grid-cols-1 md:grid-cols-12 print:grid-cols-12 gap-2.5 items-stretch">
-                    <div class="report-card md:col-span-9 print:col-span-9 flex flex-col">
-                        <h4 class="report-heading mb-1">Your plan</h4>
-                        <ul id="reportPlanBullets" class="text-[10px] text-theme-body print:text-slate-800 list-disc pl-3.5 space-y-0.5 columns-1 sm:columns-2 gap-6"></ul>
-                    </div>
-                    <div class="report-card md:col-span-3 print:col-span-3 flex flex-col">
-                        <h4 class="report-heading mb-1 text-center">Allocation</h4>
-                        <div class="h-[1in] relative">
-                            <canvas id="reportAllocationDonut"></canvas>
-                        </div>
-                        <div id="reportAllocationLegend" class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 mt-0.5"></div>
-                    </div>
-                </div>
             </div>
+
+            <!-- Footer: generated date + simulation count (moved out of the header). -->
+            <p id="reportFooterMeta" class="text-[10px] text-theme-faint print:text-slate-500 text-center pt-1"></p>
         </div>
     </div>
 </details>

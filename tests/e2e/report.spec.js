@@ -29,10 +29,10 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await page.locator('summary:has-text("Plan Snapshot")').click();
   await expect(details).toHaveAttribute('open', '');
 
-  const verdict = page.locator('#reportVerdictText');
-  await expect(verdict).not.toBeEmpty();
-  await expect(verdict).toContainText(/simulations|deplet/i);
+  // Verdict prose was removed; the two hero stats + gauges donut now carry it.
+  await expect(page.locator('#reportVerdictText')).toHaveCount(0);
   await expect(page.locator('#reportHeaderLine1')).not.toBeEmpty();
+  await expect(page.locator('#reportHeaderLine2')).toHaveCount(0);
   await expect(page.locator('#reportSuccessBarFill')).toHaveCount(0);
   await expect(page.locator('#reportOnPlanBarFill')).toHaveCount(0);
   await expect(page.locator('#reportSequenceBullet')).toHaveCount(0);
@@ -50,7 +50,8 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   expect(donutBox).toBeTruthy();
   expect(donutBox.width).toBeGreaterThan(100);
   expect(donutBox.height).toBeGreaterThan(50);
-  const verdictBox = await verdict.boundingBox();
+  // The donut sits to the right of the verdict card.
+  const verdictBox = await page.locator('#reportVerdictCard').boundingBox();
   expect(verdictBox).toBeTruthy();
   expect(donutBox.x).toBeGreaterThan(verdictBox.x);
 
@@ -60,12 +61,22 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await expect(page.locator('#reportPxLowLabel')).toHaveText('P25');
   await expect(page.locator('#reportBandLabel')).toContainText('P25');
 
-  // Hero verdict callout: big success number + status pill, driven by
-  // renderSuccessHero (DOM-based, no canvas).
+  // Two equal-weight hero stats: not depleted + on plan, plus a status pill.
   const heroNumber = page.locator('#reportHeroSuccess');
   await expect(heroNumber).toBeVisible();
   await expect(heroNumber).toContainText('%');
+  const heroOnPlan = page.locator('#reportHeroOnPlan');
+  await expect(heroOnPlan).toBeVisible();
+  await expect(heroOnPlan).toContainText('%');
   await expect(page.locator('#reportVerdictPill')).not.toBeEmpty();
+
+  // 4% comparison is split into two minimized charts on honest scales.
+  await expect(page.locator('#reportFourPctBars')).toHaveCount(0);
+  await expect(page.locator('#reportFourPctSpend')).toBeVisible();
+  await expect(page.locator('#reportFourPctSurvival')).toBeVisible();
+
+  // Generated date + simulation count moved to the footer.
+  await expect(page.locator('#reportFooterMeta')).toContainText(/simulations/i);
 
   // Report-local appearance toggle is independent of the app's theme toggle.
   const themeMode = page.locator('#reportThemeMode');

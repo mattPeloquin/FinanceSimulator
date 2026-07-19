@@ -74,6 +74,11 @@ describe('bandPercentileSeries', () => {
     expect(band.columns[1].length).toBe(4); // NaN stripped
     expect(band.low[2]).toBe(0); // clamped deposit
     expect(band.plan).toEqual([25, 25, 25]);
+    // Depleted fraction keys off the RAW value (exact $0), so the deposit
+    // (-5, clamped to 0 in the column) does NOT count as depleted.
+    expect(band.depletedFraction[0]).toBeCloseTo(1 / 5); // one raw 0 of five
+    expect(band.depletedFraction[1]).toBe(0); // no zeros
+    expect(band.depletedFraction[2]).toBe(0); // deposit is not depletion
   });
 });
 
@@ -116,7 +121,9 @@ describe('buildPlanSnapshot', () => {
 
   it('builds a usable snapshot from a real packaged run', () => {
     const snap = buildPlanSnapshot(packaged, scenario, null, { pLow: 10, pHigh: 90 });
-    expect(snap.verdict.length).toBeGreaterThan(0);
+    // Verdict prose was removed; the hero stats + gauges donut now carry it.
+    expect(snap.verdict).toEqual([]);
+    expect(snap.footerLine).toMatch(/simulations/i);
     expect(snap.band.years.length).toBe(packaged.maxYears);
     expect(snap.band.low.length).toBe(packaged.maxYears);
     expect(snap.planBullets.some((b) => /base/i.test(b))).toBe(true);

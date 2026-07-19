@@ -21,16 +21,6 @@ function dollarK(dollars) {
   return `$${k.toLocaleString('en-US')}k`;
 }
 
-function pctWhole(fraction) {
-  if (fraction == null || Number.isNaN(fraction)) return '—';
-  return `${Math.round(fraction * 100)}%`;
-}
-
-function pct1(fraction) {
-  if (fraction == null || Number.isNaN(fraction)) return '—';
-  return `${(fraction * 100).toFixed(1)}%`;
-}
-
 /**
  * Per-year withdrawal envelope at pLow / P50 / pHigh across all sims.
  * Sorts each year's column independently — overall heatmap rank order is by
@@ -46,24 +36,41 @@ export function bandPercentileSeries(heatmap, pLow, pHigh) {
   const plan = heatmap.planByYear
     ? Array.from(heatmap.planByYear, (v) => (Number.isFinite(v) ? Math.max(0, v) : 0))
     : new Array(numYears).fill(0);
+  // Flat classic 4% schedule (start × 0.04 every year) — drawn on the hero as
+  // a light dotted reference line. Same dollar scale as the band values.
+  const classic = heatmap.classicByYear
+    ? Array.from(heatmap.classicByYear, (v) => (Number.isFinite(v) ? Math.max(0, v) : 0))
+    : new Array(numYears).fill(0);
 
   const years = Array.from({ length: numYears }, (_, i) => i + 1);
   const low = new Array(numYears).fill(NaN);
   const median = new Array(numYears).fill(NaN);
   const high = new Array(numYears).fill(NaN);
   const columns = new Array(numYears);
+  // Per-year share of simulations that ended up depleted ($0 withdrawal that
+  // year). Computed from the RAW values (before the deposit clamp below) so
+  // deposit years — stored as negative withdrawals — are not mistaken for
+  // depletion. The hero band chart paints these as red strips at the bottom
+  // of each year so the "depleted" legend swatch has something behind it.
+  const depletedFraction = new Array(numYears).fill(0);
 
   for (let year = 0; year < numYears; year++) {
     const col = [];
+    let depleted = 0;
+    let total = 0;
     for (let row = 0; row < span; row++) {
       const raw = values[row * numYears + year];
       if (Number.isNaN(raw)) continue;
+      total++;
+      // Exact $0 = portfolio had nothing left to spend that year (depleted).
+      if (raw === 0) depleted++;
       // Deposit years appear as negative withdrawals — clamp for the spend band.
       col.push(Math.max(0, raw));
     }
     col.sort((a, b) => a - b);
     columns[year] = Float64Array.from(col);
     if (col.length === 0) continue;
+    depletedFraction[year] = total > 0 ? depleted / total : 0;
     low[year] = percentileLinear(col, pLow / 100);
     median[year] = percentileLinear(col, 0.5);
     high[year] = percentileLinear(col, pHigh / 100);
@@ -75,7 +82,9 @@ export function bandPercentileSeries(heatmap, pLow, pHigh) {
     median,
     high,
     plan,
+    classic,
     columns,
+    depletedFraction,
     pLow,
     pHigh,
     lowLabel: `P${pLow}`,
@@ -160,83 +169,12 @@ function headerFromScenario(scenario, result) {
     stocksPct: alloc.stocksPct,
     bondCashPct: alloc.bondCashPct,
     distMethod: scenario.distMethod || '—',
-    line1: [
-      presetName,
-      dollarK(startDollars) + ' start',
-      horizonLabel,
-      alloc.label,
-    ].filter(Boolean).join(' · '),
-    line2: `generated ${generated} · ${result.numSimulations.toLocaleString('en-US')} simulations`,
+    // Header keeps only the starting balance and horizon on one line; the
+    // preset ("easy mode") tag and allocation label live elsewhere now.
+    line1: [dollarK(startDollars) + ' start', horizonLabel].filter(Boolean).join(' · '),
+    // Footer carries the generated date + simulation count (moved out of the header).
+    footerLine: `generated ${generated} · ${result.numSimulations.toLocaleString('en-US')} simulations`,
   };
-}
-
-function primarySpend(result) {
-  const taxActive = !!result.withdrawalTaxActive;
-  const metric = result.withdrawalMetric || 'total';
-  if (result.earlyWeightingActive) {
-    return {
-      actual: result.medianEarlyWeightedWithdrawn,
-      planned: result.onPlanBenchmark,
-      label: taxActive ? 'median early-weighted spend (after taxes)' : 'median early-weighted spend',
-    };
-  }
-  if (metric === 'medianYearly') {
-    return {
-      actual: taxActive ? result.medianYearlyNetSpend : result.medianYearlyWithdrawn,
-      planned: result.onPlanBenchmark ?? result.plannedMedianYearly,
-      label: taxActive ? 'median yearly spend (after taxes)' : 'median yearly withdrawal',
-    };
-  }
-  if (metric === 'meanYearly') {
-    return {
-      actual: taxActive ? result.meanYearlyNetSpend : result.meanYearlyWithdrawn,
-      planned: result.onPlanBenchmark ?? result.plannedMeanYearly,
-      label: taxActive ? 'mean yearly spend (after taxes)' : 'mean yearly withdrawal',
-    };
-  }
-  return {
-    actual: taxActive ? result.medianNetSpend : result.medianWithdrawn,
-    planned: result.onPlanBenchmark ?? result.plannedWithdrawn,
-    label: taxActive ? 'median total spend (after taxes)' : 'median total withdrawn',
-  };
-}
-
-function buildVerdict(result, fourPercentComparison) {
-  const sentences = [];
-  const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
-  sentences.push(
-    `${pctWhole(result.successRate)} of simulations did not deplete; `
-    + `${pctWhole(result.withdrawalTargetSuccessRate)} stayed within ${tolerancePct}% of the plan.`,
-  );
-
-  const spend = primarySpend(result);
-  sentences.push(
-    `${spend.label[0].toUpperCase()}${spend.label.slice(1)} was ${dollarK(spend.actual)} `
-    + `versus a planned ${dollarK(spend.planned)}.`,
-  );
-  sentences.push(`Median ending balance: ${dollarK(result.medianBalance)}.`);
-
-  if (fourPercentComparison) {
-    if (fourPercentComparison.equivalent) {
-      sentences.push('You are already on a flat classic 4% schedule (no market cuts or boosts).');
-    } else {
-      const totalDelta = fourPercentComparison.totalWithdrawnDelta ?? 0;
-      const spendBit = totalDelta === 0
-        ? 'Spending matched the classic 4% rule.'
-        : totalDelta > 0
-          ? `Your plan spent ${dollarK(totalDelta)} more (median total) than the classic 4% rule.`
-          : `Your plan spent ${dollarK(-totalDelta)} less (median total) than the classic 4% rule.`;
-      sentences.push(
-        `${spendBit} Survival: your plan ${pctWhole(fourPercentComparison.userSuccessRate)} `
-        + `vs ${pctWhole(fourPercentComparison.classicSuccessRate)} for the rule `
-        + `(year-1 rate ${pct1(fourPercentComparison.userYear1Rate)} vs 4.0%).`,
-      );
-    }
-  } else {
-    sentences.push('Classic 4% comparison was unavailable for this simulation run.');
-  }
-
-  return sentences;
 }
 
 function buildFourPct(comparison) {
@@ -319,16 +257,8 @@ function buildPlanBullets(scenario, goalSeekWarning) {
     if (parts.length) bullets.push(`Fees & taxes: ${parts.join(', ')}.`);
   }
 
-  if (scenario.goalSeekMode) {
-    const desired = scenario.goalSeekDesiredSuccessPct ?? '—';
-    const ending = scenario.goalSeekTargetEndingBalance;
-    const endingBit = ending != null && ending !== ''
-      ? `, target ending balance ${dollarK(Number(ending) * MONEY_SCALE)}`
-      : '';
-    bullets.push(`Find Best Plan targeted ${desired}% success${endingBit}.`);
-    if (goalSeekWarning) {
-      bullets.push(`Find Best Plan warning: ${goalSeekWarning}`);
-    }
+  if (scenario.goalSeekMode && goalSeekWarning) {
+    bullets.push(`Find Best Plan warning: ${goalSeekWarning}`);
   }
 
   return bullets.slice(0, 10);
@@ -365,7 +295,9 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
 
   return {
     header,
-    verdict: buildVerdict(result, fourPercentComparison),
+    footerLine: header.footerLine,
+    // Verdict prose was removed; empty array keeps the model shape stable.
+    verdict: [],
     band,
     fan,
     depletion,

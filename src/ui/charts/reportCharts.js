@@ -26,6 +26,12 @@ export function paletteFor(dark) {
     // primary indigo accent used everywhere else.
     accentAlt: themeHex('percentile.p60', mode),
     success: themeHex('status.success', mode),
+    // Darker green for the "On track" verdict tone — the standard success
+    // green reads a little bright/saturated for a pill + donut that share a
+    // card with a subtle accent-subtle background, so the on-track state uses
+    // this deeper green for the pill, the donut's success ring, and the
+    // matching hero "not depleted" number.
+    successDeep: dark ? '#16a34a' : '#15803d',
     danger: themeHex('status.danger', mode),
     warn: themeHex('status.warn', mode),
     fail: dark ? '#334155' : '#d1d5db',
@@ -33,9 +39,12 @@ export function paletteFor(dark) {
   };
 }
 
-/** "On track" / "Monitor" / "At risk" verdict tone for a given success rate. */
+/** "On track" / "Monitor" / "At risk" verdict tone for a given success rate.
+ * Only the pill uses the deeper on-track green; the donut ring and hero
+ * "not depleted" number stay on the standard (bright) success green so the
+ * pill and the number/donut remain visually distinct. */
 function verdictTone(successRate, pal) {
-  if (successRate >= 0.9) return { label: 'On track', color: pal.success };
+  if (successRate >= 0.9) return { label: 'On track', color: pal.successDeep };
   if (successRate >= 0.7) return { label: 'Monitor', color: pal.warn };
   return { label: 'At risk', color: pal.danger };
 }
@@ -89,7 +98,7 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
 
   let yMax = 0;
   for (let i = 0; i < n; i++) {
-    yMax = Math.max(yMax, band.high[i] || 0, band.plan[i] || 0, band.median[i] || 0);
+    yMax = Math.max(yMax, band.high[i] || 0, band.plan[i] || 0, band.median[i] || 0, band.classic?.[i] || 0);
   }
   yMax = yMax * 1.05 || 1;
 
@@ -153,12 +162,39 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
       densityImage.data[pixel] = r;
       densityImage.data[pixel + 1] = g;
       densityImage.data[pixel + 2] = bl;
-      densityImage.data[pixel + 3] = Math.round(70 + 185 * (counts[bin] / maxCount));
+      // Opacity encodes density (count / max). Floor raised further so the
+      // band reads as bright and saturated rather than a faint wash.
+      densityImage.data[pixel + 3] = Math.round(185 + 70 * (counts[bin] / maxCount));
     }
   }
   densityContext.putImageData(densityImage, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(densityCanvas, pad.left, pad.top, plotW, plotH);
+
+  // Depleted ($0) simulations: the density field above is clipped to the
+  // [lo, hi] percentile window, so once the pLow percentile rises above zero
+  // the depleted sims fall out of view and the red "depleted" legend swatch
+  // has nothing backing it. Paint them explicitly as a red strip at the
+  // bottom of each year, height proportional to that year's depletion share
+  // (computed in the model from raw values, so deposit years are not mistaken
+  // for depletion). Capped so a bad year never fills the whole plot.
+  const colW = plotW / n;
+  const maxStripH = plotH * 0.22;
+  ctx.save();
+  for (let i = 0; i < n; i++) {
+    const frac = band.depletedFraction?.[i] || 0;
+    if (frac <= 0) continue;
+    const stripH = Math.max(2, frac * maxStripH);
+    const x = xAt(i) - colW / 2;
+    // Solid bottom edge (matches the heatmap's bright depletion red) fading
+    // upward so the strip reads as density, not a flat bar.
+    const grad = ctx.createLinearGradient(0, pad.top + plotH - stripH, 0, pad.top + plotH);
+    grad.addColorStop(0, 'rgba(220, 38, 38, 0.15)');
+    grad.addColorStop(1, 'rgba(220, 38, 38, 0.9)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, pad.top + plotH - stripH, colW, stripH);
+  }
+  ctx.restore();
 
   const strokePath = (series) => {
     ctx.beginPath();
@@ -186,7 +222,9 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
   strokePath(band.high);
   ctx.globalAlpha = 1;
 
-  ctx.strokeStyle = pal.ink;
+  // Median withdrawal line in green (status.success) — the hero "expected"
+  // path through the density field.
+  ctx.strokeStyle = pal.success;
   ctx.lineWidth = 2.5;
   strokePath(band.median);
 
@@ -196,9 +234,20 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
   strokePath(band.plan);
   ctx.setLineDash([]);
 
+  // Classic 4% rule: a light dotted reference line (flat start × 4% every year).
+  // Same solid teal (accentAlt) as the "4% rule" bar in the comparison mini
+  // charts so the two visuals read as the same series.
+  if (band.classic) {
+    ctx.strokeStyle = pal.accentAlt;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([1, 3]);
+    strokePath(band.classic);
+    ctx.setLineDash([]);
+  }
+
   // Axes + ticks
   ctx.strokeStyle = pal.grid;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(pad.left, pad.top);
   ctx.lineTo(pad.left, pad.top + plotH);
@@ -206,7 +255,7 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
   ctx.stroke();
 
   ctx.fillStyle = pal.muted;
-  ctx.font = '11px system-ui, sans-serif';
+  ctx.font = 'bold 11px system-ui, sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   const ticks = 4;
@@ -220,7 +269,7 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
   for (let i = 0; i < n; i += xStep) {
     ctx.fillText(String(band.years[i]), xAt(i), pad.top + plotH + 6);
   }
-  ctx.font = '10px system-ui, sans-serif';
+  ctx.font = 'bold 10px system-ui, sans-serif';
   ctx.fillText('Year', pad.left + plotW / 2, cssH - 12);
 }
 
@@ -310,25 +359,14 @@ export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = f
   const success = Math.min(1, Math.max(0, successRate ?? 0));
   const onPlan = Math.min(1, Math.max(0, onPlanRate ?? 0));
 
-  const centerText = {
-    id: 'reportSuccessCenter',
-    afterDraw(chart) {
-      const { ctx, chartArea } = chart;
-      if (!chartArea) return;
-      const centerX = (chartArea.left + chartArea.right) / 2;
-      const centerY = (chartArea.top + chartArea.bottom) / 2;
-      ctx.save();
-      ctx.fillStyle = pal.ink;
-      ctx.font = 'bold 13px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(formatPercent(success, 0) || '—', centerX, centerY - 5);
-      ctx.fillStyle = pal.muted;
-      ctx.font = '8px system-ui, sans-serif';
-      ctx.fillText('not depleted', centerX, centerY + 8);
-      ctx.restore();
-    },
-  };
+  // No center text: the hero stat card already shows the big "not depleted"
+  // number, so repeating it inside the donut would be a third copy. The two
+  // rings carry both rates on their own.
+
+  // The "remainder" fill (depleted share / off-plan share) uses the verdict
+  // pill's tone color, so the donut's dark segment visually echoes the
+  // On track / Monitor / At risk pill next to it instead of a flat grey.
+  const toneColor = verdictTone(success, pal).color;
 
   new Chart(canvas, {
     type: 'doughnut',
@@ -336,72 +374,59 @@ export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = f
       datasets: [
         {
           data: [success, 1 - success],
-          backgroundColor: [pal.success, pal.fail],
+          backgroundColor: [pal.success, toneColor],
           borderWidth: 0,
           weight: 1,
         },
         {
           data: [onPlan, 1 - onPlan],
-          backgroundColor: [pal.accent, pal.fail],
+          backgroundColor: [pal.accent, toneColor],
           borderWidth: 0,
-          weight: 0.7,
+          weight: 1,
         },
       ],
     },
     options: {
       ...chartCommon(),
       cutout: '52%',
+      // No legend: the two big numbers next to the donut are colored to match
+      // each ring, so the labels would only repeat "87% / 71%" a third time.
       plugins: {
         ...chartCommon().plugins,
-        legend: {
-          display: true,
-          position: 'right',
-          labels: {
-            boxWidth: 7,
-            boxHeight: 7,
-            padding: 6,
-            color: pal.muted,
-            font: { size: 8 },
-            generateLabels() {
-              return [
-                {
-                  text: `Not depleted ${formatPercent(success, 0)}`,
-                  fillStyle: pal.success,
-                  strokeStyle: pal.success,
-                  index: 0,
-                  datasetIndex: 0,
-                },
-                {
-                  text: `On plan ${formatPercent(onPlan, 0)}`,
-                  fillStyle: pal.accent,
-                  strokeStyle: pal.accent,
-                  index: 0,
-                  datasetIndex: 1,
-                },
-              ];
-            },
-          },
-        },
+        legend: { display: false },
       },
     },
-    plugins: [centerText],
   });
 }
 
 /**
- * Hero verdict stat — a big "not depleted" number and an On track / Monitor /
- * At risk pill. The detailed success and on-plan rates live in the donut,
- * avoiding a duplicate pair of linear gauges.
+ * Hero verdict stats — two big numbers given equal weight: "not depleted"
+ * (successRate) and "on plan" (onPlanRate), plus an On track / Monitor /
+ * At risk pill driven by the success rate. The detailed rates also live in
+ * the donut, so this is the single large-format presentation of both.
  *
- * @param {{number: HTMLElement, pill: HTMLElement}} els
+ * @param {{number: HTMLElement, onPlanNumber: HTMLElement, pill: HTMLElement}} els
  */
-export function renderSuccessHero(els, { successRate }, { dark = false } = {}) {
+export function renderSuccessHero(els, { successRate, onPlanRate }, { dark = false } = {}) {
   if (!els) return;
   const pal = paletteFor(dark);
   const success = Math.min(1, Math.max(0, successRate ?? 0));
+  const onPlan = Math.min(1, Math.max(0, onPlanRate ?? 0));
   const tone = verdictTone(success, pal);
 
-  if (els.number) els.number.textContent = formatPercent(success, 0) || '—';
+  if (els.number) {
+    els.number.textContent = formatPercent(success, 0) || '—';
+    // Match the donut's outer ring (not depleted = success/green) so the big
+    // number and the ring read as one figure. Kept bright (standard success
+    // green) even when on-track so the number/donut stay visually distinct
+    // from the darker on-track pill.
+    els.number.style.color = pal.success;
+  }
+  if (els.onPlanNumber) {
+    els.onPlanNumber.textContent = formatPercent(onPlan, 0) || '—';
+    // Match the donut's inner ring (on plan = accent/purple).
+    els.onPlanNumber.style.color = pal.accent;
+  }
 
   if (els.pill) {
     els.pill.textContent = tone.label;
@@ -410,7 +435,7 @@ export function renderSuccessHero(els, { successRate }, { dark = false } = {}) {
   }
 }
 
-export function drawFourPctBars(canvas, fourPct, { dark = false } = {}) {
+export function drawFourPctMetric(canvas, metric, fourPct, { dark = false } = {}) {
   if (!canvas) return;
   destroyChart(canvas);
   if (!fourPct) {
@@ -420,31 +445,32 @@ export function drawFourPctBars(canvas, fourPct, { dark = false } = {}) {
   canvas.style.display = '';
   const pal = paletteFor(dark);
 
-  const userSpendK = (fourPct.userPrimary ?? fourPct.userSpend) / MONEY_SCALE;
-  const classicSpendK = (fourPct.classicPrimary ?? fourPct.classicSpend) / MONEY_SCALE;
-  const userSurv = (fourPct.userSurvival ?? 0) * 100;
-  const classicSurv = (fourPct.classicSurvival ?? 0) * 100;
+  // Each metric gets its own honest scale: 'spend' is median spend in $k,
+  // 'survival' is survival in %. The old drawFourPctBars forced both onto one
+  // shared axis, which misrepresented whichever metric was smaller.
+  let userVal;
+  let classicVal;
+  if (metric === 'spend') {
+    userVal = (fourPct.userPrimary ?? fourPct.userSpend) / MONEY_SCALE;
+    classicVal = (fourPct.classicPrimary ?? fourPct.classicSpend) / MONEY_SCALE;
+  } else {
+    userVal = (fourPct.userSurvival ?? 0) * 100;
+    classicVal = (fourPct.classicSurvival ?? 0) * 100;
+  }
 
   new Chart(canvas, {
     type: 'bar',
     data: {
-      labels: ['Median spend ($k)', 'Survival %'],
+      labels: ['Your plan', '4% rule'],
       datasets: [
         {
-          label: 'Your plan',
-          data: [userSpendK, userSurv],
-          backgroundColor: pal.accent,
+          data: [userVal, classicVal],
+          backgroundColor: [pal.accent, pal.accentAlt],
           borderWidth: 0,
           borderRadius: 4,
           borderSkipped: false,
-        },
-        {
-          label: 'Classic 4%',
-          data: [classicSpendK, classicSurv],
-          backgroundColor: pal.accentAlt,
-          borderWidth: 0,
-          borderRadius: 4,
-          borderSkipped: false,
+          barPercentage: 0.7,
+          categoryPercentage: 0.8,
         },
       ],
     },
@@ -454,25 +480,23 @@ export function drawFourPctBars(canvas, fourPct, { dark = false } = {}) {
       scales: {
         x: {
           beginAtZero: true,
-          ticks: { color: pal.muted, font: { size: 10 } },
+          ticks: { color: pal.muted, font: { size: 9 }, maxTicksLimit: 4 },
           grid: { color: pal.grid },
         },
         y: {
-          ticks: { color: pal.ink, font: { size: 11, weight: '600' } },
+          // autoSkip off so both category labels ("Your plan" + "4% rule") always
+          // render next to their bars, even on the short 0.7in mini chart.
+          // "Your plan" stays bold; "4% rule" is unbolded (weight 400) per request.
+          ticks: {
+            color: pal.ink,
+            font: (ctx) => ({ size: 9, weight: ctx.tick && ctx.tick.index === 0 ? '600' : '400' }),
+            autoSkip: false,
+          },
           grid: { display: false },
         },
       },
     },
   });
-}
-
-/** Legend swatches to pair with drawFourPctBars — "Your plan" vs "Classic 4%". */
-export function fourPctLegendItems(dark) {
-  const pal = paletteFor(dark);
-  return [
-    { label: 'Your plan', color: pal.accent },
-    { label: 'Classic 4%', color: pal.accentAlt },
-  ];
 }
 
 export function drawDepletionStrip(canvas, depletion, { dark = false } = {}) {

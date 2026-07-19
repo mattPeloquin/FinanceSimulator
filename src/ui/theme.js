@@ -56,7 +56,7 @@ export const themeTokens = {
     us_lg_growth: '#2a6f9c',
     us_lg_value: '#2a8490',
     us_sm_mid: '#268a72',
-    ex_us: '#3f8a4a',
+    ex_us: '#3a78a8',
     bond: '#4f9438',
     cash: '#3d5f78',
   },
