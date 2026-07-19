@@ -9,6 +9,8 @@ async function disableGoalSeek(page) {
 test('Plan Snapshot report opens and updates with percentile sliders', async ({ page }) => {
   test.slow();
 
+  // The bento grid switches to its report layout at the medium breakpoint.
+  await page.setViewportSize({ width: 800, height: 900 });
   await page.goto('/');
   await disableGoalSeek(page);
 
@@ -30,6 +32,10 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   const verdict = page.locator('#reportVerdictText');
   await expect(verdict).not.toBeEmpty();
   await expect(verdict).toContainText(/simulations|deplet/i);
+  await expect(page.locator('#reportHeaderLine1')).not.toBeEmpty();
+  await expect(page.locator('#reportSuccessBarFill')).toHaveCount(0);
+  await expect(page.locator('#reportOnPlanBarFill')).toHaveCount(0);
+  await expect(page.locator('#reportSequenceBullet')).toHaveCount(0);
 
   const bandCanvas = page.locator('#reportBandCanvas');
   await expect(bandCanvas).toBeVisible();
@@ -38,11 +44,38 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   expect(box.width).toBeGreaterThan(100);
   expect(box.height).toBeGreaterThan(50);
 
+  const successDonut = page.locator('#reportSuccessDonut');
+  await expect(successDonut).toBeVisible();
+  const donutBox = await successDonut.boundingBox();
+  expect(donutBox).toBeTruthy();
+  expect(donutBox.width).toBeGreaterThan(100);
+  expect(donutBox.height).toBeGreaterThan(50);
+  const verdictBox = await verdict.boundingBox();
+  expect(verdictBox).toBeTruthy();
+  expect(donutBox.x).toBeGreaterThan(verdictBox.x);
+
   await expect(page.locator('#reportBandLabel')).toContainText('P10–P90');
 
   await page.locator('#reportPxLow').fill('25');
   await expect(page.locator('#reportPxLowLabel')).toHaveText('P25');
   await expect(page.locator('#reportBandLabel')).toContainText('P25');
+
+  // Hero verdict callout: big success number + status pill, driven by
+  // renderSuccessHero (DOM-based, no canvas).
+  const heroNumber = page.locator('#reportHeroSuccess');
+  await expect(heroNumber).toBeVisible();
+  await expect(heroNumber).toContainText('%');
+  await expect(page.locator('#reportVerdictPill')).not.toBeEmpty();
+
+  // Report-local appearance toggle is independent of the app's theme toggle.
+  const themeMode = page.locator('#reportThemeMode');
+  await expect(themeMode).toHaveValue('auto');
+  await themeMode.selectOption('dark');
+  await expect(page.locator('#planReport')).toHaveClass(/report-force-dark/);
+  await themeMode.selectOption('light');
+  await expect(page.locator('#planReport')).toHaveClass(/report-force-light/);
+  await themeMode.selectOption('auto');
+  await expect(page.locator('#planReport')).not.toHaveClass(/report-force-light|report-force-dark/);
 
   await expect(page.locator('#reportExportPdf')).toBeVisible();
   await expect(page.locator('#reportNextMoves')).toHaveCount(0);

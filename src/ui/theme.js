@@ -33,6 +33,9 @@ export const themeTokens = {
     'danger-bg': { light: '220 38 38', dark: '185 28 28' },
     'danger-hover': { light: '185 28 28', dark: '153 27 27' },
     info: { light: '59 130 246', dark: '96 165 250' },
+    // Amber "monitor / caution" tone — used by the report verdict pill for
+    // the middle ground between a clean pass (success) and a real problem (danger).
+    warn: { light: '180 83 9', dark: '251 191 36' },
   },
 
   percentile: {

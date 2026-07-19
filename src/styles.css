@@ -149,6 +149,21 @@
     border: none;
     background-color: rgb(var(--theme-accent));
   }
+
+  /* Plan Snapshot report: one bento card in the infographic grid. */
+  .report-card {
+    @apply rounded-lg border border-theme-border bg-theme-surface print:border-slate-300 print:rounded-none p-2.5;
+  }
+
+  /* Small uppercase card label, consistent across every report card. */
+  .report-heading {
+    @apply text-[11px] uppercase tracking-wider font-semibold text-theme-accent-text print:text-slate-500;
+  }
+
+  /* Inline swatch + label pair used in every chart legend on the report. */
+  .report-legend-dot {
+    @apply inline-flex items-center gap-1.5 text-[10px] text-theme-faint print:text-slate-500;
+  }
 }
 
 /* Plan Snapshot: print only the report page (browser Save as PDF). */
@@ -172,13 +187,8 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  #planReport .report-block {
+  #planReport .report-card {
     break-inside: avoid;
-  }
-  /* Dark-mode theme vars would leave near-white text/swatches on paper;
-     charts are separately re-rendered light by report.js before printing. */
-  #planReport .report-median-swatch {
-    background: #111827 !important;
   }
   @page {
     size: letter portrait;

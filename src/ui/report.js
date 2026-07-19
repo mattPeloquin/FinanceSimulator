@@ -1,6 +1,9 @@
 // Plan Snapshot report UI — lazy render on open, Px sliders, Export PDF.
 // Charts follow the app theme on screen and are re-rendered with a forced
 // light palette around printing so a dark-mode "Save as PDF" stays paper-friendly.
+// The report also has its own light/dark override (reportThemeMode), separate
+// from the app's theme toggle, so it never looks jarring next to the rest of
+// the UI while still always printing light.
 
 import { buildPlanSnapshot } from '../core/reportModel.js';
 import { isDarkMode, onThemeChange } from './theme.js';
@@ -8,18 +11,23 @@ import {
   drawWithdrawalBand,
   drawBalanceFan,
   drawSuccessDonut,
+  renderSuccessHero,
   drawFourPctBars,
-  drawSequenceBullet,
+  fourPctLegendItems,
   drawDepletionStrip,
   drawAllocationDonut,
+  allocationLegendItems,
 } from './charts/reportCharts.js';
 
 const BAND_STORAGE_KEY = 'sor:report-band';
+const THEME_STORAGE_KEY = 'sor:report-theme-mode';
 const DEFAULT_BAND = { low: 10, high: 90 };
 
 let lastRun = null;
 let dirty = true;
 let renderedForKey = null;
+// null = follow the app's theme; 'light' / 'dark' = report-local override.
+let themeOverride = null;
 
 function loadBandPrefs() {
   try {
@@ -44,6 +52,40 @@ function saveBandPrefs(low, high) {
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+function loadThemeOverride() {
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    return raw === 'light' || raw === 'dark' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveThemeOverride(value) {
+  try {
+    if (value) localStorage.setItem(THEME_STORAGE_KEY, value);
+    else localStorage.removeItem(THEME_STORAGE_KEY);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Report's own effective dark mode — the override if set, else the app's. */
+function effectiveDark() {
+  if (themeOverride === 'light') return false;
+  if (themeOverride === 'dark') return true;
+  return isDarkMode();
+}
+
+/** Scope the report's CSS variables to the override via report-force-* classes
+ * (see tailwind.config.js) so it can show light/dark independent of the app. */
+function applyThemeOverrideClass() {
+  const el = document.getElementById('planReport');
+  if (!el) return;
+  el.classList.toggle('report-force-light', themeOverride === 'light');
+  el.classList.toggle('report-force-dark', themeOverride === 'dark');
 }
 
 function getPx() {
@@ -87,6 +129,29 @@ function fillVerdict(el, sentences) {
   }
 }
 
+/** Fill a legend container with colored-dot + label spans. */
+function fillLegend(el, items) {
+  if (!el) return;
+  clearChildren(el);
+  for (const item of items) {
+    const span = document.createElement('span');
+    span.className = 'report-legend-dot';
+    const dot = document.createElement('span');
+    dot.className = 'inline-block w-2.5 h-2.5 rounded-full';
+    dot.style.backgroundColor = item.color;
+    span.appendChild(dot);
+    span.appendChild(document.createTextNode(item.label));
+    el.appendChild(span);
+  }
+}
+
+function successHeroEls() {
+  return {
+    number: document.getElementById('reportHeroSuccess'),
+    pill: document.getElementById('reportVerdictPill'),
+  };
+}
+
 function runKey(run, pLow, pHigh, dark) {
   if (!run) return null;
   return `${run.result?.seed}|${run.result?.numSimulations}|${pLow}|${pHigh}|${run.goalSeekWarning || ''}|${dark ? 'd' : 'l'}`;
@@ -104,7 +169,7 @@ function buildSnap(pLow, pHigh) {
 function renderFull({ forceLight = false } = {}) {
   if (!lastRun?.result) return;
   const { pLow, pHigh } = getPx();
-  const dark = forceLight ? false : isDarkMode();
+  const dark = forceLight ? false : effectiveDark();
   const snap = buildSnap(pLow, pHigh);
 
   const h1 = document.getElementById('reportHeaderLine1');
@@ -136,14 +201,16 @@ function renderFull({ forceLight = false } = {}) {
     drawDepletionStrip(document.getElementById('reportDepletionCanvas'), snap.depletion, { dark });
   }
 
+  renderSuccessHero(successHeroEls(), snap.success, { dark });
   drawSuccessDonut(document.getElementById('reportSuccessDonut'), snap.success, { dark });
   drawFourPctBars(document.getElementById('reportFourPctBars'), snap.fourPct, { dark });
-  drawSequenceBullet(document.getElementById('reportSequenceBullet'), snap.sequence, { dark });
+  fillLegend(document.getElementById('reportFourPctLegend'), fourPctLegendItems(dark));
   if (snap.band) {
     drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, { dark });
   }
   drawBalanceFan(document.getElementById('reportFanCanvas'), snap.fan, { dark });
   drawAllocationDonut(document.getElementById('reportAllocationDonut'), snap.allocation, { dark });
+  fillLegend(document.getElementById('reportAllocationLegend'), allocationLegendItems(snap.allocation, dark));
 
   renderedForKey = runKey(lastRun, pLow, pHigh, dark);
   dirty = false;
@@ -152,7 +219,7 @@ function renderFull({ forceLight = false } = {}) {
 function renderBandAndFanOnly() {
   if (!lastRun?.result) return;
   const { pLow, pHigh } = getPx();
-  const dark = isDarkMode();
+  const dark = effectiveDark();
   const snap = buildSnap(pLow, pHigh);
   const bandLabel = document.getElementById('reportBandLabel');
   if (bandLabel && snap.band) {
@@ -168,7 +235,7 @@ function renderBandAndFanOnly() {
 function ensureRendered() {
   if (!lastRun) return;
   const { pLow, pHigh } = getPx();
-  const key = runKey(lastRun, pLow, pHigh, isDarkMode());
+  const key = runKey(lastRun, pLow, pHigh, effectiveDark());
   if (dirty || key !== renderedForKey) renderFull();
 }
 
@@ -189,6 +256,11 @@ export function initReport() {
   if (highEl) highEl.value = String(prefs.high);
   syncPxLabels();
 
+  themeOverride = loadThemeOverride();
+  const modeEl = document.getElementById('reportThemeMode');
+  if (modeEl) modeEl.value = themeOverride || 'auto';
+  applyThemeOverrideClass();
+
   const onPxInput = () => {
     syncPxLabels();
     const { pLow, pHigh } = getPx();
@@ -199,6 +271,14 @@ export function initReport() {
   lowEl?.addEventListener('input', onPxInput);
   highEl?.addEventListener('input', onPxInput);
 
+  modeEl?.addEventListener('change', () => {
+    themeOverride = modeEl.value === 'light' || modeEl.value === 'dark' ? modeEl.value : null;
+    saveThemeOverride(themeOverride);
+    applyThemeOverrideClass();
+    const details = document.getElementById('details-plan-report');
+    if (details?.open && lastRun) renderFull();
+  });
+
   const details = document.getElementById('details-plan-report');
   details?.addEventListener('toggle', () => {
     if (!details.open) return;
@@ -206,18 +286,22 @@ export function initReport() {
     requestAnimationFrame(() => ensureRendered());
   });
 
-  // Follow the app theme while the report is open.
+  // Follow the app theme while the report is open, unless the report has its
+  // own override set.
   onThemeChange(() => {
+    if (themeOverride) return;
     if (details?.open && lastRun) renderFull();
   });
 
   // Force-light around printing (covers both the Export button and Ctrl+P),
-  // then restore the on-screen theme afterwards.
+  // then restore the report-appropriate rendering afterwards. The DOM colors
+  // themselves are forced light purely via CSS (see tailwind.config.js);
+  // only the canvas-drawn charts need a JS-driven re-render here.
   window.addEventListener('beforeprint', () => {
-    if (lastRun && details?.open && isDarkMode()) renderFull({ forceLight: true });
+    if (lastRun && details?.open && effectiveDark()) renderFull({ forceLight: true });
   });
   window.addEventListener('afterprint', () => {
-    if (lastRun && details?.open && isDarkMode()) renderFull();
+    if (lastRun && details?.open && effectiveDark()) renderFull();
   });
 
   document.getElementById('reportExportPdf')?.addEventListener('click', () => {
@@ -228,8 +312,8 @@ export function initReport() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
-        // Restore theme-appropriate rendering after the dialog closes.
-        if (isDarkMode()) renderFull();
+        // Restore report-appropriate rendering after the dialog closes.
+        if (effectiveDark()) renderFull();
       });
     });
   });

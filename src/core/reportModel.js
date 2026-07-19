@@ -232,6 +232,8 @@ function buildVerdict(result, fourPercentComparison) {
         + `(year-1 rate ${pct1(fourPercentComparison.userYear1Rate)} vs 4.0%).`,
       );
     }
+  } else {
+    sentences.push('Classic 4% comparison was unavailable for this simulation run.');
   }
 
   return sentences;
@@ -367,10 +369,6 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
     band,
     fan,
     depletion,
-    sequence: {
-      requiredIrr: result.returnScatter?.requiredIrr ?? null,
-      medianIrr: result.irrSummary?.median ?? null,
-    },
     fourPct: buildFourPct(fourPercentComparison),
     planBullets: buildPlanBullets(scenario || {}, goalSeekWarning),
     success: {
