@@ -123,19 +123,19 @@ describe('meanYearlyWithdrawals', () => {
 
 describe('withdrawalMetricLabels', () => {
   it('labels each metric with total as the secondary for yearly metrics', () => {
-    expect(withdrawalMetricLabels('total')).toEqual({ primary: 'Total Withdrawn', secondary: 'Median / Year' });
-    expect(withdrawalMetricLabels('medianYearly')).toEqual({ primary: 'Median / Year', secondary: 'Total Withdrawn' });
-    expect(withdrawalMetricLabels('meanYearly')).toEqual({ primary: 'Mean / Year', secondary: 'Total Withdrawn' });
+    expect(withdrawalMetricLabels('total')).toEqual({ primary: 'Total', secondary: 'Median / Year' });
+    expect(withdrawalMetricLabels('medianYearly')).toEqual({ primary: 'Median / Year', secondary: 'Total' });
+    expect(withdrawalMetricLabels('meanYearly')).toEqual({ primary: 'Mean / Year', secondary: 'Total' });
   });
 
   it('uses early-weighted primary labels when strength is above 0', () => {
     expect(withdrawalMetricLabels('total', { strengthPct: 50 })).toEqual({
       primary: 'Early-weighted Spending',
-      secondary: 'Total Withdrawn',
+      secondary: 'Total',
     });
     expect(withdrawalMetricLabels('meanYearly', { strengthPct: 50 })).toEqual({
       primary: 'Early-weighted Mean / Year',
-      secondary: 'Total Withdrawn',
+      secondary: 'Total',
     });
   });
 });

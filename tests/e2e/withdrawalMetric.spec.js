@@ -34,7 +34,7 @@ test('Auto metric switches from totals to mean/yr when a horizon range is set', 
 
   await runSimulation(page);
   await expect(page.locator('#medianWithdrawnLabel')).toHaveText('Median Total Withdrawn');
-  await expect(page.locator('#p50WdLabel')).toHaveText('Total Withdrawn');
+  await expect(page.locator('#p50WdLabel')).toHaveText('Total');
   await expect(page.locator('#outcomesDescription')).toContainText('ranked by total withdrawn');
 
   await page.fill('#horizonPlusYears', '5');

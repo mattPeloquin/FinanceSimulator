@@ -68,16 +68,43 @@ test('Charts receive the expected data arrays after a run', async ({ page }) => 
 
   // Balance over time defaults to a linear Y axis; log scale is opt-in.
   await expect(page.locator('#balanceLogScale')).not.toBeChecked();
+  await expect(page.locator('#balanceChartLegend')).toContainText('85th');
+  await expect(page.locator('#details-average-timelines > summary')).toContainText(
+    'Balance and withdrawal paths',
+  );
   const balanceMeta = await page.evaluate(() => {
     const chart = window.__TEST_HOOKS__?.balanceChart;
+    const datasets = chart?.data?.datasets || [];
     return {
       scaleType: chart?.options?.scales?.y?.type || 'linear',
-      labels: (chart?.data?.datasets || []).map((d) => d.label),
+      labels: datasets.map((d) => d.label),
+      // Uniform markers (return no longer encodes point size/shape).
+      pointRadii: datasets
+        .filter((d) => d.label !== '4% rule')
+        .map((d) => d.pointRadius),
+      pointStyles: datasets
+        .filter((d) => d.label !== '4% rule')
+        .map((d) => d.pointStyle),
+      tooltipBg: chart?.options?.plugins?.tooltip?.backgroundColor,
     };
   });
   expect(balanceMeta.scaleType).not.toBe('logarithmic');
   expect(balanceMeta.labels[0]).toMatch(/85th/);
   expect(balanceMeta.labels.some((l) => /65th/.test(l))).toBe(true);
+  expect(new Set(balanceMeta.pointRadii)).toEqual(new Set([1.5]));
+  expect(new Set(balanceMeta.pointStyles)).toEqual(new Set(['circle']));
+  expect(balanceMeta.tooltipBg).toBe('rgba(0, 0, 0, 0.8)');
+
+  // Log scale redraws the balance Y axis (not a no-op).
+  await page.locator('#details-average-timelines').evaluate((el) => { el.open = true; });
+  await page.check('#balanceLogScale');
+  await expect.poll(async () => page.evaluate(() => (
+    window.__TEST_HOOKS__?.balanceChart?.scales?.y?.type
+  ))).toBe('logarithmic');
+  await page.uncheck('#balanceLogScale');
+  await expect.poll(async () => page.evaluate(() => (
+    window.__TEST_HOOKS__?.balanceChart?.scales?.y?.type || 'linear'
+  ))).toBe('linear');
 });
 
 test('3D surface drill-down updates title and returns to overview', async ({ page }) => {

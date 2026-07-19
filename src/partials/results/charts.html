@@ -3,7 +3,10 @@
     <!-- 3D Column Chart -->
     <details id="details-surface-chart" class="group border rounded-lg" open>
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
-            <span id="surfaceChartTitle" class="min-w-0 shrink">Explore Specific Paths</span>
+            <div class="min-w-0 flex-1">
+                <span id="surfaceChartTitle" class="block">Explore Specific Paths</span>
+                <p class="text-xs font-normal text-theme-faint mt-0.5">3D sample paths by outcome percentile — click a column to inspect a run.</p>
+            </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
                 <img id="surfaceChartThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
                 <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
@@ -41,7 +44,10 @@
     <!-- Withdrawal heatmap: every run's spending per year, ranked by outcome -->
     <details id="details-withdrawal-heatmap" class="group border rounded-lg" open>
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
-            <span class="min-w-0 shrink">Withdrawal Heatmap</span>
+            <div class="min-w-0 flex-1">
+                <span class="block">Withdrawal Heatmap</span>
+                <p class="text-xs font-normal text-theme-faint mt-0.5">Year-by-year withdrawals for every run, ranked by outcome.</p>
+            </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
                 <img id="withdrawalHeatmapThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
                 <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
@@ -49,7 +55,7 @@
         </summary>
         <div class="px-4 pb-4">
             <p class="text-sm text-theme-faint mb-4">
-                View withdrawal patterns across time for all simulations. You can analyze static snapshots or animate the display to see patterns in withdrawals. Color modes compare withdrawals vs. your plan, vs. the classic flat 4% rule, vs. the median for each year, or show absolute withdrawal amounts. There is also control to visually emphasize the early years.
+                Analyze static snapshots or animate the display to see patterns in withdrawals. Color modes compare withdrawals vs. your plan, vs. the classic flat 4% rule, vs. the median for each year, or show absolute withdrawal amounts. There is also control to visually emphasize the early years.
             </p>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
                 <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color anchor">
@@ -103,7 +109,10 @@
     <!-- Sequence-risk scatter: money-weighted vs time-weighted return per path -->
     <details id="details-irr-scatter" class="group border rounded-lg" open>
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
-            <span class="min-w-0 shrink">IRR vs Average Return</span>
+            <div class="min-w-0 flex-1">
+                <span class="block">IRR vs Average Return</span>
+                <p class="text-xs font-normal text-theme-faint mt-0.5">Money-weighted vs time-weighted return per path — sequence risk at a glance.</p>
+            </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
                 <img id="irrScatterThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
                 <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
@@ -132,7 +141,10 @@
 
     <details id="details-return-distribution" class="group border rounded-lg">
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
-            <span class="min-w-0 shrink">Distribution of Real Returns</span>
+            <div class="min-w-0 flex-1">
+                <span class="block">Distribution of Real Returns</span>
+                <p class="text-xs font-normal text-theme-faint mt-0.5">How average annual returns and IRRs are distributed across simulations.</p>
+            </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
                 <img id="returnDistributionThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
                 <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>

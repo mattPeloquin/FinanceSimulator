@@ -3,6 +3,10 @@
 import { formatK, formatPercent } from '../format.js';
 import { Chart } from './chartSetup.js';
 import {
+  formatWithdrawnLine,
+  formatWithdrawalBreakdownLine,
+} from './withdrawalTooltipFormat.js';
+import {
   rankForOverviewColumn,
   buildDrilldownPaths,
   percentileLabelForRank,
@@ -286,8 +290,7 @@ function heightMetricPhrase() {
 
 function overviewDescriptionHtml() {
   return (
-    `A 3D plot of representative paths from the ${surfaceState.lowerPct}th to ${surfaceState.upperPct}th percentiles. ` +
-    `Column height represents <strong>${heightMetricPhrase()}</strong>; color reflects the <strong>annual real market return</strong> for that year (Red = crash, Green = boom). ` +
+    `Column height can represent balance or withrawal; color reflects the <strong>annual real market return</strong> for that year (Red = crash, Green = boom). ` +
     '<strong>Single-click</strong> a column to pin that simulation and mouse over each year for values; click the column again or empty space to release. ' +
     '<strong>Double-click</strong> a column to explore ~200 nearby simulations; double-click again to return.'
   );
@@ -566,36 +569,8 @@ function withdrawalPointDetails(col, dataIndex) {
 
 // A negative "withdrawal" is actually a deposit (see simulation.js); report it
 // as such rather than as a negative withdrawal amount.
-function formatWithdrawnLine(wd, unadj) {
-  if (wd < 0) return `Deposit: ${formatK(-wd)}`;
-  const delta = wd - unadj;
-  const deltaStr = delta === 0 ? '' : ` (Delta: ${delta > 0 ? '+' : ''}${formatK(delta)})`;
-  return `Withdrawn: ${formatK(wd)}${deltaStr}`;
-}
-
-// One-line attribution of non-zero components vs the original plan.
-export function formatWithdrawalBreakdownLine(breakdown) {
-  if (!breakdown || breakdown.actual < 0) return null;
-  const parts = [`Plan ${formatK(breakdown.plan)}`];
-  const components = [
-    ['Adj', breakdown.dynamicAdj],
-    ['Scale', breakdown.scaleDelta],
-    ['Gift', breakdown.gift],
-    ['Glide', breakdown.glideExtra],
-    ['Floor', breakdown.floorLift],
-    ['Event', breakdown.majorEventOutflow],
-    ['Tax', breakdown.tax],
-  ];
-  for (const [label, amount] of components) {
-    if (Math.abs(amount) > 1e-6) {
-      parts.push(`${label} ${amount > 0 ? '+' : ''}${formatK(amount)}`);
-    }
-  }
-  if (breakdown.balanceShortfall > 1e-6) {
-    parts.push(`Cap −${formatK(breakdown.balanceShortfall)}`);
-  }
-  return parts.length > 1 ? parts.join(' · ') : null;
-}
+// Re-export for existing test imports that pull formatters from this module.
+export { formatWithdrawnLine, formatWithdrawalBreakdownLine };
 
 function withdrawalDetailTailLines(details) {
   if (!details) return [];

@@ -96,6 +96,17 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#p50Irr')).toContainText('IRR');
   await expect(page.locator('#p50Irr')).toContainText('%');
 
+  // Results accordion headers carry a one-line descriptive blurb (like Investment).
+  await expect(page.locator('#details-simulation-outcomes > summary')).toContainText(
+    'Spending, returns, and ending balances',
+  );
+  await expect(page.locator('#details-plan-report > summary')).toContainText(
+    'Printable one-page summary',
+  );
+  await expect(page.locator('#details-withdrawal-heatmap > summary')).toContainText(
+    'Year-by-year withdrawals',
+  );
+
   // Return distribution tiles carry an IRR secondary value
   await page.click('summary:has-text("Distribution of Real Returns")');
   await expect(page.locator('#returnMean')).toContainText('%');

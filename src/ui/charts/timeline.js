@@ -1,8 +1,13 @@
 // Balance and withdrawal timeline charts across the tracked percentiles.
 import { Chart } from './chartSetup.js';
 import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip, percentileColors } from './chartTheme.js';
+import {
+  getChartTheme,
+  percentileColors,
+  sampleRunTooltipOptions,
+} from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
+import { formatWithdrawnLine } from './withdrawalTooltipFormat.js';
 
 function getColors() {
   return percentileColors(isDarkMode());
@@ -27,6 +32,8 @@ let balanceLogControlWired = false;
 
 const CLASSIC_SERIES_LABEL = '4% rule';
 const BALANCE_LOG_STORAGE_KEY = 'sor:ui-balance-log-scale';
+const POINT_RADIUS = 1.5;
+const POINT_HOVER_RADIUS = 3;
 
 // Absolute floor for the log axis (Chart.js cannot plot ≤ 0).
 const BALANCE_LOG_HARD_MIN = 1000;
@@ -47,6 +54,18 @@ function restoreBalanceLogScaleControl() {
   }
 }
 
+function redrawTimelineCharts() {
+  if (!lastPercentiles) return;
+  drawTimelineCharts(lastPercentiles, lastNumYears, {
+    classicMedianPath: lastClassicMedianPath,
+  });
+}
+
+function resizeTimelineCharts() {
+  balanceChart?.resize();
+  withdrawalChart?.resize();
+}
+
 /** Wire the log-scale checkbox once; redraws when toggled. */
 export function setupBalanceLogScaleControl() {
   if (balanceLogControlWired) return;
@@ -58,11 +77,12 @@ export function setupBalanceLogScaleControl() {
     try {
       localStorage.setItem(BALANCE_LOG_STORAGE_KEY, el.checked ? '1' : '0');
     } catch { /* ignore quota / private mode */ }
-    if (lastPercentiles) {
-      drawTimelineCharts(lastPercentiles, lastNumYears, {
-        classicMedianPath: lastClassicMedianPath,
-      });
-    }
+    redrawTimelineCharts();
+  });
+  // Charts are often first drawn while this <details> is closed; resize when opened
+  // so the canvas matches the visible layout (and log toggles paint correctly).
+  document.getElementById('details-average-timelines')?.addEventListener('toggle', (ev) => {
+    if (ev.target.open) resizeTimelineCharts();
   });
 }
 
@@ -85,11 +105,64 @@ export function niceBalanceLogFloor(startBalance) {
   return Math.max(BALANCE_LOG_HARD_MIN, nice);
 }
 
-function pathDataset(label, pathObj, color, values, returnOffset) {
-  const returnAt = (dataIndex) => {
-    if (!pathObj.returns || dataIndex + returnOffset < 0) return null;
-    return pathObj.returns[dataIndex + returnOffset];
+/**
+ * Point details for Average Timelines tooltips.
+ * @param {'balance'|'withdrawal'} kind
+ */
+export function timelinePointDetails(path, dataIndex, kind) {
+  if (!path) return null;
+  if (kind === 'balance') {
+    const bal = path.balances?.[dataIndex];
+    if (bal == null || Number.isNaN(bal)) return null;
+    if (dataIndex === 0) return { bal, wd: null, unadj: null, ret: null };
+    const wdIdx = dataIndex - 1;
+    return {
+      bal,
+      wd: path.withdrawals?.[wdIdx] ?? null,
+      unadj: path.unadjustedWithdrawals?.[wdIdx] ?? 0,
+      ret: path.returns?.[wdIdx] ?? null,
+    };
+  }
+  const wd = path.withdrawals?.[dataIndex];
+  if (wd == null || Number.isNaN(wd)) return null;
+  return {
+    wd,
+    unadj: path.unadjustedWithdrawals?.[dataIndex] ?? 0,
+    bal: path.balances?.[dataIndex + 1] ?? null,
+    ret: path.returns?.[dataIndex] ?? null,
   };
+}
+
+function timelineTooltipCallbacks(kind) {
+  return {
+    title: (items) => {
+      if (!items[0]) return null;
+      return `${items[0].dataset.label} · ${items[0].label}`;
+    },
+    afterTitle: (items) => {
+      if (!items[0]) return [];
+      const details = timelinePointDetails(items[0].dataset._pathObj, items[0].dataIndex, kind);
+      if (!details || details.wd == null) return [];
+      return [formatWithdrawnLine(details.wd, details.unadj)];
+    },
+    label: () => null,
+    afterBody: (items) => {
+      if (!items[0]) return [];
+      const details = timelinePointDetails(items[0].dataset._pathObj, items[0].dataIndex, kind);
+      if (!details) return [];
+      const lines = [];
+      if (details.bal != null && !Number.isNaN(details.bal)) {
+        lines.push(`Balance: ${formatK(details.bal)}`);
+      }
+      if (details.ret != null && !Number.isNaN(details.ret)) {
+        lines.push(`Market Return: ${(details.ret * 100).toFixed(1)}%`);
+      }
+      return lines;
+    },
+  };
+}
+
+function pathDataset(label, pathObj, color, values) {
   return {
     label,
     data: values,
@@ -99,52 +172,78 @@ function pathDataset(label, pathObj, color, values, returnOffset) {
     borderWidth: 1,
     tension: 0.1,
     fill: false,
-    pointBackgroundColor: color + '4D',
+    pointBackgroundColor: color,
+    pointBorderColor: color,
     pointBorderWidth: 0,
-    pointStyle: (ctx) => {
-      const r = returnAt(ctx.dataIndex);
-      return r == null || r >= 0 ? 'circle' : 'triangle';
-    },
-    pointRotation: (ctx) => {
-      const r = returnAt(ctx.dataIndex);
-      return r != null && r < 0 ? 180 : 0;
-    },
-    pointRadius: (ctx) => {
-      const r = returnAt(ctx.dataIndex);
-      return r == null ? 3 : 2 + Math.abs(r) * 10;
-    },
+    pointStyle: 'circle',
+    pointRadius: POINT_RADIUS,
+    pointHoverRadius: POINT_HOVER_RADIUS,
   };
 }
 
+function fillBalanceLegend(datasets) {
+  const el = document.getElementById('balanceChartLegend');
+  if (!el) return;
+  el.replaceChildren();
+  for (const ds of datasets) {
+    const item = document.createElement('span');
+    item.className = 'inline-flex items-center gap-1 whitespace-nowrap';
+    const swatch = document.createElement('span');
+    swatch.className = 'inline-block w-3.5 shrink-0';
+    swatch.style.height = '2px';
+    swatch.style.backgroundColor = ds.borderColor;
+    if (Array.isArray(ds.borderDash) && ds.borderDash.length) {
+      swatch.style.backgroundImage =
+        `repeating-linear-gradient(90deg, ${ds.borderColor} 0 4px, transparent 4px 7px)`;
+      swatch.style.backgroundColor = 'transparent';
+    }
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(ds.label));
+    el.appendChild(item);
+  }
+}
+
 function axisScale(theme, extra = {}) {
-  const titleFont = { weight: 'bold', size: 12, ...extra.title?.font };
+  const { title: titleExtra, ticks: ticksExtra, grid: gridExtra, ...rest } = extra;
+  const titleFont = { weight: 'bold', size: 12, ...titleExtra?.font };
   return {
-    ticks: { color: theme.axisTick, ...extra.ticks },
+    ...rest,
+    ticks: { color: theme.axisTick, ...ticksExtra },
     title: {
-      display: extra.title?.display ?? extra.title?.text != null,
+      display: titleExtra?.display ?? titleExtra?.text != null,
       color: theme.axisTitle,
-      ...extra.title,
+      ...titleExtra,
       font: titleFont,
     },
-    grid: { color: theme.gridLine, ...extra.grid },
-    ...extra,
+    grid: { color: theme.gridLine, ...gridExtra },
+  };
+}
+
+function sharedChartChrome(theme, kind) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'nearest', intersect: true },
+    plugins: {
+      legend: { display: false },
+      tooltip: sampleRunTooltipOptions(timelineTooltipCallbacks(kind)),
+    },
   };
 }
 
 function buildBalanceOptions(useLog, logFloor, theme) {
   const yScale = useLog
-    ? {
+    ? axisScale(theme, {
         type: 'logarithmic',
         min: logFloor,
-        ...axisScale(theme, {
-          title: {
-            display: true,
-            text: 'Portfolio balance ($000s)',
-            color: theme.axisName,
-          },
-          ticks: { callback: (v) => formatK(v) },
-        }),
-      }
+        beginAtZero: false,
+        title: {
+          display: true,
+          text: 'Portfolio balance ($000s)',
+          color: theme.axisName,
+        },
+        ticks: { callback: (v) => formatK(v) },
+      })
     : axisScale(theme, {
         beginAtZero: true,
         min: 0,
@@ -157,8 +256,7 @@ function buildBalanceOptions(useLog, logFloor, theme) {
       });
 
   return {
-    responsive: true,
-    maintainAspectRatio: false,
+    ...sharedChartChrome(theme, 'balance'),
     scales: {
       x: axisScale(theme, {
         ticks: { display: false },
@@ -167,31 +265,12 @@ function buildBalanceOptions(useLog, logFloor, theme) {
       }),
       y: yScale,
     },
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: { color: theme.legend, boxWidth: 14, boxHeight: 2, font: { size: 10 } },
-      },
-      tooltip: {
-        ...chartJsTooltip(theme),
-        callbacks: {
-          label: (ctx) => {
-            const ds = ctx.dataset;
-            const actual = ds._pathObj.balances[ctx.dataIndex];
-            if (ctx.dataIndex === 0) return `${ds.label}: ${formatK(actual)}`;
-            const ret = ds._pathObj.returns[ctx.dataIndex - 1];
-            return `${ds.label}: ${formatK(actual)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
-          },
-        },
-      },
-    },
   };
 }
 
 function buildWithdrawalOptions(theme) {
   return {
-    responsive: true,
-    maintainAspectRatio: false,
+    ...sharedChartChrome(theme, 'withdrawal'),
     scales: {
       x: axisScale(theme),
       y: axisScale(theme, {
@@ -201,30 +280,16 @@ function buildWithdrawalOptions(theme) {
         ticks: { callback: (v) => formatK(v) },
       }),
     },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        ...chartJsTooltip(theme),
-        callbacks: {
-          label: (ctx) => {
-            const ds = ctx.dataset;
-            const ret = ds._pathObj?.returns?.[ctx.dataIndex];
-            if (ret == null) return `${ds.label}: ${formatK(ctx.raw)}`;
-            return `${ds.label}: ${formatK(ctx.raw)} (Nominal Return: ${(ret * 100).toFixed(1)}%)`;
-          },
-        },
-      },
-    },
   };
 }
 
-function classicOverlayDataset(path, color, values, returnOffset) {
+function classicOverlayDataset(path, color, values) {
   return {
-    ...pathDataset(CLASSIC_SERIES_LABEL, path, color, values, returnOffset),
+    ...pathDataset(CLASSIC_SERIES_LABEL, path, color, values),
     borderDash: [6, 4],
     borderWidth: 1,
     pointRadius: 0,
-    pointHoverRadius: 3,
+    pointHoverRadius: POINT_HOVER_RADIUS,
     order: 0,
   };
 }
@@ -243,13 +308,16 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
   const theme = getChartTheme();
   const COLORS = getColors();
   const classicColor = theme.planLine;
+  // Log axes cannot plot ≤ 0 or NaN (horizon padding); clamp / drop those points.
   const balanceValues = (balances) => (
-    useLog ? balances.map((b) => Math.max(logFloor, b)) : balances.slice()
+    useLog
+      ? balances.map((b) => (Number.isFinite(b) ? Math.max(logFloor, b) : null))
+      : balances.slice()
   );
 
   const balanceDatasets = SERIES.map((s) => {
     const path = percentiles[s.key].path;
-    return pathDataset(s.label, path, COLORS[s.key], balanceValues(path.balances), -1);
+    return pathDataset(s.label, path, COLORS[s.key], balanceValues(path.balances));
   });
   if (classicMedianPath?.balances) {
     balanceDatasets.push(
@@ -257,10 +325,10 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
         classicMedianPath,
         classicColor,
         balanceValues(classicMedianPath.balances),
-        -1,
       ),
     );
   }
+  fillBalanceLegend(balanceDatasets);
 
   const balanceCtx = document.getElementById('balanceChart').getContext('2d');
   if (balanceChart) balanceChart.destroy();
@@ -278,7 +346,7 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
   const clampWithdrawals = (values) => values.map((v) => Math.max(0, v));
   const withdrawalDatasets = SERIES.map((s) => {
     const path = percentiles[s.key].path;
-    return pathDataset(s.label, path, COLORS[s.key], clampWithdrawals(path.withdrawals), 0);
+    return pathDataset(s.label, path, COLORS[s.key], clampWithdrawals(path.withdrawals));
   });
   if (classicMedianPath?.withdrawals) {
     withdrawalDatasets.push(
@@ -286,7 +354,6 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
         classicMedianPath,
         classicColor,
         clampWithdrawals(classicMedianPath.withdrawals),
-        0,
       ),
     );
   }

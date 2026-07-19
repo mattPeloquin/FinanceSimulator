@@ -270,6 +270,9 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
   const balances = new Array(maxLen).fill(0);
   const withdrawals = new Array(numYearsInPath).fill(0);
   const returns = new Array(numYearsInPath).fill(0);
+  // Averaged original plan (before dynamic adjustments) for the same years —
+  // used by Average Timelines tooltips as "vs plan".
+  const unadjustedWithdrawals = new Array(numYearsInPath).fill(0);
   const weightByYearBal = new Array(maxLen).fill(0);
   const weightByYearWd = new Array(numYearsInPath).fill(0);
 
@@ -282,6 +285,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
     for (let t = 0; t < p.withdrawals.length; t++) {
       withdrawals[t] += e.w * p.withdrawals[t];
       returns[t] += e.w * p.returns[t];
+      unadjustedWithdrawals[t] += e.w * (p.unadjustedWithdrawals?.[t] ?? 0);
       weightByYearWd[t] += e.w;
     }
   }
@@ -293,6 +297,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
     if (weightByYearWd[t] > 0) {
       withdrawals[t] /= weightByYearWd[t];
       returns[t] /= weightByYearWd[t];
+      unadjustedWithdrawals[t] /= weightByYearWd[t];
     }
   }
 
@@ -312,7 +317,7 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
       balances,
       withdrawals,
       returns,
-      unadjustedWithdrawals: entries[0]?.path.unadjustedWithdrawals ?? [],
+      unadjustedWithdrawals,
     },
     windowCount: hi - lo + 1,
   };

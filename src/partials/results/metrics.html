@@ -68,10 +68,13 @@
 
 <details id="details-simulation-outcomes" class="group border rounded-lg" open>
     <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
-        <span class="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-            Simulation Outcomes
-            <span id="outcomesTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span>
-        </span>
+        <div class="min-w-0 flex-1">
+            <span class="flex items-center gap-2 flex-wrap">
+                Simulation Outcomes
+                <span id="outcomesTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span>
+            </span>
+            <p class="text-xs font-normal text-theme-faint mt-0.5">Spending, returns, and ending balances for the 10th–60th percentile paths.</p>
+        </div>
         <div id="outcomesSectionState" class="w-max max-w-[40%] shrink-0 text-right text-[10px] font-normal text-theme-body leading-snug whitespace-pre-line line-clamp-2 rounded-md border border-theme-accent/40 bg-theme-accent-subtle px-3 py-2 shadow-sm group-open:hidden"></div>
         <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
     </summary>
@@ -85,7 +88,7 @@
             <div class="text-xs font-bold text-theme-p10 mb-3 text-center">10th % (Cautionary)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p10WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p10WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p10Wd" class="text-xl font-bold text-theme-heading"></div>
                     <div id="p10Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -119,7 +122,7 @@
             <div class="text-xs font-bold text-theme-p20 mb-3 text-center">20th % (Weak)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p20WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p20WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p20Wd" class="text-xl font-bold text-theme-heading"></div>
                     <div id="p20Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -153,7 +156,7 @@
             <div class="text-xs font-bold text-theme-p30 mb-3 text-center">30th % (Below Avg)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p30WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p30WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p30Wd" class="text-xl font-bold text-theme-heading"></div>
                     <div id="p30Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -187,7 +190,7 @@
             <div class="text-xs font-bold text-theme-p40 mb-3 text-center">40th % (Avg)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p40WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p40WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p40Wd" class="text-xl font-bold text-theme-heading"></div>
                     <div id="p40Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -222,7 +225,7 @@
             <div class="text-xs font-bold text-theme-p50 mb-3 mt-1 text-center">50th % (Expected)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p50WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p50WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p50Wd" class="text-xl font-bold text-theme-accent-text"></div>
                     <div id="p50Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -256,7 +259,7 @@
             <div class="text-xs font-bold text-theme-p60 mb-3 text-center">60th % (Above Avg)</div>
             <div class="space-y-3">
                 <div class="text-center">
-                    <div id="p60WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total Withdrawn</div>
+                    <div id="p60WdLabel" class="text-[10px] uppercase tracking-wider text-theme-faint">Total</div>
                     <div id="p60Wd" class="text-xl font-bold text-theme-heading"></div>
                     <div id="p60Delta" class="text-xs font-semibold" title="Difference from the planned withdrawal total"></div>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -289,7 +292,10 @@
 
     <details id="details-average-timelines" class="group border rounded-lg">
         <summary class="cursor-pointer select-none px-3 py-2.5 font-semibold text-theme-body flex items-center gap-3">
-            <span class="min-w-0 flex-1 text-sm">Average Timelines</span>
+            <div class="min-w-0 flex-1">
+                <span class="block text-sm">Average Timelines</span>
+                <p class="text-xs font-normal text-theme-faint mt-0.5">Balance and withdrawal paths for the 85th through 5th percentiles.</p>
+            </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
                 <img id="averageTimelinesThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
                 <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
@@ -297,8 +303,8 @@
         </summary>
         <div class="px-3 pb-3 space-y-4">
             <div>
-                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2">
-                    <p class="text-xs text-theme-faint min-w-0 flex-1">Portfolio balance for the 85th through 5th percentile paths. Point size and shape reflect each year's real return.</p>
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-1">
+                    <div id="balanceChartLegend" class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 flex-1 text-[10px] text-theme-muted"></div>
                     <label for="balanceLogScale" class="inline-flex items-center gap-1.5 text-xs text-theme-faint shrink-0 cursor-pointer select-none">
                         <input type="checkbox" id="balanceLogScale" class="h-3.5 w-3.5 rounded input-theme">
                         Log scale
@@ -309,7 +315,6 @@
                 </div>
             </div>
             <div>
-                <p class="text-xs text-theme-faint mb-2">Dynamic withdrawals for the 85th through 5th percentile paths. Point size and shape reflect each year's real return.</p>
                 <div class="h-56 w-full relative">
                     <canvas id="withdrawalChart"></canvas>
                 </div>

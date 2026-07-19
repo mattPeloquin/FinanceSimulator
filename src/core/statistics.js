@@ -68,13 +68,13 @@ export function resolveEarlyWeighting({
 export function withdrawalMetricLabels(metric, weighting = null) {
   if (isEarlyWeightingActive(weighting)) {
     if (isMeanYearlyMetric(metric)) {
-      return { primary: 'Early-weighted Mean / Year', secondary: 'Total Withdrawn' };
+      return { primary: 'Early-weighted Mean / Year', secondary: 'Total' };
     }
-    return { primary: 'Early-weighted Spending', secondary: 'Total Withdrawn' };
+    return { primary: 'Early-weighted Spending', secondary: 'Total' };
   }
-  if (isMedianYearlyMetric(metric)) return { primary: 'Median / Year', secondary: 'Total Withdrawn' };
-  if (isMeanYearlyMetric(metric)) return { primary: 'Mean / Year', secondary: 'Total Withdrawn' };
-  return { primary: 'Total Withdrawn', secondary: 'Median / Year' };
+  if (isMedianYearlyMetric(metric)) return { primary: 'Median / Year', secondary: 'Total' };
+  if (isMeanYearlyMetric(metric)) return { primary: 'Mean / Year', secondary: 'Total' };
+  return { primary: 'Total', secondary: 'Median / Year' };
 }
 
 // Per-run mean yearly withdrawal — the horizon-normalized lifetime total, so

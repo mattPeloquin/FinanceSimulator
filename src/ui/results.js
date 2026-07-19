@@ -52,6 +52,13 @@ const METRIC_SHORT_LABELS = {
   meanYearly: 'Mean / Year',
 };
 
+// Shorter labels on the six Simulation Outcomes cards (primary/secondary).
+const OUTCOME_METRIC_SHORT_LABELS = {
+  total: 'Total',
+  medianYearly: 'Median / Year',
+  meanYearly: 'Mean / Year',
+};
+
 // Show how far a percentile's withdrawals landed from the planned schedule:
 // green = withdrew more than planned, red = fell short of the plan.
 function setDelta(id, delta) {
@@ -209,8 +216,8 @@ function applyMetricLabels(metric, horizonVariable, weighting = null, { taxActiv
         : 'Difference from the planned withdrawal total';
   for (const key of PERCENTILE_KEYS) {
     setText(`${key}WdLabel`, primary);
-    setText(`${key}WdSecondaryLabel`, METRIC_SHORT_LABELS[secondary1]);
-    setText(`${key}WdSecondary2Label`, METRIC_SHORT_LABELS[secondary2]);
+    setText(`${key}WdSecondaryLabel`, OUTCOME_METRIC_SHORT_LABELS[secondary1]);
+    setText(`${key}WdSecondary2Label`, OUTCOME_METRIC_SHORT_LABELS[secondary2]);
     const deltaEl = document.getElementById(`${key}Delta`);
     if (deltaEl) deltaEl.title = deltaTitle;
   }
