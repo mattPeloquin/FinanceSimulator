@@ -77,12 +77,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   const fourPercentVerdict = page.locator('#fourPercentVerdict');
   await expect(fourPercentVerdict).toBeVisible();
   await expect(fourPercentVerdict).toContainText(/Vs classic 4% rule/i);
-  await expect(page.locator('#fourPercentVerdictHeadline')).toContainText(/Total Withdrawal/);
-  await expect(page.locator('#fourPercentVerdictBody')).toContainText(/Delta unspent/);
-
-  // The charts inside <details> blocks render with 0 height until opened
-  // Let's open the details block containing the charts
-  await page.click('summary:has-text("Average Timelines")');
+  await expect(page.locator('#fourPercentVerdictHeadline')).toContainText(/Median withdrawn/);
+  await expect(page.locator('#fourPercentVerdictBody')).toContainText(/Spending delta|Delta unspent/);
 
   // Wait for specific text elements to populate
   // Success rates are whole percents only (no tenths — false precision).
@@ -147,10 +143,13 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Combined success card and Median End Balance IRR
   await expect(page.locator('#medianIrr')).toContainText('%');
 
-  // IRR distribution histogram at the end of the section
+  // Chart canvases sit inside closed-by-default <details>; open the ones we assert.
+  await page.locator('#details-return-distribution').evaluate((el) => { el.open = true; });
   await expect(page.locator('#irrChart')).toBeVisible();
 
-  // Verify that canvases are rendered
+  await page.locator('#details-simulation-outcomes').evaluate((el) => { el.open = true; });
+  await page.locator('#details-average-timelines').evaluate((el) => { el.open = true; });
+
   const balanceChart = page.locator('#balanceChart');
   await expect(balanceChart).toBeVisible();
 

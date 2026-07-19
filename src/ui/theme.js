@@ -46,7 +46,8 @@ export const themeTokens = {
     p40: { light: '101 163 13', dark: '132 204 22' },
     p50: { light: '22 163 74', dark: '74 222 128' },
     p60: { light: '13 148 136', dark: '45 212 191' },
-    p65: { light: '13 148 136', dark: '45 212 191' },
+    p65: { light: '14 165 233', dark: '56 189 248' },
+    p85: { light: '37 99 235', dark: '96 165 250' },
   },
 
   // Cohesive blue→teal→green family — deeper/richer (not chalky), similar

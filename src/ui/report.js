@@ -239,6 +239,17 @@ function ensureRendered() {
   if (dirty || key !== renderedForKey) renderFull();
 }
 
+/** Paint the report using the app's current light/dark mode (for thumbs). */
+export function ensureReportPainted() {
+  if (!lastRun) return;
+  const previousOverride = themeOverride;
+  themeOverride = null;
+  applyThemeOverrideClass();
+  renderFull();
+  themeOverride = previousOverride;
+  applyThemeOverrideClass();
+}
+
 export function onNewRun(run) {
   lastRun = run;
   dirty = true;

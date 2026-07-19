@@ -87,6 +87,11 @@ describe('buildRunResult returnScatter', () => {
     expect(Number.isFinite(packaged.irrSummary.median)).toBe(true);
   });
 
+  it('packages an 85th percentile path for Average Timelines', () => {
+    expect(packaged.percentiles.p85).toBeTruthy();
+    expect(packaged.percentiles.p85.path?.balances?.length).toBeGreaterThan(0);
+  });
+
   it('builds an IRR histogram covering every simulation', () => {
     expect(packaged.irrHistogram.bins.length).toBeGreaterThan(0);
     const counted = packaged.irrHistogram.bins.reduce((a, b) => a + b, 0);

@@ -1874,16 +1874,37 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
 
   if (!window.__sorSurfaceResizeBound) {
     window.addEventListener('resize', () => {
-      if (!chartInstance) return;
-      // setOption alone doesn't move an already-initialized orbit camera;
-      // grid3DChangeCamera is the action that actually updates the live view.
-      chartInstance.dispatchAction({
-        type: 'grid3DChangeCamera',
-        distance: computeCameraDistance(dom),
-      });
-      chartInstance.resize();
+      resizeSurfaceChart();
     });
     window.__sorSurfaceResizeBound = true;
+  }
+}
+
+/** Resize the surface after its host accordion opens or the window changes. */
+export function resizeSurfaceChart() {
+  if (!chartInstance) return;
+  const dom = document.getElementById('surfaceChart');
+  if (!dom) return;
+  // setOption alone doesn't move an already-initialized orbit camera;
+  // grid3DChangeCamera is the action that actually updates the live view.
+  chartInstance.dispatchAction({
+    type: 'grid3DChangeCamera',
+    distance: computeCameraDistance(dom),
+  });
+  chartInstance.resize();
+}
+
+/** PNG data URL for accordion thumbnails; null if the chart is not ready. */
+export function getSurfaceChartDataURL({ pixelRatio = 1, backgroundColor = 'transparent' } = {}) {
+  if (!chartInstance) return null;
+  try {
+    return chartInstance.getDataURL({
+      type: 'png',
+      pixelRatio,
+      backgroundColor,
+    });
+  } catch {
+    return null;
   }
 }
 

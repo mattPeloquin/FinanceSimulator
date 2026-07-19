@@ -113,7 +113,7 @@ export function balanceFanSeries(balancePercentiles, pLow, pHigh) {
   };
 }
 
-function allocationSummary(scenario) {
+export function allocationSummary(scenario) {
   let stocks = 0;
   let bondCash = 0;
   for (const key of STOCK_ALLOCATION_KEYS) stocks += Number(scenario[key]) || 0;

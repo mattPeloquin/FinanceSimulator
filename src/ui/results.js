@@ -6,6 +6,17 @@ import { drawIrrScatter } from './charts/irrScatter.js';
 import { drawWithdrawalHeatmap } from './charts/withdrawalHeatmap.js';
 import { drawSurfaceChart } from './charts/surface3d.js';
 import {
+  withChartDetailsLaidOut,
+  captureHeatmapThumb,
+  captureIrrScatterThumb,
+  captureSurfaceThumb,
+  captureTimelinesThumb,
+  captureDistributionThumb,
+  captureReportThumb,
+} from './charts/chartThumbs.js';
+import { ensureReportPainted } from './report.js';
+import { syncOutcomesSectionState } from './sectionSummaries.js';
+import {
   isMedianYearlyMetric,
   isMeanYearlyMetric,
   isEarlyWeightingActive,
@@ -386,11 +397,12 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
     result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 0),
   );
   setNoteVisible('onPlanTaxNote', taxActive);
+
+  const [secondarySlot1, secondarySlot2] = secondaryMetricSlots(metric);
   setText('medianBalance', formatK(result.medianBalance));
   setNoteVisible('medianBalanceTaxNote', feeOrTaxActive);
   setText('medianReturn', formatPercent(result.returnSummary.median));
   setText('medianIrr', formatPercent(result.irrSummary.median) || '—');
-  const [secondarySlot1, secondarySlot2] = secondaryMetricSlots(metric);
   setText('medianWithdrawn', formatK(medianActual));
   setNoteVisible(
     'medianWithdrawnGrossNote',
@@ -427,6 +439,10 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
     taxActive,
     taxActive ? preTaxWithdrawalNote(plannedGrossValues[secondarySlot2]) : '',
   );
+  let outcomesTotalMin = Infinity;
+  let outcomesTotalMax = -Infinity;
+  let outcomesMeanMin = Infinity;
+  let outcomesMeanMax = -Infinity;
   for (const key of PERCENTILE_KEYS) {
     const p = result.percentiles[key];
     const metricValues = percentileSpendingValues(p, { taxActive });
@@ -445,10 +461,19 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
     setEndYear(`${key}EndYear`, p.path.balances, result.numYears, p.horizonYears);
     setText(`${key}Ret`, formatPercent(p.avgReturn));
     setText(`${key}Irr`, `IRR ${formatPercent(p.irr) || '—'}`);
+    outcomesTotalMin = Math.min(outcomesTotalMin, metricValues.total);
+    outcomesTotalMax = Math.max(outcomesTotalMax, metricValues.total);
+    outcomesMeanMin = Math.min(outcomesMeanMin, metricValues.meanYearly);
+    outcomesMeanMax = Math.max(outcomesMeanMax, metricValues.meanYearly);
   }
+  syncOutcomesSectionState({
+    totalMin: outcomesTotalMin,
+    totalMax: outcomesTotalMax,
+    meanMin: outcomesMeanMin,
+    meanMax: outcomesMeanMax,
+  });
 
   const classicMedianPath = classicResult?.percentiles?.p50?.path ?? null;
-  drawTimelineCharts(result.percentiles, chartYears, { classicMedianPath });
 
   const rs = result.returnSummary;
   setText('returnMean', formatPercent(rs.mean));
@@ -464,35 +489,50 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   setText('returnMaxIrr', formatPercent(irs.max) || '—');
   setText('returnStdDevIrr', formatPercent(irs.stdDev) || '—');
 
-  drawDistributionChart(result.histogram, result.returnSummary);
-  drawIrrScatter(result.returnScatter, { params, seed: result.seed, meta: result.surfaceMeta });
-  drawWithdrawalHeatmap(result.withdrawalHeatmap, {
-    params,
-    seed: result.seed,
-    outcome: result.returnScatter.outcome,
-  });
-
   const ay = result.allYearsSummary;
   setText('allYearsMean', formatPercent(ay.mean));
   setText('allYearsMedian', formatPercent(ay.median));
   setText('allYearsMin', formatPercent(ay.min));
   setText('allYearsMax', formatPercent(ay.max));
   setText('allYearsStdDev', formatPercent(ay.stdDev));
-  drawAllYearsDistributionChart(result.allYearsHistogram, result.allYearsSummary);
-  drawIrrDistributionChart(result.irrHistogram, result.irrSummary);
 
-  // 3D chart loads its heavy libs lazily; don't block the rest of the render.
-  drawSurfaceChart(result.surfacePaths, chartYears, {
-    params,
-    seed: result.seed,
-    surfaceMeta: result.surfaceMeta,
-    shortfallTolerance: result.shortfallTolerance ?? 0.05,
-    plannedWithdrawn: result.plannedWithdrawn,
-    plannedMedianYearly: result.plannedMedianYearly,
-    onPlanBenchmark: plannedBenchmark,
-    withdrawalMetric: result.withdrawalMetric ?? 'total',
-    horizonVariable: !!result.horizonVariable,
-  }).catch((err) => {
-    console.error('3D chart failed to render:', err);
+  // Open chart accordions briefly if collapsed so canvases lay out, draw, then
+  // snapshot thumbs for the closed summaries.
+  return withChartDetailsLaidOut(async () => {
+    drawTimelineCharts(result.percentiles, chartYears, { classicMedianPath });
+    captureTimelinesThumb();
+    drawDistributionChart(result.histogram, result.returnSummary);
+    drawAllYearsDistributionChart(result.allYearsHistogram, result.allYearsSummary);
+    drawIrrDistributionChart(result.irrHistogram, result.irrSummary);
+    // Chart.js may still be at 0×0 until after a layout frame inside the open details.
+    await new Promise((r) => requestAnimationFrame(r));
+    captureDistributionThumb();
+    drawIrrScatter(result.returnScatter, { params, seed: result.seed, meta: result.surfaceMeta });
+    captureIrrScatterThumb();
+    drawWithdrawalHeatmap(result.withdrawalHeatmap, {
+      params,
+      seed: result.seed,
+      outcome: result.returnScatter.outcome,
+    });
+    captureHeatmapThumb();
+    ensureReportPainted();
+    await new Promise((r) => requestAnimationFrame(r));
+    captureReportThumb();
+    try {
+      await drawSurfaceChart(result.surfacePaths, chartYears, {
+        params,
+        seed: result.seed,
+        surfaceMeta: result.surfaceMeta,
+        shortfallTolerance: result.shortfallTolerance ?? 0.05,
+        plannedWithdrawn: result.plannedWithdrawn,
+        plannedMedianYearly: result.plannedMedianYearly,
+        onPlanBenchmark: plannedBenchmark,
+        withdrawalMetric: result.withdrawalMetric ?? 'total',
+        horizonVariable: !!result.horizonVariable,
+      });
+      await captureSurfaceThumb();
+    } catch (err) {
+      console.error('3D chart failed to render:', err);
+    }
   });
 }

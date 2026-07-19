@@ -8,6 +8,7 @@ function getColors() {
   return percentileColors(isDarkMode());
 }
 const SERIES = [
+  { key: 'p85', label: '85th % (Strong)' },
   { key: 'p65', label: '65th % (Above Avg)' },
   { key: 'p50', label: '50th % (Median)' },
   { key: 'p40', label: '40th % (Avg)' },
@@ -22,11 +23,48 @@ let withdrawalChart = null;
 let lastPercentiles = null;
 let lastNumYears = 0;
 let lastClassicMedianPath = null;
+let balanceLogControlWired = false;
 
 const CLASSIC_SERIES_LABEL = '4% rule';
+const BALANCE_LOG_STORAGE_KEY = 'sor:ui-balance-log-scale';
 
 // Absolute floor for the log axis (Chart.js cannot plot ≤ 0).
 const BALANCE_LOG_HARD_MIN = 1000;
+
+/** Read the Balance over time log-scale checkbox (defaults off). */
+export function isBalanceLogScaleEnabled() {
+  const el = document.getElementById('balanceLogScale');
+  return Boolean(el?.checked);
+}
+
+function restoreBalanceLogScaleControl() {
+  const el = document.getElementById('balanceLogScale');
+  if (!el) return;
+  try {
+    el.checked = localStorage.getItem(BALANCE_LOG_STORAGE_KEY) === '1';
+  } catch {
+    el.checked = false;
+  }
+}
+
+/** Wire the log-scale checkbox once; redraws when toggled. */
+export function setupBalanceLogScaleControl() {
+  if (balanceLogControlWired) return;
+  const el = document.getElementById('balanceLogScale');
+  if (!el) return;
+  balanceLogControlWired = true;
+  restoreBalanceLogScaleControl();
+  el.addEventListener('change', () => {
+    try {
+      localStorage.setItem(BALANCE_LOG_STORAGE_KEY, el.checked ? '1' : '0');
+    } catch { /* ignore quota / private mode */ }
+    if (lastPercentiles) {
+      drawTimelineCharts(lastPercentiles, lastNumYears, {
+        classicMedianPath: lastClassicMedianPath,
+      });
+    }
+  });
+}
 
 // Log-axis floor near start÷10, snapped down to a 1–2–2.5–5 "nice" dollar
 // amount so tick labels stay clean without leaving two empty decades under start.
@@ -93,17 +131,9 @@ function axisScale(theme, extra = {}) {
   };
 }
 
-function buildBalanceOptions(logFloor, theme) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: axisScale(theme, {
-        ticks: { display: false },
-        grid: { display: false },
-        title: { display: false },
-      }),
-      y: {
+function buildBalanceOptions(useLog, logFloor, theme) {
+  const yScale = useLog
+    ? {
         type: 'logarithmic',
         min: logFloor,
         ...axisScale(theme, {
@@ -114,7 +144,28 @@ function buildBalanceOptions(logFloor, theme) {
           },
           ticks: { callback: (v) => formatK(v) },
         }),
-      },
+      }
+    : axisScale(theme, {
+        beginAtZero: true,
+        min: 0,
+        title: {
+          display: true,
+          text: 'Portfolio balance ($000s)',
+          color: theme.axisName,
+        },
+        ticks: { callback: (v) => formatK(v) },
+      });
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: axisScale(theme, {
+        ticks: { display: false },
+        grid: { display: false },
+        title: { display: false },
+      }),
+      y: yScale,
     },
     plugins: {
       legend: {
@@ -187,21 +238,25 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
   const withdrawalLabels = Array.from({ length: numYears }, (_, i) => `Year ${i + 1}`);
 
   const startBalance = percentiles.p50?.path?.balances?.[0] ?? 0;
-  const logFloor = niceBalanceLogFloor(startBalance);
+  const useLog = isBalanceLogScaleEnabled();
+  const logFloor = useLog ? niceBalanceLogFloor(startBalance) : 0;
   const theme = getChartTheme();
   const COLORS = getColors();
   const classicColor = theme.planLine;
+  const balanceValues = (balances) => (
+    useLog ? balances.map((b) => Math.max(logFloor, b)) : balances.slice()
+  );
 
   const balanceDatasets = SERIES.map((s) => {
     const path = percentiles[s.key].path;
-    return pathDataset(s.label, path, COLORS[s.key], path.balances.map((b) => Math.max(logFloor, b)), -1);
+    return pathDataset(s.label, path, COLORS[s.key], balanceValues(path.balances), -1);
   });
   if (classicMedianPath?.balances) {
     balanceDatasets.push(
       classicOverlayDataset(
         classicMedianPath,
         classicColor,
-        classicMedianPath.balances.map((b) => Math.max(logFloor, b)),
+        balanceValues(classicMedianPath.balances),
         -1,
       ),
     );
@@ -215,7 +270,7 @@ export function drawTimelineCharts(percentiles, numYears, { classicMedianPath = 
       labels: balanceLabels,
       datasets: balanceDatasets,
     },
-    options: buildBalanceOptions(logFloor, theme),
+    options: buildBalanceOptions(useLog, logFloor, theme),
   });
 
   // Deposit years are stored as negative withdrawals; this chart only shows

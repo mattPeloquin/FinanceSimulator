@@ -35,6 +35,7 @@ import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './
 import { syncAllocationPreview } from './charts/allocationPreview.js';
 import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
 import { weightPreviewSeries } from '../core/statistics.js';
+import { suppressAccordionPersist, onChartDetailsOpened } from './charts/chartThumbs.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -112,7 +113,9 @@ export function setupAccordionResize() {
 
   document.querySelectorAll('details').forEach((details) => {
     details.addEventListener('toggle', () => {
-      if (details.id) setAccordionOpen(details.id, details.open);
+      if (details.id && !suppressAccordionPersist) {
+        setAccordionOpen(details.id, details.open);
+      }
       if (!details.open) return;
       // Charts created while this accordion was closed may never have painted
       // (0×0 canvas). Resize existing instances, and rebuild the schedule
@@ -120,6 +123,7 @@ export function setupAccordionResize() {
       details.querySelectorAll('canvas').forEach((canvas) => {
         Chart.getChart(canvas)?.resize();
       });
+      if (details.id) onChartDetailsOpened(details.id);
       if (details.id === 'section-withdrawal') {
         syncBaseWithdrawalPreview();
         syncWithdrawalPreviewFromForm();

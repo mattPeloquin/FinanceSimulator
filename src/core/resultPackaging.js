@@ -34,7 +34,8 @@ import {
   grossUpPlanSchedule,
 } from './feesTaxes.js';
 
-const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65];
+// Packaged path cards / timelines. p85 is for Average Timelines only (not report fan).
+const PERCENTILES = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.85];
 const SURFACE_SAMPLES = 200;
 const HISTOGRAM_BINS = 75;
 // Cap on pre-sliced animation frames for the heatmap's "Animate runs" mode

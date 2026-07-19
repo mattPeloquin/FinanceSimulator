@@ -1,134 +1,142 @@
 <!-- Charts -->
 <div class="space-y-8">
     <!-- 3D Column Chart -->
-    <div>
-        <h3 id="surfaceChartTitle" class="text-lg font-semibold text-theme-body mb-2"
-        >Explore specific paths</h3>
-        <p id="surfaceChartDescription" class="text-sm text-theme-faint mb-3"
-            ><!-- filled by surface3d updateSurfaceChrome --></p>
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
-            <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Column height">
-                <button id="surfaceHeightBalance" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">Balance</button>
-                <button id="surfaceHeightWithdrawal" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Withdrawal</button>
-            </div>
-            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint pl-1" title="Widen early-year bars for emphasis">
-                <span>Early years</span>
-                <input type="range" id="surfaceEmphasis" min="0" max="100" step="1" value="0" class="range-theme w-24">
-            </label>
-            <div class="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-faint ml-2 pl-1 border-theme-input">
-                <label class="inline-flex items-center gap-1" title="Lower end of the outcome-percentile axis">
-                    <span>Show from</span>
-                    <input type="range" id="surfaceLower" min="0" max="45" step="5" value="5" class="range-theme w-14">
-                    <span id="surfaceLowerLabel" class="w-9">P5</span>
-                </label>
-                <label class="inline-flex items-center gap-1" title="Upper end of the outcome-percentile axis">
-                    <span>to</span>
-                    <input type="range" id="surfaceUpper" min="55" max="100" step="5" value="65" class="range-theme w-14">
-                    <span id="surfaceUpperLabel" class="w-9">P65</span>
-                </label>
-            </div>
-        </div>
-        <div id="surfaceChart" class="h-[420px] w-[90%] mx-auto rounded-lg overflow-hidden border border-theme-border bg-theme-page"></div>
-    </div>
-
-    <!-- Withdrawal heatmap: every run's spending per year, ranked by outcome -->
-    <div>
-        <h3 class="text-lg font-semibold text-theme-body mb-2">Withdrawal Heatmap</h3>
-        <p class="text-sm text-theme-faint mb-4">
-            View withdrawal patterns across time for all simulations. You can analyze static snapshots or animate the display to see patterns in withdrawals. Color modes compare withdrawals vs. your plan, vs. the classic flat 4% rule, vs. the median for each year, or show absolute withdrawal amounts. There is also control to visually emphasize the early years.
-        </p>
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
-            <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color anchor">
-                <button id="withdrawalHeatmapModeDelta" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">vs Plan</button>
-                <button id="withdrawalHeatmapModeClassic" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs 4%</button>
-                <button id="withdrawalHeatmapModeMedian" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs Median</button>
-                <button id="withdrawalHeatmapModeAbs" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Amount</button>
-            </div>
-            <label id="withdrawalHeatmapSpeedWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Continuously replay random runs per column; 0 = off">
-                <span>Speed</span>
-                <input type="range" id="withdrawalHeatmapSpeed" min="0" max="10" step="1" value="0" class="range-theme w-24">
-                <span id="withdrawalHeatmapSpeedLabel" class="w-6">off</span>
-            </label>
-            <label id="withdrawalHeatmapFrameWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Scrub through individual-run snapshots; leftmost shows the band averages. Disabled while replaying.">
-                <span>Run</span>
-                <input type="range" id="withdrawalHeatmapFrame" min="0" max="0" step="1" value="0" class="range-theme w-24 disabled:opacity-40">
-                <span id="withdrawalHeatmapFrameLabel" class="w-8">Avg</span>
-            </label>
-        </div>
-        <div id="withdrawalHeatmapLegend" class="flex flex-wrap items-center gap-x-8 gap-y-2 mt-3"></div>
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
-            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Stretch early-year rows taller for emphasis">
-                <span>Early years</span>
-                <input type="range" id="withdrawalHeatmapEmphasis" min="0" max="100" step="1" value="50" class="range-theme w-24">
-            </label>
-            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Lower end of the outcome-percentile axis">
-                <span>Show from</span>
-                <input type="range" id="withdrawalHeatmapLower" min="0" max="45" step="5" value="5" class="range-theme w-20">
-                <span id="withdrawalHeatmapLowerLabel" class="w-9">P5</span>
-            </label>
-            <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Upper end of the outcome-percentile axis">
-                <span>to</span>
-                <input type="range" id="withdrawalHeatmapUpper" min="55" max="100" step="5" value="65" class="range-theme w-20">
-                <span id="withdrawalHeatmapUpperLabel" class="w-9">P65</span>
-            </label>
-        </div>
-        <div id="withdrawalHeatmapColumnNote" class="hidden text-xs text-theme-faint mb-3"></div>
-        <div class="relative h-[17rem] w-full">
-            <canvas id="withdrawalHeatmapCanvas" class="w-full h-full block"></canvas>
-            <div id="withdrawalHeatmapTooltip" style="display:none" class="absolute pointer-events-none flex flex-col gap-0.5 text-xs rounded-md px-2 py-1.5 z-10"></div>
-        </div>
-        <div id="withdrawalHeatmapDrilldown" class="hidden mt-3">
-            <div id="withdrawalHeatmapDrilldownTitle" class="text-xs font-semibold text-theme-body mb-0.5"></div>
-            <div id="withdrawalHeatmapDrilldownMeta" class="text-xs text-theme-faint mb-1"></div>
-            <div class="h-48 w-full"><canvas id="withdrawalHeatmapPathCanvas"></canvas></div>
-            <div class="h-32 w-full mt-1"><canvas id="withdrawalHeatmapBalanceCanvas"></canvas></div>
-        </div>
-    </div>
-
-    <!-- Sequence-risk scatter: money-weighted vs time-weighted return per path -->
-    <div>
-        <h3 class="text-lg font-semibold text-theme-body mb-2">Sequence Risk: IRR vs Average Return</h3>
-        <p class="text-sm text-theme-faint mb-4">Each dot is one simulation. Dots below the dashed diagonal were hurt by early bad years — their money-weighted IRR trails their time-weighted average return; dots above it got lucky early. Paths in the lower-right had good average returns but still fell short of the plan: sequence risk in its purest form. Click a dot to see that path's withdrawals against its plan.</p>
-        <div id="irrScatterLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 w-full">
-            <label for="irrScatterZoom" class="text-xs text-theme-faint shrink-0">Plot range</label>
-            <input type="range" id="irrScatterZoom" min="0" max="100" step="1" value="50" class="range-theme w-[50vw] max-w-full shrink-0" title="Drag left to zoom in, right to zoom out. Center is −4% to +8% (default).">
-            <span id="irrScatterZoomLabel" class="text-xs text-theme-faint shrink-0" aria-live="polite"></span>
-        </div>
-        <div class="relative h-80 w-full">
-            <canvas id="irrScatterCanvas" class="w-full h-full block"></canvas>
-            <div id="irrScatterTooltip" style="display:none" class="absolute pointer-events-none flex flex-col gap-0.5 text-xs rounded-md px-2 py-1.5 z-10"></div>
-        </div>
-        <div id="irrScatterDrilldown" class="hidden mt-3">
-            <div id="irrScatterDrilldownTitle" class="text-xs font-semibold text-theme-body mb-0.5"></div>
-            <div id="irrScatterDrilldownMeta" class="text-xs text-theme-faint mb-1"></div>
-            <div class="h-48 w-full"><canvas id="irrScatterPathCanvas"></canvas></div>
-            <div class="h-32 w-full mt-1"><canvas id="irrScatterBalanceCanvas"></canvas></div>
-        </div>
-    </div>
-
-    <details id="details-average-timelines" class="group border rounded-lg">
-        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center justify-between">
-            <span>Average Timelines</span>
-            <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+    <details id="details-surface-chart" class="group border rounded-lg" open>
+        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
+            <span id="surfaceChartTitle" class="min-w-0 shrink">Explore Specific Paths</span>
+            <span class="ml-auto flex items-center gap-2 shrink-0">
+                <img id="surfaceChartThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
+                <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </span>
         </summary>
         <div class="px-4 pb-4">
-            <p class="text-sm text-theme-faint mb-4">Shows portfolio balance and dynamic withdrawals over time for the 65th through 5th percentile paths. Point size and shape reflect each year's real return.</p>
-            <div class="h-[32rem] w-full flex flex-col gap-1">
-                <div class="flex-[2] relative min-h-0">
-                    <canvas id="balanceChart"></canvas>
+            <p id="surfaceChartDescription" class="text-sm text-theme-faint mb-3"
+                ><!-- filled by surface3d updateSurfaceChrome --></p>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+                <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Column height">
+                    <button id="surfaceHeightBalance" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">Balance</button>
+                    <button id="surfaceHeightWithdrawal" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Withdrawal</button>
                 </div>
-                <div class="flex-1 relative min-h-0">
-                    <canvas id="withdrawalChart"></canvas>
+                <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint pl-1" title="Widen early-year bars for emphasis">
+                    <span>Early years</span>
+                    <input type="range" id="surfaceEmphasis" min="0" max="100" step="1" value="0" class="range-theme w-24">
+                </label>
+                <div class="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-faint ml-2 pl-1 border-theme-input">
+                    <label class="inline-flex items-center gap-1" title="Lower end of the outcome-percentile axis">
+                        <span>Show from</span>
+                        <input type="range" id="surfaceLower" min="0" max="45" step="5" value="5" class="range-theme w-14">
+                        <span id="surfaceLowerLabel" class="w-9">P5</span>
+                    </label>
+                    <label class="inline-flex items-center gap-1" title="Upper end of the outcome-percentile axis">
+                        <span>to</span>
+                        <input type="range" id="surfaceUpper" min="55" max="100" step="5" value="65" class="range-theme w-14">
+                        <span id="surfaceUpperLabel" class="w-9">P65</span>
+                    </label>
                 </div>
+            </div>
+            <div id="surfaceChart" class="h-[420px] w-[90%] mx-auto rounded-lg overflow-hidden border border-theme-border bg-theme-page"></div>
+        </div>
+    </details>
+
+    <!-- Withdrawal heatmap: every run's spending per year, ranked by outcome -->
+    <details id="details-withdrawal-heatmap" class="group border rounded-lg" open>
+        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
+            <span class="min-w-0 shrink">Withdrawal Heatmap</span>
+            <span class="ml-auto flex items-center gap-2 shrink-0">
+                <img id="withdrawalHeatmapThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
+                <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+        </summary>
+        <div class="px-4 pb-4">
+            <p class="text-sm text-theme-faint mb-4">
+                View withdrawal patterns across time for all simulations. You can analyze static snapshots or animate the display to see patterns in withdrawals. Color modes compare withdrawals vs. your plan, vs. the classic flat 4% rule, vs. the median for each year, or show absolute withdrawal amounts. There is also control to visually emphasize the early years.
+            </p>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
+                <div class="inline-flex rounded-md border border-theme-input overflow-hidden text-xs" role="group" aria-label="Color anchor">
+                    <button id="withdrawalHeatmapModeDelta" type="button" aria-pressed="true" class="px-3 py-1.5 transition-colors hover:bg-theme-muted bg-theme-muted text-theme-heading font-semibold">vs Plan</button>
+                    <button id="withdrawalHeatmapModeClassic" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs 4%</button>
+                    <button id="withdrawalHeatmapModeMedian" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">vs Median</button>
+                    <button id="withdrawalHeatmapModeAbs" type="button" aria-pressed="false" class="px-3 py-1.5 transition-colors hover:bg-theme-muted border-l border-theme-input text-theme-faint">Amount</button>
+                </div>
+                <label id="withdrawalHeatmapSpeedWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Continuously replay random runs per column; 0 = off">
+                    <span>Speed</span>
+                    <input type="range" id="withdrawalHeatmapSpeed" min="0" max="10" step="1" value="0" class="range-theme w-24">
+                    <span id="withdrawalHeatmapSpeedLabel" class="w-6">off</span>
+                </label>
+                <label id="withdrawalHeatmapFrameWrap" class="hidden inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Scrub through individual-run snapshots; leftmost shows the band averages. Disabled while replaying.">
+                    <span>Run</span>
+                    <input type="range" id="withdrawalHeatmapFrame" min="0" max="0" step="1" value="0" class="range-theme w-24 disabled:opacity-40">
+                    <span id="withdrawalHeatmapFrameLabel" class="w-8">Avg</span>
+                </label>
+            </div>
+            <div id="withdrawalHeatmapLegend" class="flex flex-wrap items-center gap-x-8 gap-y-2 mt-3"></div>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+                <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Stretch early-year rows taller for emphasis">
+                    <span>Early years</span>
+                    <input type="range" id="withdrawalHeatmapEmphasis" min="0" max="100" step="1" value="50" class="range-theme w-24">
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Lower end of the outcome-percentile axis">
+                    <span>Show from</span>
+                    <input type="range" id="withdrawalHeatmapLower" min="0" max="45" step="5" value="5" class="range-theme w-20">
+                    <span id="withdrawalHeatmapLowerLabel" class="w-9">P5</span>
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-theme-faint" title="Upper end of the outcome-percentile axis">
+                    <span>to</span>
+                    <input type="range" id="withdrawalHeatmapUpper" min="55" max="100" step="5" value="65" class="range-theme w-20">
+                    <span id="withdrawalHeatmapUpperLabel" class="w-9">P65</span>
+                </label>
+            </div>
+            <div id="withdrawalHeatmapColumnNote" class="hidden text-xs text-theme-faint mb-3"></div>
+            <div class="relative h-[17rem] w-full">
+                <canvas id="withdrawalHeatmapCanvas" class="w-full h-full block"></canvas>
+                <div id="withdrawalHeatmapTooltip" style="display:none" class="absolute pointer-events-none flex flex-col gap-0.5 text-xs rounded-md px-2 py-1.5 z-10"></div>
+            </div>
+            <div id="withdrawalHeatmapDrilldown" class="hidden mt-3">
+                <div id="withdrawalHeatmapDrilldownTitle" class="text-xs font-semibold text-theme-body mb-0.5"></div>
+                <div id="withdrawalHeatmapDrilldownMeta" class="text-xs text-theme-faint mb-1"></div>
+                <div class="h-48 w-full"><canvas id="withdrawalHeatmapPathCanvas"></canvas></div>
+                <div class="h-32 w-full mt-1"><canvas id="withdrawalHeatmapBalanceCanvas"></canvas></div>
+            </div>
+        </div>
+    </details>
+
+    <!-- Sequence-risk scatter: money-weighted vs time-weighted return per path -->
+    <details id="details-irr-scatter" class="group border rounded-lg" open>
+        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
+            <span class="min-w-0 shrink">IRR vs Average Return</span>
+            <span class="ml-auto flex items-center gap-2 shrink-0">
+                <img id="irrScatterThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
+                <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+        </summary>
+        <div class="px-4 pb-4">
+            <p class="text-sm text-theme-faint mb-4">Each dot is one simulation. Dots below the dashed diagonal were hurt by early bad years — their money-weighted IRR trails their time-weighted average return; dots above it got lucky early. Paths in the lower-right had good average returns but still fell short of the plan: sequence risk in its purest form. Click a dot to see that path's withdrawals against its plan.</p>
+            <div id="irrScatterLegend" class="flex flex-wrap gap-x-4 gap-y-2 mb-3"></div>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 w-full">
+                <label for="irrScatterZoom" class="text-xs text-theme-faint shrink-0">Plot range</label>
+                <input type="range" id="irrScatterZoom" min="0" max="100" step="1" value="50" class="range-theme w-[50vw] max-w-full shrink-0" title="Drag left to zoom in, right to zoom out. Center is −4% to +8% (default).">
+                <span id="irrScatterZoomLabel" class="text-xs text-theme-faint shrink-0" aria-live="polite"></span>
+            </div>
+            <div class="relative h-80 w-full">
+                <canvas id="irrScatterCanvas" class="w-full h-full block"></canvas>
+                <div id="irrScatterTooltip" style="display:none" class="absolute pointer-events-none flex flex-col gap-0.5 text-xs rounded-md px-2 py-1.5 z-10"></div>
+            </div>
+            <div id="irrScatterDrilldown" class="hidden mt-3">
+                <div id="irrScatterDrilldownTitle" class="text-xs font-semibold text-theme-body mb-0.5"></div>
+                <div id="irrScatterDrilldownMeta" class="text-xs text-theme-faint mb-1"></div>
+                <div class="h-48 w-full"><canvas id="irrScatterPathCanvas"></canvas></div>
+                <div class="h-32 w-full mt-1"><canvas id="irrScatterBalanceCanvas"></canvas></div>
             </div>
         </div>
     </details>
 
     <details id="details-return-distribution" class="group border rounded-lg">
-        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center justify-between">
-            <span>Distribution of Real Returns</span>
-            <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
+            <span class="min-w-0 shrink">Distribution of Real Returns</span>
+            <span class="ml-auto flex items-center gap-2 shrink-0">
+                <img id="returnDistributionThumb" alt="" class="h-10 w-[4.5rem] rounded border border-theme-border object-cover bg-theme-page group-open:hidden" hidden>
+                <svg class="w-4 h-4 text-theme-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </span>
         </summary>
         <div class="px-4 pb-4">
             <p class="text-sm text-theme-faint mb-4">Summary of average annual real return across all simulations. Each stat also shows the IRR — the money-weighted return, which accounts for the timing of withdrawals and deposits.</p>

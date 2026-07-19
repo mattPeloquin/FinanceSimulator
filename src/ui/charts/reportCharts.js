@@ -5,7 +5,6 @@
 import { Chart } from './chartSetup.js';
 import { formatK, formatPercent } from '../format.js';
 import { MONEY_SCALE, ALLOCATION_LABELS, ALLOCATION_CHART_KEYS } from '../../state/scenario.js';
-import { niceBalanceLogFloor } from './timeline.js';
 import { cellRgb, belowArmEnd } from './withdrawalHeatmap.js';
 import { themeHex, themeTokens } from '../theme.js';
 
@@ -230,12 +229,10 @@ export function drawBalanceFan(canvas, fan, { dark = false } = {}) {
   destroyChart(canvas);
   const pal = paletteFor(dark);
   const labels = fan.years.map((y) => String(y));
-  const startBal = fan.median.find((v) => Number.isFinite(v) && v > 0) || 100000;
-  const logFloor = niceBalanceLogFloor(startBal);
 
   const sanitize = (arr) => arr.map((v) => {
-    if (!Number.isFinite(v) || v <= 0) return null;
-    return Math.max(v, logFloor);
+    if (!Number.isFinite(v) || v < 0) return null;
+    return v;
   });
 
   const fanStroke = dark ? 'rgba(129, 140, 248, 0.4)' : 'rgba(79, 70, 229, 0.35)';
@@ -286,8 +283,8 @@ export function drawBalanceFan(canvas, fan, { dark = false } = {}) {
           grid: { color: pal.grid },
         },
         y: {
-          type: 'logarithmic',
-          min: logFloor,
+          beginAtZero: true,
+          min: 0,
           ticks: {
             color: pal.muted,
             font: { size: 10 },

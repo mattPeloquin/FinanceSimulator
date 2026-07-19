@@ -36,6 +36,16 @@ test('Charts receive the expected data arrays after a run', async ({ page }) => 
     return pathLen > 0;
   });
 
+  // Closed-summary thumbs are populated after the post-run draw.
+  await expect(page.locator('#withdrawalHeatmapThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#irrScatterThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#averageTimelinesThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#returnDistributionThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#planReportThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#surfaceChartThumb')).toHaveAttribute('src', /^data:image\//, {
+    timeout: 30_000,
+  });
+
   const chartData = await page.evaluate(() => {
     const hooks = window.__TEST_HOOKS__;
     const opt = hooks.surfaceChart?.getOption();
@@ -55,6 +65,19 @@ test('Charts receive the expected data arrays after a run', async ({ page }) => 
   expect(chartData.rawSeriesName).toMatch(/^paths/);
   // Surface: 200 columns × (30 years + 1), split across per-year series
   expect(chartData.surfaceDataLength).toBe(6200);
+
+  // Balance over time defaults to a linear Y axis; log scale is opt-in.
+  await expect(page.locator('#balanceLogScale')).not.toBeChecked();
+  const balanceMeta = await page.evaluate(() => {
+    const chart = window.__TEST_HOOKS__?.balanceChart;
+    return {
+      scaleType: chart?.options?.scales?.y?.type || 'linear',
+      labels: (chart?.data?.datasets || []).map((d) => d.label),
+    };
+  });
+  expect(balanceMeta.scaleType).not.toBe('logarithmic');
+  expect(balanceMeta.labels[0]).toMatch(/85th/);
+  expect(balanceMeta.labels.some((l) => /65th/.test(l))).toBe(true);
 });
 
 test('3D surface drill-down updates title and returns to overview', async ({ page }) => {
