@@ -68,6 +68,7 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   const heroOnPlan = page.locator('#reportHeroOnPlan');
   await expect(heroOnPlan).toBeVisible();
   await expect(heroOnPlan).toContainText('%');
+  await expect(page.locator('#reportHeroOnPlanLabel')).toContainText(/within \d+% of plan/);
   await expect(page.locator('#reportVerdictPill')).not.toBeEmpty();
 
   // 4% comparison is split into two minimized charts on honest scales.

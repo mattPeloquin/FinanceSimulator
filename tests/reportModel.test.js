@@ -126,6 +126,7 @@ describe('buildPlanSnapshot', () => {
     expect(snap.footerLine).toMatch(/simulations/i);
     expect(snap.band.years.length).toBe(packaged.maxYears);
     expect(snap.band.low.length).toBe(packaged.maxYears);
+    expect(snap.shortfallTolerance).toBe(packaged.shortfallTolerance);
     expect(snap.planBullets.some((b) => /base/i.test(b))).toBe(true);
     expect(snap.nextMoves).toBeUndefined();
   });

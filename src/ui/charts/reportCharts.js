@@ -5,7 +5,7 @@
 import { Chart } from './chartSetup.js';
 import { formatK, formatPercent } from '../format.js';
 import { MONEY_SCALE, ALLOCATION_LABELS, ALLOCATION_CHART_KEYS } from '../../state/scenario.js';
-import { cellRgb, belowArmEnd } from './withdrawalHeatmap.js';
+import { smoothColumnSeries } from './withdrawalHeatmap.js';
 import { themeHex, themeTokens } from '../theme.js';
 
 // Resolve the report palette for a mode. Print always uses 'light'.
@@ -71,12 +71,13 @@ function chartCommon() {
 }
 
 /**
- * Heat-colored withdrawal band. Colors match the Withdrawal Heatmap's
- * plan-anchored diverging spectrum: burnt orange = below plan (cut),
- * indigo-gray = on plan, teal = above plan (boost), bright red = depleted ($0).
- * Opacity encodes density — how many simulations spend at that level that year.
+ * Withdrawal probability cloud for the Plan Snapshot. Opacity encodes
+ * density; hue is three vibrant categories by plan delta (orange cut /
+ * blue near-plan / green boost). Near-plan width is the run's Plan Risk
+ * Tolerance (shortfallTolerance) as a fraction of that year's planned
+ * withdrawal — the same fraction used for the lifetime on-plan rate.
  */
-export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
+export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolerance = 0.05 } = {}) {
   if (!canvas || !band) return;
   destroyChart(canvas);
   const pal = paletteFor(dark);
@@ -105,71 +106,208 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
   const xAt = (i) => pad.left + ((i + 0.5) / n) * plotW;
   const yAt = (v) => pad.top + plotH * (1 - Math.max(0, v) / yMax);
 
-  // Asymmetric diverging domain vs plan, matching the heatmap's convention:
-  // lo = deepest cut below plan (stored positive), hi = biggest boost above.
-  let deepestCut = 0;
-  let biggestBoost = 0;
-  for (let i = 0; i < n; i++) {
-    const plan = band.plan[i] || 0;
-    if (Number.isFinite(band.low[i])) deepestCut = Math.max(deepestCut, plan - band.low[i]);
-    if (Number.isFinite(band.high[i])) biggestBoost = Math.max(biggestBoost, band.high[i] - plan);
-  }
-  const domain = { lo: Math.max(1, deepestCut), hi: Math.max(1, biggestBoost) };
-  // Guard against degenerate all-on-plan data (belowArmEnd needs a usable arm).
-  if (belowArmEnd(domain) <= 0) domain.lo = 1;
+  // Near-plan band width: same Plan Risk Tolerance fraction used for the
+  // lifetime "on plan" success rate (actual >= plan × (1 − tolerance)).
+  // Here it means a year's withdrawal within ±tolerance of that year's
+  // planned amount paints blue; outside that band is cut (orange) or
+  // boost (green). Clamped to the setting's 0–35% range.
+  const tol = Math.min(
+    0.35,
+    Math.max(0, Number.isFinite(shortfallTolerance) ? shortfallTolerance : 0.05),
+  );
 
-  // Density fill: each cell is still derived from an individual year's
-  // distribution, but it is painted into one shared image. Scaling that image
-  // with smoothing blends neighboring years and vertical density levels into a
-  // continuous field without changing the underlying percentile data.
-  const bins = 192;
+  // Density fill. The band is painted as one continuous field rather than
+  // per-year rectangles so the P-low / P-high silhouette reads as a smooth
+  // curve instead of year-column stairsteps. Design:
+  //   1. Per-year soft (KDE) histograms capture each year's distribution
+  //      between its [lo, hi] window.
+  //   2. The raster is upsampled horizontally (vss sub-samples per year) and
+  //      the lo/hi envelope is smoothed across years (1-2-1 + linear interp,
+  //      the heatmap's smoothColumnSeries) so neighboring years blend into a
+  //      continuous band outline.
+  //   3. A short alpha feather near the local [lo, hi] edges softens the
+  //      boundary so density fades out instead of hard-cutting at the band.
+  //   4. Opacity encodes density; hue is three vibrant categories by plan
+  //      delta (orange cut / blue near-plan / green boost) — not the
+  //      heatmap's continuous spectrum.
+  const bins = 128;
+  const vss = 4; // horizontal sub-samples per year for the upsampled raster
+  const rasterW = Math.max(1, n * vss);
   const rasterHeight = Math.max(1, Math.ceil(plotH));
-  const densityCanvas = document.createElement('canvas');
-  densityCanvas.width = n;
-  densityCanvas.height = rasterHeight;
-  const densityContext = densityCanvas.getContext('2d');
-  const densityImage = densityContext.createImageData(n, rasterHeight);
+  // Feather width (px) over which density fades at the local lo/hi edges.
+  // Wider than the original so the silhouette softens more visibly.
+  const featherPx = 14;
 
+  // Per-year normalized density columns: counts[k] / maxCount, indexed
+  // [year][bin]. Kept around so the upsample pass can interpolate between
+  // years without recomputing histograms.
+  const yearDensity = new Array(n);
   for (let i = 0; i < n; i++) {
     const lo = band.low[i];
     const hi = band.high[i];
     const col = band.columns?.[i];
-    const plan = band.plan[i] || 0;
-    if (!Number.isFinite(lo) || !Number.isFinite(hi) || !col || col.length === 0) continue;
-
-    const counts = new Uint16Array(bins);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || !col || col.length === 0) {
+      yearDensity[i] = null;
+      continue;
+    }
+    // Soft (KDE-style) histogram: each sample is smeared across neighboring
+    // bins with a triangular kernel instead of landing in a single bin. With
+    // modest simulation counts a hard 1-sample-per-bin histogram is mostly
+    // empty, which renders as faint horizontal streaks; the kernel produces a
+    // smooth density field directly so the cloud reads as a continuous field
+    // with a bright probable core and feathered edges.
+    const counts = new Float32Array(bins);
+    const kernelRadius = 1.5; // bins
     let maxCount = 1;
     for (let k = 0; k < col.length; k++) {
       const v = col[k];
       if (v < lo || v > hi) continue;
       const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
-      const b = Math.min(bins - 1, Math.max(0, Math.floor(t * bins)));
-      counts[b]++;
-      if (counts[b] > maxCount) maxCount = counts[b];
+      const center = t * bins; // float bin position
+      const b0 = Math.floor(center - kernelRadius);
+      const b1 = Math.ceil(center + kernelRadius);
+      for (let bb = b0; bb <= b1; bb++) {
+        if (bb < 0 || bb >= bins) continue;
+        const dist = Math.abs(bb + 0.5 - center);
+        const w = Math.max(0, 1 - dist / kernelRadius);
+        counts[bb] += w;
+        if (counts[bb] > maxCount) maxCount = counts[bb];
+      }
     }
+    const norm = new Float32Array(bins);
+    for (let b = 0; b < bins; b++) norm[b] = counts[b] / maxCount;
+    yearDensity[i] = { lo, hi, norm };
+  }
+
+  // Smoothed + upsampled lo/hi envelope (in dollars), one value per raster
+  // column. smoothColumnSeries is NaN-aware so horizon edges stay hard.
+  const loSeries = smoothColumnSeries(Float64Array.from(band.low), vss);
+  const hiSeries = smoothColumnSeries(Float64Array.from(band.high), vss);
+
+  const densityCanvas = document.createElement('canvas');
+  densityCanvas.width = rasterW;
+  densityCanvas.height = rasterHeight;
+  const densityContext = densityCanvas.getContext('2d');
+  const densityImage = densityContext.createImageData(rasterW, rasterHeight);
+
+  for (let col = 0; col < rasterW; col++) {
+    // Which year this raster column falls in (year-center coordinates).
+    const pos = (col + 0.5) / vss - 0.5;
+    let j0 = Math.floor(pos);
+    let frac = pos - j0;
+    if (j0 < 0) { j0 = 0; frac = 0; }
+    if (j0 >= n - 1) { j0 = n - 1; frac = 0; }
+    const j1 = Math.min(n - 1, j0 + 1);
+    const a = yearDensity[j0];
+    const b = yearDensity[j1];
+    let lo = loSeries[col];
+    let hi = hiSeries[col];
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || (!a && !b)) continue;
+    // Clamp the envelope to contain the raw median. The 1-2-1 envelope
+    // smoothing can pull the high edge below the raw median (or the low edge
+    // above it) at narrow percentile windows, which would leave the median
+    // line floating above the cloud with no fill behind it. The median line
+    // is drawn as straight segments between year centers, i.e. the linear
+    // interpolation of band.median — so clamping each raster column to that
+    // same interpolated median guarantees the fill always backs the line.
+    const medRaw = (band.median[j0] || 0) + ((band.median[j1] || 0) - (band.median[j0] || 0)) * frac;
+    if (Number.isFinite(medRaw)) {
+      if (lo > medRaw) lo = medRaw;
+      if (hi < medRaw) hi = medRaw;
+      if (lo > hi) { lo = hi = medRaw; }
+    }
+    const plan = (band.plan[j0] || 0) + ((band.plan[j1] || 0) - (band.plan[j0] || 0)) * frac;
 
     for (let row = 0; row < rasterHeight; row++) {
-      // Convert this shared image row back to dollars so every year's density
-      // aligns to the same chart y-position before horizontal blending.
+      // Shared image row -> dollars so every column aligns to the same y.
       const value = yMax * (1 - (row + 0.5) / rasterHeight);
       if (value < lo || value > hi) continue;
-      const t = hi > lo ? (value - lo) / (hi - lo) : 0.5;
-      const bin = Math.min(bins - 1, Math.max(0, Math.floor(t * bins)));
-      if (counts[bin] === 0) continue;
 
-      const [r, g, bl] = cellRgb(value < 1 ? 0 : value, value - plan, domain, dark);
-      const pixel = (row * n + i) * 4;
+      // Density at this (year, value). Each year's histogram is normalized
+      // to that year's RAW [lo,hi], so the bin must be looked up in each
+      // neighbor's own raw frame — using the smoothed envelope here would
+      // read the density at a different dollar value and paint it in the
+      // wrong place (e.g. lower-value density appearing above the median
+      // when smoothing inflates the high edge).
+      const loR0 = band.low[j0], hiR0 = band.high[j0];
+      const loR1 = band.low[j1], hiR1 = band.high[j1];
+      const t0 = hiR0 > loR0 ? (value - loR0) / (hiR0 - loR0) : 0.5;
+      const t1 = hiR1 > loR1 ? (value - loR1) / (hiR1 - loR1) : 0.5;
+      const bin0 = Math.min(bins - 1, Math.max(0, Math.floor(t0 * bins)));
+      const bin1 = Math.min(bins - 1, Math.max(0, Math.floor(t1 * bins)));
+      let d = 0;
+      if (a && b) d = a.norm[bin0] + (b.norm[bin1] - a.norm[bin0]) * frac;
+      else if (a) d = a.norm[bin0];
+      else if (b) d = b.norm[bin1];
+      if (d <= 0) continue;
+
+      // Edge feather: smoothstep fade near the local lo/hi so the silhouette
+      // softens instead of hard-cutting at the band boundary.
+      const distLo = value - lo;
+      const distHi = hi - value;
+      const smoothstep = (x) => {
+        const t = Math.min(1, Math.max(0, x));
+        return t * t * (3 - 2 * t);
+      };
+      const edgeF = Math.min(smoothstep(distLo / featherPx), smoothstep(distHi / featherPx));
+
+      // Two independent channels:
+      //   opacity = density (how likely this withdrawal level is)
+      //   hue     = plan delta as three vibrant categories (cut / near /
+      //             boost), not the heatmap's continuous spectrum — so
+      //             failed vs near-plan vs surplus reads at a glance.
+      // Mild gamma keeps denser regions clearly more opaque without a
+      // "hot ridge" that washes the rest of the cloud out.
+      const dWeight = Math.pow(d, 0.85);
+
+      // Vibrant categorical colors. Near-plan width is the run's Plan Risk
+      // Tolerance as a fraction of that year's planned withdrawal (same
+      // fraction as the lifetime on-plan check). Soft blend across that
+      // band; poles stay full orange / green.
+      const orange = dark ? [251, 146, 60] : [249, 115, 22];
+      const blue = dark ? [96, 165, 250] : [59, 130, 246];
+      const green = dark ? [74, 222, 128] : [34, 197, 94];
+      const nearDollars = plan > 0 ? plan * tol : 0;
+      const delta = value - plan;
+      const lerpRgb = (a, b, t) => [
+        Math.round(a[0] + (b[0] - a[0]) * t),
+        Math.round(a[1] + (b[1] - a[1]) * t),
+        Math.round(a[2] + (b[2] - a[2]) * t),
+      ];
+      let rgb;
+      if (nearDollars <= 0) {
+        rgb = delta < 0 ? orange : delta > 0 ? green : blue;
+      } else if (delta <= -nearDollars) {
+        rgb = orange;
+      } else if (delta >= nearDollars) {
+        rgb = green;
+      } else if (delta < 0) {
+        rgb = lerpRgb(orange, blue, smoothstep((delta + nearDollars) / nearDollars));
+      } else {
+        rgb = lerpRgb(blue, green, smoothstep(delta / nearDollars));
+      }
+      const [r, g, bl] = rgb;
+      const pixel = (row * rasterW + col) * 4;
       densityImage.data[pixel] = r;
       densityImage.data[pixel + 1] = g;
       densityImage.data[pixel + 2] = bl;
-      // Opacity encodes density (count / max). Floor raised further so the
-      // band reads as bright and saturated rather than a faint wash.
-      densityImage.data[pixel + 3] = Math.round(185 + 70 * (counts[bin] / maxCount));
+      // Opacity encodes density only. Floor high enough that the whole
+      // cloud is readable on the dark report background; denser bins go
+      // toward full alpha so "more likely" areas clearly stand out.
+      densityImage.data[pixel + 3] = Math.round((95 + 160 * dWeight) * edgeF);
     }
   }
   densityContext.putImageData(densityImage, 0, 0);
+  // Blur the composited density when drawing it into the plot. With modest
+  // simulation counts the per-year histogram is sparse (most bins empty), so
+  // the raw raster can read as faint horizontal streaks rather than a smooth
+  // field. A light blur merges those streaks into a continuous cloud, then
+  // we reset the filter so the overlay strokes/axes below stay crisp.
   ctx.imageSmoothingEnabled = true;
+  ctx.save();
+  ctx.filter = 'blur(3px)';
   ctx.drawImage(densityCanvas, pad.left, pad.top, plotW, plotH);
+  ctx.restore();
 
   // Depleted ($0) simulations: the density field above is clipped to the
   // [lo, hi] percentile window, so once the pLow percentile rises above zero
@@ -214,22 +352,28 @@ export function drawWithdrawalBand(canvas, band, { dark = false } = {}) {
     ctx.stroke();
   };
 
-  // Band edge whiskers (subtle), then median + plan overlays.
-  ctx.globalAlpha = 0.45;
-  ctx.strokeStyle = pal.muted;
-  ctx.lineWidth = 1;
-  strokePath(band.low);
-  strokePath(band.high);
+  // Median + plan overlays. The smoothed density fill already traces the
+  // P-low / P-high envelope, so explicit band-edge whiskers are not drawn —
+  // they competed with the fill and read as noise on the silhouette.
+
+  // Median withdrawal line in green (status.success) — a secondary reference
+  // path through the density field. Thinner and lower-alpha than the plan line
+  // so the planned schedule reads as the hero of this chart.
+  ctx.globalAlpha = 0.7;
+  ctx.strokeStyle = pal.success;
+  ctx.lineWidth = 1.25;
+  ctx.setLineDash([3, 3]);
+  strokePath(band.median);
+  ctx.setLineDash([]);
   ctx.globalAlpha = 1;
 
-  // Median withdrawal line in green (status.success) — the hero "expected"
-  // path through the density field.
-  ctx.strokeStyle = pal.success;
-  ctx.lineWidth = 2.5;
-  strokePath(band.median);
-
-  ctx.strokeStyle = pal.plan;
-  ctx.lineWidth = 1.5;
+  // Planned schedule — the hero line. Dashed blue, same weight as the median
+  // so the two reference paths read as a matched pair layered over the density
+  // field the band is anchored to (cut < plan < boost). A darker, more saturated
+  // blue from the same hue family as the density cloud so the line and the
+  // cloud read as one series (line = dark blue, cloud = light blue).
+  ctx.strokeStyle = dark ? '#3b82f6' : '#1d4ed8';
+  ctx.lineWidth = 1.25;
   ctx.setLineDash([4, 3]);
   strokePath(band.plan);
   ctx.setLineDash([]);
@@ -405,9 +549,9 @@ export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = f
  * At risk pill driven by the success rate. The detailed rates also live in
  * the donut, so this is the single large-format presentation of both.
  *
- * @param {{number: HTMLElement, onPlanNumber: HTMLElement, pill: HTMLElement}} els
+ * @param {{number: HTMLElement, onPlanNumber: HTMLElement, onPlanLabel?: HTMLElement, pill: HTMLElement}} els
  */
-export function renderSuccessHero(els, { successRate, onPlanRate }, { dark = false } = {}) {
+export function renderSuccessHero(els, { successRate, onPlanRate, shortfallTolerance }, { dark = false } = {}) {
   if (!els) return;
   const pal = paletteFor(dark);
   const success = Math.min(1, Math.max(0, successRate ?? 0));
@@ -426,6 +570,13 @@ export function renderSuccessHero(els, { successRate, onPlanRate }, { dark = fal
     els.onPlanNumber.textContent = formatPercent(onPlan, 0) || '—';
     // Match the donut's inner ring (on plan = accent/purple).
     els.onPlanNumber.style.color = pal.accent;
+  }
+  // Same wording as the main results "Success Rate (within X% of plan)" card —
+  // Plan Risk Tolerance is the shortfall fraction baked into the on-plan rate.
+  if (els.onPlanLabel) {
+    const tol = Number.isFinite(shortfallTolerance) ? shortfallTolerance : 0.05;
+    const tolerancePct = Math.round(Math.min(0.35, Math.max(0, tol)) * 100);
+    els.onPlanLabel.textContent = `within ${tolerancePct}% of plan`;
   }
 
   if (els.pill) {

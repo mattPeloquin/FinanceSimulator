@@ -156,6 +156,7 @@ function successHeroEls() {
   return {
     number: document.getElementById('reportHeroSuccess'),
     onPlanNumber: document.getElementById('reportHeroOnPlan'),
+    onPlanLabel: document.getElementById('reportHeroOnPlanLabel'),
     pill: document.getElementById('reportVerdictPill'),
   };
 }
@@ -209,12 +210,18 @@ function renderFull({ forceLight = false } = {}) {
     drawDepletionStrip(document.getElementById('reportDepletionCanvas'), snap.depletion, { dark });
   }
 
-  renderSuccessHero(successHeroEls(), snap.success, { dark });
+  renderSuccessHero(successHeroEls(), {
+    ...snap.success,
+    shortfallTolerance: snap.shortfallTolerance,
+  }, { dark });
   drawSuccessDonut(document.getElementById('reportSuccessDonut'), snap.success, { dark });
   drawFourPctMetric(document.getElementById('reportFourPctSpend'), 'spend', snap.fourPct, { dark });
   drawFourPctMetric(document.getElementById('reportFourPctSurvival'), 'survival', snap.fourPct, { dark });
   if (snap.band) {
-    drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, { dark });
+    drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, {
+      dark,
+      shortfallTolerance: snap.shortfallTolerance,
+    });
   }
   drawBalanceFan(document.getElementById('reportFanCanvas'), snap.fan, { dark });
   drawAllocationDonut(document.getElementById('reportAllocationDonut'), snap.allocation, { dark });
@@ -234,7 +241,10 @@ function renderBandAndFanOnly() {
     bandLabel.textContent = `${snap.band.lowLabel}–${snap.band.highLabel}`;
   }
   if (snap.band) {
-    drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, { dark });
+    drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, {
+      dark,
+      shortfallTolerance: snap.shortfallTolerance,
+    });
   }
   drawBalanceFan(document.getElementById('reportFanCanvas'), snap.fan, { dark });
   renderedForKey = runKey(lastRun, pLow, pHigh, dark);
