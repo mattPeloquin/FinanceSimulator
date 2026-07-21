@@ -159,7 +159,7 @@ self.onmessage = async (e) => {
             fraction: fraction * 0.5,
           }),
       });
-      // Blue below-plan tags / on-plan success % use Advanced → Plan Risk
+      // Blue below-plan tags / on-plan success % use Easy Mode → Plan Risk
       // Tolerance (on sim params), not Find Best Plan's search Risk Tolerance.
       const shortfallTolerance = finalParams.shortfallTolerance ?? params.shortfallTolerance ?? 0.05;
       const { userResult, classicResult, fourPercentComparison } =

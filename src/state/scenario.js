@@ -1641,7 +1641,7 @@ export function buildSimParams(scenario, samples) {
   };
 }
 
-/** Fraction 0–0.35 from the advanced "Plan Risk Tolerance" setting. */
+/** Fraction 0–0.35 from the Easy Mode "Plan Risk Tolerance" setting. */
 export function planShortfallTolerance(scenario) {
   return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.35);
 }

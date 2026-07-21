@@ -498,7 +498,7 @@ describe('buildSimParams', () => {
 
   it('converts plan risk tolerance from percent to a shortfall fraction', () => {
     const s = defaultScenario();
-    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.05, 6);
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.10, 6);
     s.planRiskTolerancePct = 20;
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.2, 6);
     s.planRiskTolerancePct = 150;

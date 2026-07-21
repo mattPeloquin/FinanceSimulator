@@ -10,7 +10,7 @@
     "goalSeekIncludeMarketAdjustments": true,
     "goalSeekIncludeBalanceOverrides": true,
     "goalSeekIncludeGlidePath": true,
-    "planRiskTolerancePct": 5,
+    "planRiskTolerancePct": 10,
     "usLgGrowthAllocation": 25,
     "usLgValueAllocation": 25,
     "usSmMidAllocation": 10,

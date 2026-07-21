@@ -56,4 +56,26 @@
             </div>
         </div>
     </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mt-6">
+        <!-- Outcome ranking preference — applies to results and Find Best Plan -->
+        <div>
+            <label for="earlyWeightSlot" class="block text-sm font-medium text-theme-body">What matters more when judging outcomes?</label>
+            <div class="flex items-center gap-3 mt-2 max-w-xs">
+                <span class="text-xs text-theme-faint whitespace-nowrap shrink-0">Total Lifetime</span>
+                <input type="range" id="earlyWeightSlot" min="0" max="4" step="1" class="range-theme flex-1">
+                <span class="text-xs text-theme-faint whitespace-nowrap shrink-0">Early Withdrawal</span>
+            </div>
+            <p class="text-xs text-theme-faint mt-1.5 leading-tight max-w-sm">Optionally rank success by early-weighted spending. Does not change boosts or guardrails — set those in <strong>Withdrawal Strategy</strong> for a front-loaded plan.</p>
+        </div>
+        <!-- Plan scoring shortfall band — sits under Easy Mode on wide screens -->
+        <div>
+            <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
+            <div class="flex items-center gap-3 mt-2 max-w-xs">
+                <input type="range" id="planRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
+                <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+            </div>
+            <p class="text-xs text-theme-faint mt-1.5 leading-tight max-w-sm">Max spending shortfall vs. plan, affects &ldquo;on plan&rdquo; success rate.</p>
+        </div>
+    </div>
 </div>

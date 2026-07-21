@@ -42,12 +42,9 @@
                 <p class="text-xs text-theme-faint mt-1">Primary metric for ranking (P5&ndash;P65), on-plan success, 3D coloring, and Find Best Plan. Auto picks mean/yr (total &divide; years lived) when a horizon range is set. Total withdrawn is still shown alongside results. When the Withdrawals slider favors Early Withdrawal, early-weighted spending overrides median/yr for ranking.</p>
             </div>
             <div>
-                <label for="planRiskTolerancePct" class="block text-sm font-medium text-theme-body">Plan Risk Tolerance</label>
-                <div class="flex items-center gap-3 mt-1">
-                    <input type="range" id="planRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
-                    <input type="number" id="planRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
-                </div>
-                <p class="text-xs text-theme-faint mt-1">Max spending shortfall vs. plan when scoring runs. Affects the &ldquo;on plan&rdquo; success rate, blue below-plan markers, and 3D chart coloring — including after Find Best Plan. Find Best Plan&rsquo;s own Risk Tolerance only shapes the search.</p>
+                <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Find Best Plan: Simulations per Search Step</label>
+                <input type="number" id="goalSeekNumSimulations" min="1" class="mt-1 block w-full rounded-md input-theme sm:text-sm p-2">
+                <p class="text-xs text-theme-faint mt-1">How many simulations Find Best Plan runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
             </div>
         </div>
 
@@ -95,12 +92,6 @@
                 <input type="number" id="scaledHistoricalSmoothing" min="0" max="100" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
             </div>
             <p class="text-xs text-theme-faint">Softens Smoothed Historical's output so it isn't limited to only the exact years in your selected range. Not used by the other two methods.</p>
-        </div>
-
-        <div>
-            <label for="goalSeekNumSimulations" class="block text-sm font-medium text-theme-body">Find Best Plan: Simulations per Search Step</label>
-            <input type="number" id="goalSeekNumSimulations" min="1" class="mt-1 block w-full max-w-xs rounded-md input-theme sm:text-sm p-2">
-            <p class="text-xs text-theme-faint mt-1">How many simulations Find Best Plan runs to score each candidate plan while searching. Lower = faster search but noisier results; higher = slower but more reliable. The final plan is always confirmed using the full Number of Simulations above.</p>
         </div>
     </div>
 </details>
