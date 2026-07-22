@@ -42,10 +42,12 @@
                  hero full-width and visually dominant, then your plan (with
                  allocation folded in), then balance/depletion, then a footer. -->
             <div class="space-y-2.5">
-                <!-- Row 1: Verdict card — header + two colored stats + pill, with the
-                     gauges donut folded in (no "Plan gauges" title, no donut labels).
-                     The 4% comparison moved to under the Your plan legend below. -->
+                <!-- Row 1: Verdict card — title + compressed P-low / median / P-high
+                     metric columns on the left, the two hero success percentages
+                     in the middle, gauges donut on the right. The 4% comparison
+                     lives under the Your plan legend below. -->
                 <div id="reportVerdictCard" class="report-card !bg-theme-accent-subtle print:!bg-transparent flex flex-col md:flex-row gap-3 items-center md:items-stretch">
+                    <!-- Left: title with the metric bands compressed directly under it. -->
                     <div class="flex-1 min-w-0 flex flex-col">
                         <div class="flex items-center gap-2">
                             <span class="inline-block w-2 h-10 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
@@ -53,12 +55,44 @@
                                 <h3 class="text-xl font-bold tracking-tight text-theme-muted print:text-slate-900 leading-tight">Plan Snapshot</h3>
                                 <p id="reportHeaderLine1" class="text-sm font-semibold text-theme-heading print:text-slate-700 leading-snug"></p>
                             </div>
-                            <!-- Pill sits between the heading and the donut (pushed right, just left of the donut). -->
-                            <span id="reportVerdictPill" class="inline-flex ml-auto px-1.5 py-0.5 rounded-full border text-[10px] font-semibold"></span>
                         </div>
-                        <!-- Two equal-weight verdict stats, centered, colored to match the donut rings:
-                             not depleted = success (green), on plan = accent (purple). -->
-                        <div class="grid grid-cols-2 gap-3 mt-3 text-center">
+                        <!-- Compact headline bands tucked under the title: label | P-low | Med | P-high.
+                             Label column is a fixed width so every row aligns; the three number
+                             columns are equal width and evenly spaced. -->
+                        <div id="reportSnapMetrics" class="mt-1">
+                            <div class="grid grid-cols-[4.5rem_2.75rem_2.75rem_2.75rem] gap-x-1 gap-y-0 items-center justify-start">
+                                <span></span>
+                                <span id="reportSnapColLow" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P10</span>
+                                <span class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">Med</span>
+                                <span id="reportSnapColHigh" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P90</span>
+
+                                <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Mean / Year</span>
+                                <span id="reportSnapMeanLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapMeanMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapMeanHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+
+                                <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Total Withdrawn</span>
+                                <span id="reportSnapTotalLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapTotalMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapTotalHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+
+                                <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">End Balance</span>
+                                <span id="reportSnapBalLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapBalMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapBalHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+
+                                <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Avg Return</span>
+                                <span id="reportSnapRetLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapRetMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
+                                <span id="reportSnapRetHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Middle: two equal-weight verdict stats, colored to match the donut rings
+                         (not depleted = success/green, on plan = accent/purple), with the pill above. -->
+                    <div class="shrink-0 flex flex-col items-center justify-center md:w-[2in]">
+                        <span id="reportVerdictPill" class="inline-flex mb-2 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold"></span>
+                        <div class="grid grid-cols-2 gap-3 text-center w-full">
                             <div class="flex flex-col items-center">
                                 <span id="reportHeroSuccess" class="text-3xl leading-none font-extrabold">—</span>
                                 <span class="text-[10px] text-theme-muted print:text-slate-600 mt-1">not depleted</span>
@@ -69,6 +103,7 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Right: gauges donut. -->
                     <div class="shrink-0 flex items-center justify-center md:w-[1.4in]">
                         <div class="h-[1.1in] w-[1.1in] relative">
                             <canvas id="reportSuccessDonut" class="w-full h-full"></canvas>
@@ -81,7 +116,7 @@
                     <div class="flex items-center justify-between gap-2 mb-1.5">
                         <h4 class="flex items-center gap-2 text-lg font-bold tracking-tight text-theme-heading print:text-slate-900">
                             <span class="inline-block w-1.5 h-5 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
-                            Withdrawals to expect
+                            Withdrawal possibilities
                         </h4>
                         <span class="inline-flex items-center rounded-full bg-theme-accent-subtle text-theme-accent-text print:bg-slate-100 print:text-slate-700 px-2 py-0.5 text-[10px] font-semibold"><span id="reportBandLabel"></span><span id="reportBandTaxNote" class="hidden"> · gross (before taxes)</span></span>
                     </div>
@@ -136,13 +171,13 @@
                         <div class="grid grid-cols-2 gap-3 px-3 py-1">
                             <div class="flex flex-col">
                                 <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Median spend ($k)</span>
-                                <div class="h-[0.5in] relative">
+                                <div class="h-[0.4in] relative">
                                     <canvas id="reportFourPctSpend"></canvas>
                                 </div>
                             </div>
                             <div class="flex flex-col">
                                 <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Survival %</span>
-                                <div class="h-[0.5in] relative">
+                                <div class="h-[0.4in] relative">
                                     <canvas id="reportFourPctSurvival"></canvas>
                                 </div>
                             </div>

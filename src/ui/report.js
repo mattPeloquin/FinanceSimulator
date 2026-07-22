@@ -7,6 +7,7 @@
 
 import { buildPlanSnapshot } from '../core/reportModel.js';
 import { isDarkMode, onThemeChange } from './theme.js';
+import { formatK, formatPercent } from './format.js';
 import {
   drawWithdrawalBand,
   drawBalanceFan,
@@ -17,6 +18,42 @@ import {
   drawAllocationDonut,
   allocationLegendItems,
 } from './charts/reportCharts.js';
+
+/** Map snapshot metric row ids → DOM id prefixes for the three band cells. */
+const SNAP_METRIC_ELS = {
+  meanYear: { low: 'reportSnapMeanLow', med: 'reportSnapMeanMed', high: 'reportSnapMeanHigh' },
+  total: { low: 'reportSnapTotalLow', med: 'reportSnapTotalMed', high: 'reportSnapTotalHigh' },
+  endBalance: { low: 'reportSnapBalLow', med: 'reportSnapBalMed', high: 'reportSnapBalHigh' },
+  avgReturn: { low: 'reportSnapRetLow', med: 'reportSnapRetMed', high: 'reportSnapRetHigh' },
+};
+
+function formatSnapValue(value, kind) {
+  if (value == null || Number.isNaN(value)) return '—';
+  if (kind === 'percent') return formatPercent(value, 1) || '—';
+  // Dollar amounts: $000s, matching the main results cards (no "k" suffix).
+  const k = formatK(value);
+  return k === '' ? '—' : k;
+}
+
+/** Fill the left-column P-low / median / P-high headline metrics. */
+function renderSnapMetrics(metrics) {
+  if (!metrics) return;
+  const lowHdr = document.getElementById('reportSnapColLow');
+  const highHdr = document.getElementById('reportSnapColHigh');
+  if (lowHdr) lowHdr.textContent = metrics.lowLabel || '';
+  if (highHdr) highHdr.textContent = metrics.highLabel || '';
+
+  for (const row of metrics.rows || []) {
+    const ids = SNAP_METRIC_ELS[row.id];
+    if (!ids) continue;
+    const lowEl = document.getElementById(ids.low);
+    const medEl = document.getElementById(ids.med);
+    const highEl = document.getElementById(ids.high);
+    if (lowEl) lowEl.textContent = formatSnapValue(row.low, row.kind);
+    if (medEl) medEl.textContent = formatSnapValue(row.median, row.kind);
+    if (highEl) highEl.textContent = formatSnapValue(row.high, row.kind);
+  }
+}
 
 const BAND_STORAGE_KEY = 'sor:report-band';
 const THEME_STORAGE_KEY = 'sor:report-theme-mode';
@@ -210,6 +247,7 @@ function renderFull({ forceLight = false } = {}) {
     drawDepletionStrip(document.getElementById('reportDepletionCanvas'), snap.depletion, { dark });
   }
 
+  renderSnapMetrics(snap.metrics);
   renderSuccessHero(successHeroEls(), {
     ...snap.success,
     shortfallTolerance: snap.shortfallTolerance,
@@ -231,7 +269,8 @@ function renderFull({ forceLight = false } = {}) {
   dirty = false;
 }
 
-function renderBandAndFanOnly() {
+/** Re-paint only the pieces that depend on the P-low / P-high band sliders. */
+function renderBandDependent() {
   if (!lastRun?.result) return;
   const { pLow, pHigh } = getPx();
   const dark = effectiveDark();
@@ -240,6 +279,7 @@ function renderBandAndFanOnly() {
   if (bandLabel && snap.band) {
     bandLabel.textContent = `${snap.band.lowLabel}–${snap.band.highLabel}`;
   }
+  renderSnapMetrics(snap.metrics);
   if (snap.band) {
     drawWithdrawalBand(document.getElementById('reportBandCanvas'), snap.band, {
       dark,
@@ -295,7 +335,7 @@ export function initReport() {
     const { pLow, pHigh } = getPx();
     saveBandPrefs(pLow, pHigh);
     const details = document.getElementById('details-plan-report');
-    if (details?.open && lastRun) renderBandAndFanOnly();
+    if (details?.open && lastRun) renderBandDependent();
   };
   lowEl?.addEventListener('input', onPxInput);
   highEl?.addEventListener('input', onPxInput);

@@ -61,6 +61,12 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await expect(page.locator('#reportPxLowLabel')).toHaveText('P25');
   await expect(page.locator('#reportBandLabel')).toContainText('P25');
 
+  // Left-column headline metrics: P-low / median / P-high; side headers follow the sliders.
+  await expect(page.locator('#reportSnapMetrics')).toBeVisible();
+  await expect(page.locator('#reportSnapColLow')).toHaveText('P25');
+  await expect(page.locator('#reportSnapMeanMed')).not.toHaveText('—');
+  await expect(page.locator('#reportSnapRetMed')).toContainText('%');
+
   // Two equal-weight hero stats: not depleted + on plan, plus a status pill.
   const heroNumber = page.locator('#reportHeroSuccess');
   await expect(heroNumber).toBeVisible();

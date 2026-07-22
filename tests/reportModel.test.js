@@ -5,6 +5,8 @@ import {
   bandPercentileSeries,
   balanceFanSeries,
   buildPlanSnapshot,
+  seriesPercentileBand,
+  snapshotMetricBands,
 } from '../src/core/reportModel.js';
 
 const baseAllocation = {
@@ -95,6 +97,48 @@ describe('balanceFanSeries', () => {
   });
 });
 
+describe('seriesPercentileBand', () => {
+  it('returns P-low / median / P-high and ignores non-finite values', () => {
+    // 0,10,20,30,40 → P0=0, P50=20, P100=40; NaN dropped
+    const values = [0, 10, NaN, 20, 30, 40];
+    const band = seriesPercentileBand(values, 0, 100);
+    expect(band.low).toBe(0);
+    expect(band.median).toBe(20);
+    expect(band.high).toBe(40);
+  });
+});
+
+describe('snapshotMetricBands', () => {
+  it('builds four headline rows with side columns following the band sliders', () => {
+    const p = params();
+    const packaged = buildRunResult(p, runMonteCarlo(p));
+    const metrics = snapshotMetricBands(packaged, 10, 90);
+    expect(metrics.lowLabel).toBe('P10');
+    expect(metrics.highLabel).toBe('P90');
+    expect(metrics.rows.map((r) => r.id)).toEqual([
+      'meanYear',
+      'total',
+      'endBalance',
+      'avgReturn',
+    ]);
+    for (const row of metrics.rows) {
+      expect(Number.isFinite(row.low)).toBe(true);
+      expect(Number.isFinite(row.median)).toBe(true);
+      expect(Number.isFinite(row.high)).toBe(true);
+      // Side columns bracket the median for ascending outcome metrics.
+      expect(row.low).toBeLessThanOrEqual(row.median);
+      expect(row.median).toBeLessThanOrEqual(row.high);
+    }
+    // Wider band should move the sides outward (or hold) vs a tighter band.
+    const tight = snapshotMetricBands(packaged, 25, 75);
+    const meanWide = metrics.rows.find((r) => r.id === 'meanYear');
+    const meanTight = tight.rows.find((r) => r.id === 'meanYear');
+    expect(meanWide.low).toBeLessThanOrEqual(meanTight.low);
+    expect(meanWide.high).toBeGreaterThanOrEqual(meanTight.high);
+    expect(meanWide.median).toBe(meanTight.median);
+  });
+});
+
 describe('buildPlanSnapshot', () => {
   const p = params();
   const raw = runMonteCarlo(p);
@@ -123,6 +167,8 @@ describe('buildPlanSnapshot', () => {
     const snap = buildPlanSnapshot(packaged, scenario, null, { pLow: 10, pHigh: 90 });
     // Verdict prose was removed; the hero stats + gauges donut now carry it.
     expect(snap.verdict).toEqual([]);
+    expect(snap.metrics.rows).toHaveLength(4);
+    expect(snap.metrics.lowLabel).toBe('P10');
     expect(snap.footerLine).toMatch(/simulations/i);
     expect(snap.band.years.length).toBe(packaged.maxYears);
     expect(snap.band.low.length).toBe(packaged.maxYears);

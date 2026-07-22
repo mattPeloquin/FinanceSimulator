@@ -70,6 +70,59 @@ function chartCommon() {
   };
 }
 
+// Density → opacity for the withdrawal probability cloud.
+// Low floor keeps sparse mass readable; gamma > 1 restores contrast so peaks
+// read clearly instead of crushing mid-bins toward the same shade.
+export const DENSITY_ALPHA_FLOOR = 35;
+export const DENSITY_ALPHA_SPAN = 220;
+export const DENSITY_ALPHA_GAMMA = 1.6;
+// Normalize each year's histogram to this quantile of positive bin counts so
+// a single cut-mode spike cannot own the year and wash out a broader surplus.
+export const DENSITY_NORM_QUANTILE = 0.95;
+
+/**
+ * Map relative density in [0, 1] to a canvas alpha 0–255.
+ * Exported for unit tests.
+ */
+export function densityAlpha(
+  d,
+  {
+    floor = DENSITY_ALPHA_FLOOR,
+    span = DENSITY_ALPHA_SPAN,
+    gamma = DENSITY_ALPHA_GAMMA,
+  } = {},
+) {
+  if (!(d > 0)) return 0;
+  const clamped = Math.min(1, d);
+  const weight = clamped ** gamma;
+  return Math.round(floor + span * weight);
+}
+
+/**
+ * Normalize a soft-histogram count array to [0, 1].
+ * Scale is the given quantile of *positive* bin counts (default P95), not the
+ * single maximum — so a tight minority pile does not flatten the rest of the
+ * cloud. Values above the scale clamp to 1.
+ * Exported for unit tests.
+ */
+export function normalizeDensityCounts(counts, quantile = DENSITY_NORM_QUANTILE) {
+  const n = counts.length;
+  const norm = new Float32Array(n);
+  const positive = [];
+  for (let i = 0; i < n; i++) {
+    if (counts[i] > 0) positive.push(counts[i]);
+  }
+  if (positive.length === 0) return norm;
+  positive.sort((a, b) => a - b);
+  const q = Math.min(1, Math.max(0, quantile));
+  const idx = Math.min(positive.length - 1, Math.max(0, Math.ceil(q * positive.length) - 1));
+  const scale = Math.max(positive[idx], Number.EPSILON);
+  for (let i = 0; i < n; i++) {
+    norm[i] = Math.min(1, counts[i] / scale);
+  }
+  return norm;
+}
+
 /**
  * Withdrawal probability cloud for the Plan Snapshot. Opacity encodes
  * density; hue is three vibrant categories by plan delta (orange cut /
@@ -127,9 +180,9 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
   //      continuous band outline.
   //   3. A short alpha feather near the local [lo, hi] edges softens the
   //      boundary so density fades out instead of hard-cutting at the band.
-  //   4. Opacity encodes density; hue is three vibrant categories by plan
-  //      delta (orange cut / blue near-plan / green boost) — not the
-  //      heatmap's continuous spectrum.
+  //   4. Opacity encodes density (steep gamma, modest floor); hue is three
+  //      vibrant categories by plan delta (orange cut / blue near-plan /
+  //      green boost) — not the heatmap's continuous spectrum.
   const bins = 128;
   const vss = 4; // horizontal sub-samples per year for the upsampled raster
   const rasterW = Math.max(1, n * vss);
@@ -138,9 +191,10 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
   // Wider than the original so the silhouette softens more visibly.
   const featherPx = 14;
 
-  // Per-year normalized density columns: counts[k] / maxCount, indexed
-  // [year][bin]. Kept around so the upsample pass can interpolate between
-  // years without recomputing histograms.
+  // Per-year normalized density columns: counts scaled to the P95 positive
+  // bin (not the single max), indexed [year][bin]. Kept around so the
+  // upsample pass can interpolate between years without recomputing
+  // histograms.
   const yearDensity = new Array(n);
   for (let i = 0; i < n; i++) {
     const lo = band.low[i];
@@ -158,7 +212,6 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
     // with a bright probable core and feathered edges.
     const counts = new Float32Array(bins);
     const kernelRadius = 1.5; // bins
-    let maxCount = 1;
     for (let k = 0; k < col.length; k++) {
       const v = col[k];
       if (v < lo || v > hi) continue;
@@ -171,12 +224,9 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
         const dist = Math.abs(bb + 0.5 - center);
         const w = Math.max(0, 1 - dist / kernelRadius);
         counts[bb] += w;
-        if (counts[bb] > maxCount) maxCount = counts[bb];
       }
     }
-    const norm = new Float32Array(bins);
-    for (let b = 0; b < bins; b++) norm[b] = counts[b] / maxCount;
-    yearDensity[i] = { lo, hi, norm };
+    yearDensity[i] = { lo, hi, norm: normalizeDensityCounts(counts) };
   }
 
   // Smoothed + upsampled lo/hi envelope (in dollars), one value per raster
@@ -256,9 +306,10 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
       //   hue     = plan delta as three vibrant categories (cut / near /
       //             boost), not the heatmap's continuous spectrum — so
       //             failed vs near-plan vs surplus reads at a glance.
-      // Mild gamma keeps denser regions clearly more opaque without a
-      // "hot ridge" that washes the rest of the cloud out.
-      const dWeight = Math.pow(d, 0.85);
+      // Steep gamma (> 1) keeps concentrations distinct; a modest floor
+      // keeps the rest of the cloud visible without crushing mid-tones
+      // into the same shade as the peak.
+      const alpha = densityAlpha(d);
 
       // Vibrant categorical colors. Near-plan width is the run's Plan Risk
       // Tolerance as a fraction of that year's planned withdrawal (same
@@ -291,21 +342,16 @@ export function drawWithdrawalBand(canvas, band, { dark = false, shortfallTolera
       densityImage.data[pixel] = r;
       densityImage.data[pixel + 1] = g;
       densityImage.data[pixel + 2] = bl;
-      // Opacity encodes density only. Floor high enough that the whole
-      // cloud is readable on the dark report background; denser bins go
-      // toward full alpha so "more likely" areas clearly stand out.
-      densityImage.data[pixel + 3] = Math.round((95 + 160 * dWeight) * edgeF);
+      densityImage.data[pixel + 3] = Math.round(alpha * edgeF);
     }
   }
   densityContext.putImageData(densityImage, 0, 0);
-  // Blur the composited density when drawing it into the plot. With modest
-  // simulation counts the per-year histogram is sparse (most bins empty), so
-  // the raw raster can read as faint horizontal streaks rather than a smooth
-  // field. A light blur merges those streaks into a continuous cloud, then
-  // we reset the filter so the overlay strokes/axes below stay crisp.
+  // Light blur merges sparse histogram streaks into a continuous cloud
+  // without flattening peak/mid opacity contrast (kept at 1.5px; 3px was
+  // washing concentrations into ~two shades).
   ctx.imageSmoothingEnabled = true;
   ctx.save();
-  ctx.filter = 'blur(3px)';
+  ctx.filter = 'blur(1.5px)';
   ctx.drawImage(densityCanvas, pad.left, pad.top, plotW, plotH);
   ctx.restore();
 
@@ -621,7 +667,7 @@ export function drawFourPctMetric(canvas, metric, fourPct, { dark = false } = {}
           borderRadius: 4,
           borderSkipped: false,
           barPercentage: 0.7,
-          categoryPercentage: 0.8,
+          categoryPercentage: 1,
         },
       ],
     },
@@ -638,6 +684,10 @@ export function drawFourPctMetric(canvas, metric, fourPct, { dark = false } = {}
           // autoSkip off so both category labels ("Your plan" + "4% rule") always
           // render next to their bars, even on the short 0.7in mini chart.
           // "Your plan" stays bold; "4% rule" is unbolded (weight 400) per request.
+          // offset:false removes the half-category padding above the first bar
+          // and below the last, so the bottom (4% rule) bar sits flush on the
+          // x-axis instead of floating above it.
+          offset: false,
           ticks: {
             color: pal.ink,
             font: (ctx) => ({ size: 9, weight: ctx.tick && ctx.tick.index === 0 ? '600' : '400' }),

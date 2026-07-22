@@ -3,6 +3,7 @@
 // run result, the current scenario, and an optional classic-4% comparison.
 
 import { percentileLinear } from './resultPackaging.js';
+import { meanYearlyWithdrawals } from './statistics.js';
 import { MONEY_SCALE, ALLOCATION_KEYS } from '../state/scenario.js';
 import { presetForLevel } from '../state/presets/index.js';
 
@@ -119,6 +120,68 @@ export function balanceFanSeries(balancePercentiles, pLow, pHigh) {
     lowLabel: `P${pLow}`,
     highLabel: `P${pHigh}`,
     years: Array.from({ length: numYears }, (_, i) => i + 1),
+  };
+}
+
+/**
+ * P-low / median / P-high of a per-run series (sorted ascending, linear
+ * interpolation). Finite values only — NaN paths are dropped so a depleted
+ * run's missing return does not drag the band.
+ */
+export function seriesPercentileBand(values, pLow, pHigh) {
+  const sorted = [];
+  if (values) {
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (Number.isFinite(v)) sorted.push(v);
+    }
+  }
+  sorted.sort((a, b) => a - b);
+  if (sorted.length === 0) {
+    return { low: NaN, median: NaN, high: NaN };
+  }
+  return {
+    low: percentileLinear(sorted, pLow / 100),
+    median: percentileLinear(sorted, 0.5),
+    high: percentileLinear(sorted, pHigh / 100),
+  };
+}
+
+/**
+ * Compact headline bands for the Plan Snapshot verdict card: Mean / Year,
+ * Total Withdrawn, End Balance, and Avg Return. Side columns follow the
+ * report's "Show from / to" percentile sliders; the middle column is always
+ * the median (P50). Dollar series come from the packaged returnScatter
+ * (gross withdrawals — same source as the IRR scatter).
+ */
+export function snapshotMetricBands(result, pLow, pHigh) {
+  const scatter = result?.returnScatter;
+  if (!scatter?.totalWithdrawn || !scatter?.finalBalance || !scatter?.avgReturn) {
+    return {
+      lowLabel: `P${pLow}`,
+      medianLabel: 'Med',
+      highLabel: `P${pHigh}`,
+      pLow,
+      pHigh,
+      rows: [],
+    };
+  }
+
+  const meanYearly = meanYearlyWithdrawals(scatter.totalWithdrawn, scatter.horizonYears);
+  const rows = [
+    { id: 'meanYear', label: 'Mean / Year', kind: 'dollars', ...seriesPercentileBand(meanYearly, pLow, pHigh) },
+    { id: 'total', label: 'Total Withdrawn', kind: 'dollars', ...seriesPercentileBand(scatter.totalWithdrawn, pLow, pHigh) },
+    { id: 'endBalance', label: 'End Balance', kind: 'dollars', ...seriesPercentileBand(scatter.finalBalance, pLow, pHigh) },
+    { id: 'avgReturn', label: 'Avg Return', kind: 'percent', ...seriesPercentileBand(scatter.avgReturn, pLow, pHigh) },
+  ];
+
+  return {
+    lowLabel: `P${pLow}`,
+    medianLabel: 'Med',
+    highLabel: `P${pHigh}`,
+    pLow,
+    pHigh,
+    rows,
   };
 }
 
@@ -298,6 +361,8 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
     footerLine: header.footerLine,
     // Verdict prose was removed; empty array keeps the model shape stable.
     verdict: [],
+    // Left-column headline bands (P-low / median / P-high) on the verdict card.
+    metrics: snapshotMetricBands(result, pLow, pHigh),
     band,
     fan,
     depletion,
