@@ -1,3 +1,5 @@
+import { loadUiPrefs, saveUiPrefs } from '../state/uiPrefs.js';
+
 export const themeTokens = {
   meta: { light: '#4f46e5', dark: '#1e293b' },
 
@@ -115,14 +117,12 @@ export function themeRgba(path, mode, alpha) {
   return hexToRgba(themeHex(path, mode), alpha);
 }
 
-const STORAGE_KEY = 'sor:theme';
-
 const listeners = new Set();
 let systemMedia = null;
 
 function getStoredTheme() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === 'light' || stored === 'dark' ? stored : null;
+  const theme = loadUiPrefs().theme;
+  return theme === 'light' || theme === 'dark' ? theme : null;
 }
 
 function getSystemDark() {
@@ -156,7 +156,7 @@ export function setTheme(mode, { persist = true } = {}) {
   const next = mode === 'dark' ? 'dark' : 'light';
   const prev = isDarkMode() ? 'dark' : 'light';
   document.documentElement.classList.toggle('dark', next === 'dark');
-  if (persist) localStorage.setItem(STORAGE_KEY, next);
+  if (persist) saveUiPrefs({ theme: next });
   updateMetaThemeColor(next);
   syncToggleUi(next);
   if (prev !== next) {

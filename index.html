@@ -1,17 +1,57 @@
 <!DOCTYPE html>
+<!--
+  Finance Simulator — MIT License
+  SPDX-License-Identifier: MIT
+
+  MIT License
+
+  Copyright (c) 2026 Matt Peloquin
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="26eaLeD1dPB7Bimof5JApygAOK7RQOscBqQCBwj2fgk" />
     <title>Finance Simulator</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%20role%3D%22img%22%20aria-label%3D%22Finance%20simulator%22%3E%20%3Cdefs%3E%20%3ClinearGradient%20id%3D%22area%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220.4%22%2F%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220%22%2F%3E%20%3C%2FlinearGradient%3E%20%3C%2Fdefs%3E%20%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%234f46e5%22%2F%3E%20%3Cpath%20d%3D%22M6%2023V17.5L11.5%2014L16.5%2017L24.5%209.5V23H6Z%22%20fill%3D%22url(%23area)%22%2F%3E%20%3Cpath%20d%3D%22M6%2017.5L11.5%2014L16.5%2017L24.5%209.5%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%20%3Ccircle%20cx%3D%2224.5%22%20cy%3D%229.5%22%20r%3D%221.75%22%20fill%3D%22%23ffffff%22%2F%3E%20%3C%2Fsvg%3E">
     <meta name="theme-color" content="#4f46e5">
     <script>
       (function () {
-        var stored = localStorage.getItem('sor:theme');
+        var theme = null;
+        try {
+          var raw = localStorage.getItem('sor:ui');
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && (parsed.theme === 'light' || parsed.theme === 'dark')) {
+              theme = parsed.theme;
+            }
+          } else {
+            // Legacy key used before view prefs were consolidated into sor:ui.
+            var legacy = localStorage.getItem('sor:theme');
+            if (legacy === 'light' || legacy === 'dark') theme = legacy;
+          }
+        } catch (e) { /* defaults below */ }
         var dark =
-          stored === 'dark' ||
-          (stored !== 'light' &&
+          theme === 'dark' ||
+          (theme !== 'light' &&
             window.matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) document.documentElement.classList.add('dark');
       })();
@@ -22,46 +62,52 @@
 </head>
 <body class="bg-theme-page text-theme-heading flex items-center justify-center min-h-screen p-4 py-12 transition-colors">
 
-    <div class="w-full max-w-[1400px] xl:max-w-[1600px] 2xl:max-w-[1800px] bg-theme-surface rounded-2xl shadow-lg p-6 md:p-8 space-y-8 transition-colors">
+    <div class="w-full max-w-[1400px] xl:max-w-[1600px] 2xl:max-w-[1800px] space-y-3">
+        <div class="bg-theme-surface rounded-2xl shadow-lg p-6 md:p-8 space-y-8 transition-colors">
 
-        {{> header }}
+            {{> header }}
 
-        <!-- Input Parameters Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
-            <!-- Left Column: Primary Inputs -->
-            <div class="space-y-6">
-            {{> general }}
-            {{> goalSeek }}
-            {{> investment }}
-            {{> feesTaxes }}
+            <!-- Input Parameters Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
+                <!-- Left Column: Primary Inputs -->
+                <div class="space-y-6">
+                {{> general }}
+                {{> goalSeek }}
+                {{> investment }}
+                {{> feesTaxes }}
+                </div>
+
+                <!-- Right Column: Dynamic Parameters & Portfolio Setup -->
+                <div class="space-y-6 lg:pl-12 lg:border-l border-theme-border">
+                {{> withdrawal }}
+                </div>
             </div>
 
-            <!-- Right Column: Dynamic Parameters & Portfolio Setup -->
-            <div class="space-y-6 lg:pl-12 lg:border-l border-theme-border">
-            {{> withdrawal }}
+            <!-- Action Button -->
+            <div class="text-center">
+                <button id="runButton" class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg"
+                >Run Simulation</button>
             </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="hidden space-y-8">
+                <div id="goalSeekWarning" class="hidden rounded-lg border border-theme-p20/40 bg-theme-muted px-4 py-3" role="status">
+                    <p class="text-sm text-theme-body">
+                        <span class="font-semibold text-theme-p20">Goal not reached — </span>
+                        <span id="goalSeekWarningMessage"></span>
+                    </p>
+                </div>
+                {{> metrics }}
+                {{> report }}
+                {{> charts }}
+            </div>
+            {{> loading }}
+            {{> advanced }}
         </div>
 
-        <!-- Action Button -->
-        <div class="text-center">
-            <button id="runButton" class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg"
-            >Run Simulation</button>
-        </div>
-
-        <!-- Results Section -->
-        <div id="resultsSection" class="hidden space-y-8">
-            <div id="goalSeekWarning" class="hidden rounded-lg border border-theme-p20/40 bg-theme-muted px-4 py-3" role="status">
-                <p class="text-sm text-theme-body">
-                    <span class="font-semibold text-theme-p20">Goal not reached — </span>
-                    <span id="goalSeekWarningMessage"></span>
-                </p>
-            </div>
-            {{> metrics }}
-            {{> report }}
-            {{> charts }}
-        </div>
-        {{> loading }}
-        {{> advanced }}
+        <p class="text-center text-xs text-theme-faint">
+            <a id="githubLink" href="https://github.com/mattpeloquin/FinanceSimulator" target="_blank" rel="noopener noreferrer" class="underline-offset-2 hover:underline hover:text-theme-muted transition-colors">View on GitHub</a>
+        </p>
     </div>
 
     {{> dialogs }}

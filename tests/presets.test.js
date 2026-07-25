@@ -11,7 +11,6 @@ import {
 import {
   defaultScenario,
   validateScenario,
-  migrateScenario,
   SCENARIO_DEFAULTS,
   FIELD_BY_KEY,
 } from '../src/state/scenario.js';
@@ -98,7 +97,7 @@ describe('preset files', () => {
   });
 
   it('sets max-boost drawdown Easy Mode ladder from Conservative to Aggressive', () => {
-    expect(PRESETS.map((p) => p.derived.maxBoostDrawdownPct)).toEqual([-1, 0, 1, 2, null]);
+    expect(PRESETS.map((p) => p.derived.maxBoostDrawdownPct)).toEqual([0, 1, 2, 3, null]);
   });
 
   it('sums allocations to 100 and keeps market triggers strictly increasing', () => {
@@ -127,11 +126,7 @@ describe('preset files', () => {
   });
 
   it('steps glide spend timing later for conservative and sooner for aggressive', () => {
-    expect(PRESETS[0].scenario.glideRate).toBe(-2);
-    expect(PRESETS[1].scenario.glideRate).toBe(-1);
-    expect(PRESETS[2].scenario.glideRate).toBe(-1);
-    expect(PRESETS[3].scenario.glideRate).toBe(-1);
-    expect(PRESETS[4].scenario.glideRate).toBe(0);
+    expect(PRESETS.map((p) => p.scenario.glideRate)).toEqual([-1, -1, -1, -0.5, 0]);
   });
 
   it('clamps out-of-range levels to the nearest valid preset', () => {
@@ -165,15 +160,19 @@ describe('computeDerivedPresetValues', () => {
       ],
     });
     expect(out.withdrawalFloors).toEqual([{ amount: 60 }]);
-    expect(out.dynNoCutBal).toBe(3000);
-    expect(out.dynMaxBoostDrawdownPct).toBe(1);
+    expect(out.dynNoCutBal).toBe(Math.round(3000 * balanced.derived.noCutBalanceMultipleOfStart));
+    expect(out.dynMaxBoostDrawdownPct).toBe(balanced.derived.maxBoostDrawdownPct);
     expect(out.goalSeekTargetEndingBalance).toBe(
       Math.round(3000 * (balanced.derived.targetEndingBalancePctOfStart / 100)),
     );
     expect(out.glideTarget).toBe(out.goalSeekTargetEndingBalance);
     expect(out.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 50, years: 15 },
-      { changePct: -1, extra: 0 },
+      {
+        changePct: balanced.derived.spending.changePct,
+        extra: 50,
+        years: Math.max(1, Math.round(35 * balanced.derived.spending.firstTierYearsFractionOfHorizon)),
+      },
+      { changePct: balanced.derived.spending.remainingChangePct, extra: 0 },
     ]);
     expect(out.giftingTiers).toEqual([{ amount: 30, balance: 2700 }]);
   });
@@ -276,8 +275,12 @@ describe('computeDerivedPresetValues', () => {
       { amount: 5, balance: 500 },
     ]);
     expect(out.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 77, years: 15 },
-      { changePct: -1, extra: 0, years: 6 },
+      {
+        changePct: balanced.derived.spending.changePct,
+        extra: 77,
+        years: Math.max(1, Math.round(35 * balanced.derived.spending.firstTierYearsFractionOfHorizon)),
+      },
+      { changePct: balanced.derived.spending.remainingChangePct, extra: 0, years: 6 },
       { changePct: 1, extra: 55 },
     ]);
   });
@@ -301,7 +304,9 @@ describe('computeDerivedPresetValues', () => {
       numYears: 35,
       spendingOverTimeTiers: [{ changePct: 1, extra: 20 }],
     });
-    expect(out.spendingOverTimeTiers).toEqual([{ changePct: -2, extra: 20 }]);
+    expect(out.spendingOverTimeTiers).toEqual([
+      { changePct: balanced.derived.spending.changePct, extra: 20 },
+    ]);
   });
 
   it('sets remaining-years changePct independently of the first tier', () => {
@@ -313,8 +318,8 @@ describe('computeDerivedPresetValues', () => {
         { changePct: 0, extra: 0 },
       ],
     });
-    expect(out.spendingOverTimeTiers[0].changePct).toBe(-2);
-    expect(out.spendingOverTimeTiers[1].changePct).toBe(-1);
+    expect(out.spendingOverTimeTiers[0].changePct).toBe(balanced.derived.spending.changePct);
+    expect(out.spendingOverTimeTiers[1].changePct).toBe(balanced.derived.spending.remainingChangePct);
   });
 
   it('writes percentage minimum floors for Specific List, not dollar floors', () => {
@@ -418,10 +423,17 @@ describe('defaults composition', () => {
     expect(SCENARIO_DEFAULTS.glideTarget).toBeUndefined();
     expect(SCENARIO_DEFAULTS.floorBalance).toBeUndefined();
     expect(SCENARIO_DEFAULTS.ceilingBalance).toBeUndefined();
-    expect(SCENARIO_DEFAULTS.glideRate).toBe(-1);
+    expect(SCENARIO_DEFAULTS.glideRate).toBe(balanced.scenario.glideRate);
     expect(SCENARIO_DEFAULTS.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 0, years: 13 },
-      { changePct: -1, extra: 0 },
+      {
+        changePct: balanced.derived.spending.changePct,
+        extra: 0,
+        years: Math.max(
+          1,
+          Math.round(BASE_DEFAULTS.numYears * balanced.derived.spending.firstTierYearsFractionOfHorizon),
+        ),
+      },
+      { changePct: balanced.derived.spending.remainingChangePct, extra: 0 },
     ]);
   });
 
@@ -441,25 +453,5 @@ describe('defaults composition', () => {
           .toEqual([PROFILES_ERROR]);
       }
     }
-  });
-});
-
-describe('preset migration', () => {
-  it('marks pre-v5 saves detached at the default level', () => {
-    const migrated = migrateScenario({ startBalance: 4000 }, 4);
-    expect(migrated.presetActive).toBe(false);
-    expect(migrated.presetLevel).toBe(DEFAULT_PRESET_LEVEL);
-  });
-
-  it('leaves v5 preset state alone', () => {
-    const migrated = migrateScenario({ presetActive: true, presetLevel: 3 }, 5);
-    expect(migrated.presetActive).toBe(true);
-    expect(migrated.presetLevel).toBe(3);
-  });
-
-  it('detaches current-schema saves that omit Easy Mode so defaults cannot re-attach', () => {
-    const migrated = migrateScenario({ startBalance: 4200, withdrawalFloors: [{ amount: 88 }] }, 6);
-    expect(migrated.presetActive).toBe(false);
-    expect(migrated.presetLevel).toBe(DEFAULT_PRESET_LEVEL);
   });
 });

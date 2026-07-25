@@ -6,6 +6,7 @@
 // the UI while still always printing light.
 
 import { buildPlanSnapshot } from '../core/reportModel.js';
+import { loadUiPrefs, saveUiPrefs, DEFAULT_UI_PREFS } from '../state/uiPrefs.js';
 import { isDarkMode, onThemeChange } from './theme.js';
 import { formatK, formatPercent } from './format.js';
 import {
@@ -55,9 +56,7 @@ function renderSnapMetrics(metrics) {
   }
 }
 
-const BAND_STORAGE_KEY = 'sor:report-band';
-const THEME_STORAGE_KEY = 'sor:report-theme-mode';
-const DEFAULT_BAND = { low: 10, high: 90 };
+const DEFAULT_BAND = { ...DEFAULT_UI_PREFS.reportBand };
 
 let lastRun = null;
 let dirty = true;
@@ -66,46 +65,40 @@ let renderedForKey = null;
 let themeOverride = null;
 
 function loadBandPrefs() {
-  try {
-    const raw = localStorage.getItem(BAND_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_BAND };
-    const parsed = JSON.parse(raw);
-    const low = Number(parsed.low);
-    const high = Number(parsed.high);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) return { ...DEFAULT_BAND };
-    return {
-      low: Math.min(45, Math.max(0, Math.round(low / 5) * 5)),
-      high: Math.min(100, Math.max(55, Math.round(high / 5) * 5)),
-    };
-  } catch {
-    return { ...DEFAULT_BAND };
-  }
+  const band = loadUiPrefs().reportBand;
+  return { low: band.low, high: band.high };
 }
 
 function saveBandPrefs(low, high) {
-  try {
-    localStorage.setItem(BAND_STORAGE_KEY, JSON.stringify({ low, high }));
-  } catch {
-    /* ignore quota / private mode */
-  }
+  saveUiPrefs({ reportBand: { low, high } });
 }
 
 function loadThemeOverride() {
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    return raw === 'light' || raw === 'dark' ? raw : null;
-  } catch {
-    return null;
-  }
+  const mode = loadUiPrefs().reportThemeMode;
+  return mode === 'light' || mode === 'dark' ? mode : null;
 }
 
 function saveThemeOverride(value) {
-  try {
-    if (value) localStorage.setItem(THEME_STORAGE_KEY, value);
-    else localStorage.removeItem(THEME_STORAGE_KEY);
-  } catch {
-    /* ignore quota / private mode */
+  saveUiPrefs({ reportThemeMode: value === 'light' || value === 'dark' ? value : null });
+}
+
+/** Push report band + theme mode into controls (used when applying shared UI). */
+export function applyReportViewPrefs({ reportBand, reportThemeMode } = {}) {
+  if (reportBand && typeof reportBand === 'object') {
+    const lowEl = document.getElementById('reportPxLow');
+    const highEl = document.getElementById('reportPxHigh');
+    if (lowEl && Number.isFinite(reportBand.low)) lowEl.value = String(reportBand.low);
+    if (highEl && Number.isFinite(reportBand.high)) highEl.value = String(reportBand.high);
+    syncPxLabels();
   }
+  themeOverride =
+    reportThemeMode === 'light' || reportThemeMode === 'dark' ? reportThemeMode : null;
+  const modeEl = document.getElementById('reportThemeMode');
+  if (modeEl) modeEl.value = themeOverride || 'auto';
+  applyThemeOverrideClass();
+  const details = document.getElementById('details-plan-report');
+  if (details?.open && lastRun) renderFull();
+  else dirty = true;
 }
 
 /** Report's own effective dark mode — the override if set, else the app's. */

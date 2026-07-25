@@ -274,6 +274,10 @@ test('Link sits between New and Export and copies a share URL', async ({ page, c
 
   await page.fill('#startBalance', '3,000');
   await page.click('#linkCopyButton');
+  const includeDialog = page.locator('#includeUiDialog');
+  await expect(includeDialog).toBeVisible();
+  await expect(page.locator('#includeUiCheckbox')).not.toBeChecked();
+  await page.click('#confirmIncludeUi');
   await expect(page.locator('#linkCopyButton')).toHaveText('Copied!', { timeout: 2000 });
 
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
@@ -296,6 +300,8 @@ test('Opening a share link loads inputs and starts a run', async ({ page, contex
   await page.fill('#numSimulations', '400');
 
   await page.click('#linkCopyButton');
+  await expect(page.locator('#includeUiDialog')).toBeVisible();
+  await page.click('#confirmIncludeUi');
   await expect(page.locator('#linkCopyButton')).toHaveText('Copied!', { timeout: 2000 });
   const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
 
@@ -305,4 +311,52 @@ test('Opening a share link loads inputs and starts a run', async ({ page, contex
   await expect(page.locator('#startBalance')).toHaveValue('3,000');
   await expect(page).not.toHaveURL(/[?&]s=/);
   await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
+});
+
+test('Share link can attach view settings and prompt the recipient', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await waitForInit(page);
+
+  await page.evaluate(() => {
+    localStorage.setItem('sor:ui', JSON.stringify({
+      theme: 'dark',
+      reportBand: { low: 25, high: 75 },
+      reportThemeMode: null,
+      accordions: {},
+      balanceLogScale: false,
+    }));
+  });
+  await page.reload();
+  await waitForInit(page);
+
+  await page.fill('#startBalance', '2,500');
+  await page.click('#linkCopyButton');
+  await expect(page.locator('#includeUiDialog')).toBeVisible();
+  await page.check('#includeUiCheckbox');
+  await page.click('#confirmIncludeUi');
+  await expect(page.locator('#linkCopyButton')).toHaveText('Copied!', { timeout: 2000 });
+  const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
+
+  await page.evaluate(() => {
+    localStorage.setItem('sor:ui', JSON.stringify({
+      theme: 'light',
+      reportBand: { low: 10, high: 90 },
+      reportThemeMode: null,
+      accordions: {},
+      balanceLogScale: false,
+    }));
+  });
+  await page.goto(shareUrl);
+
+  const applyDialog = page.locator('#applyUiDialog');
+  await expect(applyDialog).toBeVisible({ timeout: 30_000 });
+  await page.click('#applyUiPrefs');
+  await expect(applyDialog).toBeHidden();
+  await waitForInit(page);
+
+  const theme = await page.evaluate(() => JSON.parse(localStorage.getItem('sor:ui')).theme);
+  expect(theme).toBe('dark');
+  await expect(page.locator('#startBalance')).toHaveValue('2,500');
 });

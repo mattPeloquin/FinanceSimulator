@@ -4,6 +4,14 @@
 //   - JSON export / import for sharing
 
 import { SCHEMA_VERSION, migrateScenario } from './scenario.js';
+import {
+  loadAccordionState,
+  saveAccordionState,
+  setAccordionOpen,
+  optionalUiFromEnvelope,
+} from './uiPrefs.js';
+
+export { loadAccordionState, saveAccordionState, setAccordionOpen };
 
 const AUTOSAVE_KEY = 'sor:autosave';
 const DB_NAME = 'sor-sessions';
@@ -30,7 +38,7 @@ export function loadAutosave() {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.scenario) return null;
     return {
-      scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
+      scenario: migrateScenario(parsed.scenario, parsed.schemaVersion),
       name: parsed.name || '',
       description: parsed.description || '',
     };
@@ -67,7 +75,7 @@ export function loadUnsavedStash() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.scenario) return null;
-    return migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1);
+    return migrateScenario(parsed.scenario, parsed.schemaVersion);
   } catch {
     return null;
   }
@@ -81,45 +89,7 @@ export function clearUnsavedStash() {
   }
 }
 
-// ---- Accordion open/closed (UI chrome, not scenario data) --------------------
-// Kept in a separate key so expand/collapse survives refresh and is independent
-// of autosaved settings, named sessions, and import/export.
-
-const ACCORDION_KEY = 'sor:ui-accordions';
-
-/** @returns {Record<string, boolean>} id → open */
-export function loadAccordionState() {
-  try {
-    const raw = localStorage.getItem(ACCORDION_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out = {};
-    for (const [id, open] of Object.entries(parsed)) {
-      if (typeof open === 'boolean') out[id] = open;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-/** @param {Record<string, boolean>} state */
-export function saveAccordionState(state) {
-  try {
-    localStorage.setItem(ACCORDION_KEY, JSON.stringify(state));
-  } catch {
-    /* non-fatal */
-  }
-}
-
-/** Merge one accordion's open flag into the persisted map. */
-export function setAccordionOpen(id, open) {
-  if (!id) return;
-  const state = loadAccordionState();
-  state[id] = !!open;
-  saveAccordionState(state);
-}
+// Accordion open/closed lives in sor:ui (see uiPrefs.js). Re-exported above.
 
 // ---- Named sessions (IndexedDB) ---------------------------------------------
 
@@ -152,18 +122,19 @@ function requestToPromise(request) {
   });
 }
 
-export async function saveSession(name, scenario, description = '') {
+export async function saveSession(name, scenario, description = '', { ui } = {}) {
   const db = await openDb();
   try {
-    await requestToPromise(
-      tx(db, 'readwrite').put({
-        name,
-        scenario,
-        description: description || '',
-        schemaVersion: SCHEMA_VERSION,
-        savedAt: Date.now(),
-      }),
-    );
+    const record = {
+      name,
+      scenario,
+      description: description || '',
+      schemaVersion: SCHEMA_VERSION,
+      savedAt: Date.now(),
+    };
+    const attached = optionalUiFromEnvelope(ui);
+    if (attached) record.ui = attached;
+    await requestToPromise(tx(db, 'readwrite').put(record));
   } finally {
     db.close();
   }
@@ -174,10 +145,13 @@ export async function loadSession(name) {
   try {
     const record = await requestToPromise(tx(db, 'readonly').get(name));
     if (!record) return null;
-    return {
-      scenario: migrateScenario(record.scenario, record.schemaVersion ?? 1),
+    const out = {
+      scenario: migrateScenario(record.scenario, record.schemaVersion),
       description: record.description || '',
     };
+    const ui = optionalUiFromEnvelope(record.ui);
+    if (ui) out.ui = ui;
+    return out;
   } finally {
     db.close();
   }
@@ -213,11 +187,14 @@ export function parseScenarioPayload(parsed) {
   if (!parsed || parsed.type !== EXPORT_TYPE || !parsed.scenario) {
     throw new Error('Not a valid simulator scenario file.');
   }
-  return {
-    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion ?? 1),
+  const out = {
+    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion),
     name: parsed.name || '',
     description: parsed.description || '',
   };
+  const ui = optionalUiFromEnvelope(parsed.ui);
+  if (ui) out.ui = ui;
+  return out;
 }
 
 function bytesToBase64Url(bytes) {
@@ -246,8 +223,9 @@ function utf8Decode(bytes) {
 /**
  * Compact JSON envelope → base64url (no padding) for the `s` query param.
  * Omits exportedAt; includes name/description only when non-empty.
+ * Optional `ui` attaches a view-settings snapshot when provided.
  */
-export function encodeScenarioToShareParam(scenario, { name = '', description = '' } = {}) {
+export function encodeScenarioToShareParam(scenario, { name = '', description = '', ui } = {}) {
   const payload = {
     type: EXPORT_TYPE,
     schemaVersion: SCHEMA_VERSION,
@@ -255,6 +233,8 @@ export function encodeScenarioToShareParam(scenario, { name = '', description = 
   };
   if (name) payload.name = name;
   if (description) payload.description = description;
+  const attached = optionalUiFromEnvelope(ui);
+  if (attached) payload.ui = attached;
   return bytesToBase64Url(utf8Encode(JSON.stringify(payload)));
 }
 
@@ -296,7 +276,7 @@ export function stripShareParamFromUrl(href = typeof location !== 'undefined' ? 
   return url.pathname + url.search + url.hash;
 }
 
-export function exportScenario(scenario, name = 'scenario', description = '') {
+export function exportScenario(scenario, name = 'scenario', description = '', { ui } = {}) {
   const payload = {
     type: EXPORT_TYPE,
     schemaVersion: SCHEMA_VERSION,
@@ -305,6 +285,8 @@ export function exportScenario(scenario, name = 'scenario', description = '') {
     description: description || '',
     scenario,
   };
+  const attached = optionalUiFromEnvelope(ui);
+  if (attached) payload.ui = attached;
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

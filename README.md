@@ -1,15 +1,13 @@
 # 📈 Personal Finance Simulator
 
-Welcome to the Personal Finance Simulator! This is a powerful, interactive tool that helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market. 
+Welcome to the Personal Finance Simulator! This interactive tool helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market. 
 
-**[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs locally in your browser, no account required. Easy Mode and built-in help will get you started; this README is primarily for extending the simulator with AI coding.
+**[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs in web browser on your device, no apps or user accounts! 
 
-## Why is this so easy to use?
+The entire simulator is a **single, self-contained HTML file**. Easy Mode and built-in help will get you started.
 
-This entire simulator is a **single, self-contained HTML file**.
-
-- **No cloud - you control all data:** This app doesn't use databases, networks, or any servers.
-- **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links.
+- **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
+- **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
 - **Run anywhere:** Double-click the `index.html` file and run in your browser.
 - **Designed for vibe coding:**  Follow instructions below if you want to change or extend.
 
@@ -26,7 +24,7 @@ Cursor has a built-in AI assistant. You essentially act as the "Product Manager,
 1. **Use the Composer (Ctrl+I / Cmd+I)**
   - Press `Ctrl + I` (or `Cmd + I` on Mac) to open the AI Composer.
   - Simply type what you want to achieve in plain English.
-  - *Example:* "Make the background of the app dark mode," or "Add a new text input for 'Annual Inflation Rate' next to the starting balance."
+  - *Example:* "Add a new text input for 'Annual Inflation Rate' next to the starting balance."
   - The AI will generate the code across multiple files. Simply click **Accept All** to apply it.
 2. **Use the Chat Panel (Ctrl+L / Cmd+L)**
   - If you want to ask questions or figure out how something works, open the Chat panel.
@@ -71,9 +69,11 @@ Once you've vibe-coded your app to perfection and want to share it with the worl
 npm run build
 ```
 
-This will bundle your entire app into a single `index.html` file located in the `dist` folder. You can now send that file to anyone or drag-and-drop it onto a web host! Happy building!
+This will bundle your entire app into a single `index.html` file located in the `dist` folder. The MIT copyright notice is embedded inside that file automatically, so it travels along when you share or host the build. You can now send that file to anyone or drag-and-drop it onto a web host! Happy building!
 
 ---
+
+
 
 ## How the Simulator Works
 
@@ -89,6 +89,10 @@ flowchart TD
     D --> E["5. Package chart data<br/>(~200 surface paths + heatmap grid)"]
     E --> F["6. Render Results<br/>(metric cards + charts)"]
 ```
+
+
+
+
 
 ### From inputs to results
 
@@ -107,18 +111,22 @@ flowchart TD
 
 ### Where to look when vibe-coding
 
-| You want to change…                 | Look in…                                                                                            |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
-| The math of growth/withdrawals      | `src/core/simulation.js`, `src/core/withdrawal.js`                                                  |
-| Find Best Plan's search logic       | `src/core/goalSeek.js`                                                                              |
-| The historical dataset              | `src/data/historicalData.js`                                                                        |
-| An input field or its default value | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/` |
+
+| You want to change…                     | Look in…                                                                                             |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| The math of growth/withdrawals          | `src/core/simulation.js`, `src/core/withdrawal.js`                                                   |
+| Find Best Plan's search logic           | `src/core/goalSeek.js`                                                                               |
+| The historical dataset                  | `src/data/historicalData.js`                                                                         |
+| An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/`  |
 | Fees & taxes (AUM fee / withdrawal tax) | `src/partials/inputs/feesTaxes.html`, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
-| The Risk Level slider presets       | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)              |
-| A chart's look or behavior          | `src/ui/charts/` (one file per chart)                                                               |
-| 3D drilldown / Show from–to window  | `src/core/surfaceDrilldown.js`, `src/ui/charts/outcomeWindow.js`                                    |
-| The summary numbers shown           | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                     |
-| Saving/loading sessions             | `src/state/persistence.js`                                                                          |
+| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)               |
+| A chart's look or behavior              | `src/ui/charts/` (one file per chart)                                                                |
+| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, `src/ui/charts/outcomeWindow.js`                                     |
+| The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                      |
+| Saving/loading sessions                 | `src/state/persistence.js`                                                                           |
+
+
+
 
 ## License
 

@@ -59,23 +59,20 @@ describe('share link encode/decode', () => {
     expect(() => decodeScenarioFromShareParam(bad)).toThrow(/valid simulator scenario link/i);
   });
 
-  it('migrates older schemaVersion the same way as import', () => {
-    const v1Payload = {
+  it('rejects unsupported older schemaVersion the same way as import', () => {
+    const oldPayload = {
       type: 'sor-scenario',
       schemaVersion: 1,
       scenario: { startBalance: 4_000_000, baseWithdrawal: 80_000, numYears: 40 },
     };
-    const fromParse = parseScenarioPayload(v1Payload);
-    expect(fromParse.scenario.startBalance).toBe(4000);
-    expect(fromParse.scenario.baseWithdrawal).toBe(80);
+    expect(() => parseScenarioPayload(oldPayload)).toThrow(/older than this app supports/i);
 
-    const param = btoa(JSON.stringify(v1Payload))
+    const param = btoa(JSON.stringify(oldPayload))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
-    const fromShare = decodeScenarioFromShareParam(param);
-    expect(fromShare.scenario.startBalance).toBe(fromParse.scenario.startBalance);
-    expect(fromShare.scenario.baseWithdrawal).toBe(fromParse.scenario.baseWithdrawal);
+    // Share decode wraps migrate errors as a generic invalid-link message.
+    expect(() => decodeScenarioFromShareParam(param)).toThrow(/valid simulator scenario link/i);
   });
 
   it('buildShareUrl sets s and strip/peek helpers work', () => {
@@ -89,5 +86,28 @@ describe('share link encode/decode', () => {
     const stripped = stripShareParamFromUrl(url);
     expect(stripped).toBe('/app/?x=1#top');
     expect(peekShareParamFromUrl(`https://example.com${stripped}`)).toBeNull();
+  });
+
+  it('round-trips optional ui view settings on share/import envelopes', () => {
+    const ui = {
+      theme: 'dark',
+      reportBand: { low: 25, high: 75 },
+      reportThemeMode: null,
+      accordions: { 'section-advanced': true },
+      balanceLogScale: true,
+    };
+    const param = encodeScenarioToShareParam({ startBalance: 2500 }, { ui });
+    const loaded = decodeScenarioFromShareParam(param);
+    expect(loaded.scenario.startBalance).toBe(2500);
+    expect(loaded.ui).toEqual(ui);
+
+    const fromParse = parseScenarioPayload({
+      type: 'sor-scenario',
+      schemaVersion: SCHEMA_VERSION,
+      scenario: { startBalance: 1 },
+      ui: { theme: 'nope', reportBand: { low: 20, high: 80 } },
+    });
+    expect(fromParse.ui.theme).toBeNull();
+    expect(fromParse.ui.reportBand).toEqual({ low: 20, high: 80 });
   });
 });

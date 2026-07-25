@@ -19,6 +19,11 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   // Expect the initial state
   await expect(page.locator('h1')).toContainText('Simulator');
+  await expect(page.locator('#githubLink')).toBeVisible();
+  await expect(page.locator('#githubLink')).toHaveAttribute(
+    'href',
+    'https://github.com/mattpeloquin/FinanceSimulator',
+  );
   await expect(page.getByRole('heading', { name: 'Sequence of Returns' })).toBeVisible();
   await expect(page.getByText(/Market returns and inflation are based on historical data/)).toBeVisible();
   await expect(page.getByText(/uses real \(today.s\) dollars/)).toBeVisible();

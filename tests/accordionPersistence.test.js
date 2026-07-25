@@ -44,8 +44,10 @@ describe('accordion persistence', () => {
 
   it('setupAccordionResize restores saved open state and persists toggles', () => {
     localStorage.setItem(
-      'sor:ui-accordions',
-      JSON.stringify({ 'section-investment': true, 'section-withdrawal': false }),
+      'sor:ui',
+      JSON.stringify({
+        accordions: { 'section-investment': true, 'section-withdrawal': false },
+      }),
     );
 
     setupAccordionResize();

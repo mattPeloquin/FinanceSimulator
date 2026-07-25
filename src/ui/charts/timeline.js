@@ -7,6 +7,7 @@ import {
   sampleRunTooltipOptions,
 } from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
+import { loadUiPrefs, saveUiPrefs } from '../../state/uiPrefs.js';
 import { formatWithdrawnLine } from './withdrawalTooltipFormat.js';
 
 function getColors() {
@@ -31,7 +32,6 @@ let lastClassicMedianPath = null;
 let balanceLogControlWired = false;
 
 const CLASSIC_SERIES_LABEL = '4% rule';
-const BALANCE_LOG_STORAGE_KEY = 'sor:ui-balance-log-scale';
 const POINT_RADIUS = 1.5;
 const POINT_HOVER_RADIUS = 3;
 
@@ -47,11 +47,15 @@ export function isBalanceLogScaleEnabled() {
 function restoreBalanceLogScaleControl() {
   const el = document.getElementById('balanceLogScale');
   if (!el) return;
-  try {
-    el.checked = localStorage.getItem(BALANCE_LOG_STORAGE_KEY) === '1';
-  } catch {
-    el.checked = false;
-  }
+  el.checked = !!loadUiPrefs().balanceLogScale;
+}
+
+/** Apply a stored/shared balance-log preference to the checkbox and redraw. */
+export function applyBalanceLogScalePref(enabled) {
+  const el = document.getElementById('balanceLogScale');
+  if (el) el.checked = !!enabled;
+  saveUiPrefs({ balanceLogScale: !!enabled });
+  redrawTimelineCharts();
 }
 
 function redrawTimelineCharts() {
@@ -74,9 +78,7 @@ export function setupBalanceLogScaleControl() {
   balanceLogControlWired = true;
   restoreBalanceLogScaleControl();
   el.addEventListener('change', () => {
-    try {
-      localStorage.setItem(BALANCE_LOG_STORAGE_KEY, el.checked ? '1' : '0');
-    } catch { /* ignore quota / private mode */ }
+    saveUiPrefs({ balanceLogScale: !!el.checked });
     redrawTimelineCharts();
   });
   // Charts are often first drawn while this <details> is closed; resize when opened

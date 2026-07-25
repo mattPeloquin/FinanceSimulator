@@ -7,7 +7,10 @@ async function waitForInit(page) {
 test('Results chart sections default open when accordion chrome is empty', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
-  await page.evaluate(() => localStorage.removeItem('sor:ui-accordions'));
+  await page.evaluate(() => {
+    localStorage.removeItem('sor:ui-accordions');
+    localStorage.removeItem('sor:ui');
+  });
   await page.reload();
   await waitForInit(page);
 
@@ -32,8 +35,8 @@ test('Results chart accordion collapse persists across refresh', async ({ page }
   });
   expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(false);
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui-accordions');
-    return raw && JSON.parse(raw)['details-surface-chart'] === false;
+    const raw = localStorage.getItem('sor:ui');
+    return raw && JSON.parse(raw).accordions?.['details-surface-chart'] === false;
   });
 
   await page.reload();
@@ -57,9 +60,9 @@ test('Expanded settings sections survive refresh and stay independent of scenari
 
   // Wait until the UI chrome key is written (separate from sor:autosave).
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui-accordions');
+    const raw = localStorage.getItem('sor:ui');
     if (!raw) return false;
-    const state = JSON.parse(raw);
+    const state = JSON.parse(raw).accordions || {};
     return state['section-investment'] === true && state['section-advanced'] === true;
   });
 
@@ -77,8 +80,8 @@ test('Expanded settings sections survive refresh and stay independent of scenari
   // Collapsing also persists across refresh.
   await page.locator('#section-investment > summary').click();
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui-accordions');
-    return raw && JSON.parse(raw)['section-investment'] === false;
+    const raw = localStorage.getItem('sor:ui');
+    return raw && JSON.parse(raw).accordions?.['section-investment'] === false;
   });
 
   await page.reload();

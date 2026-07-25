@@ -11,14 +11,14 @@ import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGi
 import { buildWithdrawalTaxSeries } from '../core/feesTaxes.js';
 import { buildAllocationOverTimeSeries } from '../core/allocation.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
-import {
-  earlyWeightSlotFromStrengthPct,
-  resolveEarlyWeighting,
-} from '../core/statistics.js';
+import { resolveEarlyWeighting } from '../core/statistics.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
 export const SCHEMA_VERSION = 13;
+
+/** Oldest schema version this build can load. Pre-floor history was removed. */
+export const SCHEMA_VERSION_MIN = 13;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -199,185 +199,33 @@ export function formatCurrency(val) {
   return Math.round(n).toLocaleString('en-US');
 }
 
-/** Upgrade saved scenarios from older schema versions. */
-export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
-  if (!scenario) return scenario;
-  let migrated = { ...scenario };
-
-  if (schemaVersion < 2) {
-    for (const f of FIELDS) {
-      const isCurrency = f.type === 'currency' || f.type === 'optionalCurrency';
-      if (isCurrency && migrated[f.key] != null && migrated[f.key] !== '') {
-        migrated[f.key] = migrated[f.key] / MONEY_SCALE;
-      }
-    }
-    if (migrated.withdrawalFloor != null && migrated.withdrawalFloor !== '') {
-      migrated.withdrawalFloor = migrated.withdrawalFloor / MONEY_SCALE;
-    }
+/**
+ * Upgrade saved scenarios within the versions this build supports.
+ * Historical migrations below SCHEMA_VERSION_MIN were removed for production;
+ * add forward steps here when bumping SCHEMA_VERSION (e.g. `if (schemaVersion < 14)`).
+ */
+export function migrateScenario(scenario, schemaVersion) {
+  if (scenario == null || typeof scenario !== 'object' || Array.isArray(scenario)) {
+    throw new Error('Scenario data is missing or invalid.');
+  }
+  if (typeof schemaVersion !== 'number' || !Number.isFinite(schemaVersion)) {
+    throw new Error('Scenario schema version is missing or invalid.');
+  }
+  if (schemaVersion < SCHEMA_VERSION_MIN) {
+    throw new Error(
+      `This scenario uses schema version ${schemaVersion}, which is older than this app supports (${SCHEMA_VERSION_MIN}).`,
+    );
+  }
+  if (schemaVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `This scenario uses schema version ${schemaVersion}, which is newer than this app supports (${SCHEMA_VERSION}).`,
+    );
   }
 
-  if (schemaVersion < 3) {
-    if (migrated.withdrawalFloors == null) {
-      const legacyFloor = parseCurrency(migrated.withdrawalFloor);
-      migrated.withdrawalFloors = legacyFloor > 0 ? [{ amount: legacyFloor }] : [];
-    }
-    delete migrated.withdrawalFloor;
-  }
+  const migrated = { ...scenario };
 
-  if (schemaVersion < 4) {
-    if (migrated.spendingOverTimeTiers == null) {
-      const changePct = migrated.spendChangePct ?? 0;
-      const extra = parseCurrency(migrated.goGoBonus);
-      const years = parseInt(migrated.goGoYears, 10);
-      if (Number.isFinite(years) && years > 0) {
-        migrated.spendingOverTimeTiers = [
-          { changePct, extra, years },
-          { changePct, extra: 0 },
-        ];
-      } else {
-        migrated.spendingOverTimeTiers = [{ changePct, extra: 0 }];
-      }
-    }
-    delete migrated.spendChangePct;
-    delete migrated.goGoBonus;
-    delete migrated.goGoYears;
-    if (migrated.goalSeekIncludeSpendingOverTime == null && migrated.goalSeekIncludeGoGoYears != null) {
-      migrated.goalSeekIncludeSpendingOverTime = migrated.goalSeekIncludeGoGoYears;
-    }
-    delete migrated.goalSeekIncludeGoGoYears;
-  }
-
-  if (migrated.goalSeekIncludeBaseWithdrawal == null && migrated.goalSeekPinBaseWithdrawal != null) {
-    migrated.goalSeekIncludeBaseWithdrawal = !migrated.goalSeekPinBaseWithdrawal;
-  }
-  delete migrated.goalSeekPinBaseWithdrawal;
-
-  // Easy Mode (presetActive / presetLevel) is part of saved scenario state.
-  // Missing flag → detached. New empty workbenches get presetActive:true from
-  // defaultScenario() itself, not via migration. Any persisted scenario that
-  // omits the field (pre-slider saves, partial imports, or current-schema
-  // records that never stored it) must load detached so merging with defaults
-  // cannot turn Easy Mode on and overwrite hand-tuned values on the next
-  // balance/horizon edit.
-  if (migrated.presetActive == null) migrated.presetActive = false;
-  if (migrated.presetLevel == null) migrated.presetLevel = SCENARIO_DEFAULTS.presetLevel;
-
-  if (schemaVersion < 6) {
-    // The three per-band "Bal <> Override" thresholds collapsed into a single
-    // "no cut if balance above X" rule. The old Expected override carried
-    // exactly those semantics (raise a cut back to the ~0 Expected adjustment
-    // while the balance is above it), so it becomes the new threshold. The
-    // forced-cut (Low) and forced-boost (High) overrides have no equivalent
-    // and are dropped — the Balance adjustment floor/ceiling covers their
-    // intent.
-    if (migrated.dynNoCutBal == null && migrated.dynMedBal != null) {
-      migrated.dynNoCutBal = migrated.dynMedBal;
-    }
-    delete migrated.dynLowBal;
-    delete migrated.dynMedBal;
-    delete migrated.dynHighBal;
-  }
-
-  if (schemaVersion < 7) {
-    // Optional allocation glide schedule; empty = fixed static mix every year.
-    if (migrated.allocationOverTimeTiers == null) {
-      migrated.allocationOverTimeTiers = [];
-    }
-  }
-
-  if (schemaVersion < 8) {
-    // 0–100 strength + named shapes → 5-stop slot + Early emphasis / Late floor.
-    if (migrated.earlyWeightSlot == null && migrated.earlyWeightStrengthPct != null) {
-      migrated.earlyWeightSlot = earlyWeightSlotFromStrengthPct(migrated.earlyWeightStrengthPct);
-    }
-    if (migrated.earlyWeightSlot == null) {
-      migrated.earlyWeightSlot = SCENARIO_DEFAULTS.earlyWeightSlot;
-    }
-    if (migrated.earlyWeightEmphasisPct == null) {
-      migrated.earlyWeightEmphasisPct = SCENARIO_DEFAULTS.earlyWeightEmphasisPct;
-    }
-    if (migrated.earlyWeightLateFloorPct == null) {
-      migrated.earlyWeightLateFloorPct = SCENARIO_DEFAULTS.earlyWeightLateFloorPct;
-    }
-    delete migrated.earlyWeightStrengthPct;
-    delete migrated.rankWeightingShape;
-  }
-
-  if (schemaVersion < 9) {
-    if (migrated.advisorFeePct == null) migrated.advisorFeePct = SCENARIO_DEFAULTS.advisorFeePct;
-    if (migrated.withdrawalTaxTiers == null) migrated.withdrawalTaxTiers = [];
-  }
-
-  if (schemaVersion < 10) {
-    // Explicit section toggle. Preserve prior behavior: turn on when a save
-    // already had a non-zero fee or any tax-tier rate configured.
-    if (migrated.enableFeesTaxes == null) {
-      const feeOn = (migrated.advisorFeePct ?? 0) > 0;
-      const taxOn = Array.isArray(migrated.withdrawalTaxTiers)
-        && migrated.withdrawalTaxTiers.some((t) => (t?.taxPct ?? 0) > 0
-          || (t?.highTaxPct ?? 0) > 0
-          || (Array.isArray(t?.spendBrackets) && t.spendBrackets.some((b) => (b?.taxPct ?? 0) > 0)));
-      migrated.enableFeesTaxes = feeOn || taxOn;
-    }
-  }
-
-  if (schemaVersion < 11) {
-    // Nested progressive spend brackets replace the single highSpendAbove/highTaxPct pair.
-    if (Array.isArray(migrated.withdrawalTaxTiers)) {
-      migrated.withdrawalTaxTiers = migrated.withdrawalTaxTiers.map((tier) => {
-        let spendBrackets = Array.isArray(tier?.spendBrackets)
-          ? tier.spendBrackets.map((b) => ({ ...b }))
-          : [];
-        if (
-          spendBrackets.length === 0
-          && tier?.highSpendAbove != null
-          && tier.highSpendAbove !== ''
-        ) {
-          const above = typeof tier.highSpendAbove === 'number'
-            ? tier.highSpendAbove
-            : parseCurrency(tier.highSpendAbove);
-          if (above > 0) {
-            spendBrackets = [{
-              above,
-              taxPct: parseOptionalTaxPct(tier.highTaxPct),
-            }];
-          }
-        }
-        const next = {
-          taxPct: tier?.taxPct,
-          applyToGifts: tier?.applyToGifts,
-          spendBrackets,
-        };
-        if (tier?.years != null) next.years = tier.years;
-        return next;
-      });
-    }
-  }
-
-  if (schemaVersion < 12) {
-    // On-plan blend measure + yearly impact curve (Advanced). Missing → defaults.
-    if (migrated.onPlanMeasure == null) {
-      migrated.onPlanMeasure = SCENARIO_DEFAULTS.onPlanMeasure;
-    }
-    if (migrated.onPlanYearlyEmphasisPct == null) {
-      migrated.onPlanYearlyEmphasisPct = SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct;
-    }
-    if (migrated.onPlanYearlyLateFloorPct == null) {
-      migrated.onPlanYearlyLateFloorPct = SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct;
-    }
-  }
-
-  if (schemaVersion < 13) {
-    // Symmetrical end-weights replaced the old early-drop / late-floor curve.
-    // Prior defaults (0, 100) were flat under the old formula; map to (100, 100).
-    if (
-      migrated.onPlanYearlyEmphasisPct === 0
-      && migrated.onPlanYearlyLateFloorPct === 100
-    ) {
-      migrated.onPlanYearlyEmphasisPct = 100;
-      migrated.onPlanYearlyLateFloorPct = 100;
-    }
-  }
+  // Forward migrations go here when SCHEMA_VERSION increases:
+  // if (schemaVersion < 14) { ... }
 
   return migrated;
 }

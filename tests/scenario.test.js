@@ -16,6 +16,8 @@ import {
   normalizeGiftingTiers,
   migrateScenario,
   MONEY_SCALE,
+  SCHEMA_VERSION,
+  SCHEMA_VERSION_MIN,
   SCENARIO_DEFAULTS,
 } from '../src/state/scenario.js';
 import { getSampleYears, computeProfiles, computeStandardizedYears } from '../src/core/history.js';
@@ -49,255 +51,40 @@ describe('currency helpers', () => {
 });
 
 describe('migrateScenario', () => {
-  it('converts v1 dollar fields to $000s', () => {
-    const v1 = { startBalance: 4000000, baseWithdrawal: 80000, numYears: 40 };
-    const v2 = migrateScenario(v1, 1);
-    expect(v2.startBalance).toBe(4000);
-    expect(v2.baseWithdrawal).toBe(80);
-    expect(v2.numYears).toBe(40);
-  });
-  it('converts v2 withdrawalFloor to withdrawalFloors', () => {
-    const v2 = { startBalance: 4000, withdrawalFloor: 100 };
-    const v3 = migrateScenario(v2, 2);
-    expect(v3.withdrawalFloors).toEqual([{ amount: 100 }]);
-    expect(v3.withdrawalFloor).toBeUndefined();
-  });
-  it('converts v3 front-loading fields to spendingOverTimeTiers', () => {
-    const v3 = {
-      startBalance: 4000,
-      withdrawalFloors: [{ amount: 80 }],
-      spendChangePct: -2,
-      goGoBonus: 50,
-      goGoYears: 15,
-    };
-    const v4 = migrateScenario(v3, 3);
-    expect(v4.spendingOverTimeTiers).toEqual([
-      { changePct: -2, extra: 50, years: 15 },
-      { changePct: -2, extra: 0 },
-    ]);
-    expect(v4.spendChangePct).toBeUndefined();
-    expect(v4.goGoBonus).toBeUndefined();
-    expect(v4.goGoYears).toBeUndefined();
-  });
-  it('leaves v4 scenarios unchanged apart from marking the preset detached', () => {
-    const s = {
-      startBalance: 4000,
-      withdrawalFloors: [{ amount: 80 }],
-      spendingOverTimeTiers: [{ changePct: 0, extra: 0 }],
-    };
-    // Pre-v5 saves predate the Risk Level slider: they load detached so the
-    // slider never overwrites their hand-built values.
-    const onPlanDefaults = {
-      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
-      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
-      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
-    };
-    expect(migrateScenario(s, 4)).toEqual({
-      ...s,
-      presetActive: false,
-      presetLevel: SCENARIO_DEFAULTS.presetLevel,
-      allocationOverTimeTiers: [],
-      earlyWeightSlot: SCENARIO_DEFAULTS.earlyWeightSlot,
-      earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
-      earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
-      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
-      ...onPlanDefaults,
-    });
-  });
-  it('adds an empty allocation-over-time schedule when migrating pre-v7 saves', () => {
+  it('returns a shallow copy of a current-schema scenario', () => {
     const s = {
       startBalance: 4000,
       presetActive: true,
       presetLevel: 4,
-    };
-    const earlyWeightDefaults = {
-      earlyWeightSlot: SCENARIO_DEFAULTS.earlyWeightSlot,
-      earlyWeightEmphasisPct: SCENARIO_DEFAULTS.earlyWeightEmphasisPct,
-      earlyWeightLateFloorPct: SCENARIO_DEFAULTS.earlyWeightLateFloorPct,
-    };
-    const feesTaxesDefaults = {
-      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
-    };
-    const onPlanDefaults = {
-      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
-      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
-      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
-    };
-    expect(migrateScenario(s, 5)).toEqual({
-      ...s,
-      allocationOverTimeTiers: [],
-      ...earlyWeightDefaults,
-      ...feesTaxesDefaults,
-      ...onPlanDefaults,
-    });
-    expect(migrateScenario(s, 6)).toEqual({
-      ...s,
-      allocationOverTimeTiers: [],
-      ...earlyWeightDefaults,
-      ...feesTaxesDefaults,
-      ...onPlanDefaults,
-    });
-  });
-  it('adds fees/taxes defaults when migrating pre-v9 saves', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 4,
-      allocationOverTimeTiers: [],
-      earlyWeightSlot: 0,
-      earlyWeightEmphasisPct: 30,
-      earlyWeightLateFloorPct: 40,
-    };
-    expect(migrateScenario(s, 8)).toEqual({
-      ...s,
-      advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
-      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
-      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
-      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
-    });
-  });
-  it('adds enableFeesTaxes when migrating pre-v10 saves', () => {
-    const off = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 2,
-      advisorFeePct: 0,
-      withdrawalTaxTiers: [],
-    };
-    expect(migrateScenario(off, 9)).toEqual({
-      ...off,
-      enableFeesTaxes: false,
-      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
-      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
-      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
-    });
-    const on = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 2,
-      advisorFeePct: 0.5,
-      withdrawalTaxTiers: [{ taxPct: 12, applyToGifts: true, spendBrackets: [] }],
-    };
-    expect(migrateScenario(on, 9).enableFeesTaxes).toBe(true);
-  });
-  it('migrates legacy highSpendAbove into spendBrackets on pre-v11 saves', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 2,
-      enableFeesTaxes: true,
-      advisorFeePct: 0,
-      withdrawalTaxTiers: [{
-        taxPct: 12,
-        applyToGifts: true,
-        highSpendAbove: 200,
-        highTaxPct: 18,
-      }],
-    };
-    const migrated = migrateScenario(s, 10);
-    expect(migrated.withdrawalTaxTiers).toEqual([{
-      taxPct: 12,
-      applyToGifts: true,
-      spendBrackets: [{ above: 200, taxPct: 18 }],
-    }]);
-  });
-  it('adds on-plan blend defaults when migrating pre-v12 saves', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 4,
-      allocationOverTimeTiers: [],
-      earlyWeightSlot: 0,
-      earlyWeightEmphasisPct: 30,
-      earlyWeightLateFloorPct: 40,
-      advisorFeePct: 0,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
-    };
-    expect(migrateScenario(s, 11)).toEqual({
-      ...s,
-      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
-      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
-      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
-    });
-  });
-  it('maps flat v12 on-plan defaults (0,100) to symmetrical flat (100,100)', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 4,
-      allocationOverTimeTiers: [],
-      earlyWeightSlot: 0,
-      earlyWeightEmphasisPct: 30,
-      earlyWeightLateFloorPct: 40,
-      advisorFeePct: 0,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
-      onPlanMeasure: 'blend',
-      onPlanYearlyEmphasisPct: 0,
-      onPlanYearlyLateFloorPct: 100,
-    };
-    expect(migrateScenario(s, 12)).toEqual({
-      ...s,
-      onPlanYearlyEmphasisPct: 100,
-      onPlanYearlyLateFloorPct: 100,
-    });
-  });
-  it('leaves fully-migrated v13 scenarios untouched when already current', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      presetLevel: 4,
-      allocationOverTimeTiers: [],
-      earlyWeightSlot: 0,
-      earlyWeightEmphasisPct: 30,
-      earlyWeightLateFloorPct: 40,
-      advisorFeePct: 0,
-      withdrawalTaxTiers: [],
-      enableFeesTaxes: false,
       onPlanMeasure: 'blend',
       onPlanYearlyEmphasisPct: 100,
       onPlanYearlyLateFloorPct: 100,
     };
-    expect(migrateScenario(s, 13)).toEqual(s);
+    const migrated = migrateScenario(s, SCHEMA_VERSION);
+    expect(migrated).toEqual(s);
+    expect(migrated).not.toBe(s);
   });
-  it('preserves shaped v12 on-plan curves when migrating to symmetrical end-weights', () => {
-    const s = {
-      startBalance: 4000,
-      onPlanMeasure: 'blend',
-      onPlanYearlyEmphasisPct: 80,
-      onPlanYearlyLateFloorPct: 20,
-    };
-    const migrated = migrateScenario(s, 12);
-    expect(migrated.onPlanYearlyEmphasisPct).toBe(80);
-    expect(migrated.onPlanYearlyLateFloorPct).toBe(20);
+
+  it('rejects schema versions older than SCHEMA_VERSION_MIN', () => {
+    expect(() => migrateScenario({ startBalance: 4000 }, SCHEMA_VERSION_MIN - 1))
+      .toThrow(/older than this app supports/i);
   });
-  it('maps legacy earlyWeightStrengthPct to a 5-stop slot and drops shape', () => {
-    const s = {
-      startBalance: 4000,
-      presetActive: true,
-      earlyWeightStrengthPct: 50,
-      rankWeightingShape: 'linear',
-      allocationOverTimeTiers: [],
-    };
-    const migrated = migrateScenario(s, 7);
-    expect(migrated.earlyWeightSlot).toBe(2);
-    expect(migrated.earlyWeightEmphasisPct).toBe(SCENARIO_DEFAULTS.earlyWeightEmphasisPct);
-    expect(migrated.earlyWeightLateFloorPct).toBe(SCENARIO_DEFAULTS.earlyWeightLateFloorPct);
-    expect(migrated.earlyWeightStrengthPct).toBeUndefined();
-    expect(migrated.rankWeightingShape).toBeUndefined();
+
+  it('rejects schema versions newer than SCHEMA_VERSION', () => {
+    expect(() => migrateScenario({ startBalance: 4000 }, SCHEMA_VERSION + 1))
+      .toThrow(/newer than this app supports/i);
   });
-  it('detaches any schema version that omits Easy Mode', () => {
-    expect(migrateScenario({ startBalance: 1000 }, 6)).toMatchObject({
-      presetActive: false,
-      presetLevel: SCENARIO_DEFAULTS.presetLevel,
-    });
+
+  it('rejects missing or non-numeric schema versions', () => {
+    expect(() => migrateScenario({ startBalance: 4000 })).toThrow(/schema version/i);
+    expect(() => migrateScenario({ startBalance: 4000 }, '13')).toThrow(/schema version/i);
+    expect(() => migrateScenario({ startBalance: 4000 }, NaN)).toThrow(/schema version/i);
+  });
+
+  it('rejects missing or non-object scenarios', () => {
+    expect(() => migrateScenario(null, SCHEMA_VERSION)).toThrow(/missing or invalid/i);
+    expect(() => migrateScenario(undefined, SCHEMA_VERSION)).toThrow(/missing or invalid/i);
+    expect(() => migrateScenario([{ startBalance: 1 }], SCHEMA_VERSION)).toThrow(/missing or invalid/i);
   });
 });
 
@@ -470,21 +257,6 @@ describe('buildSimParams', () => {
     const pos = defaultScenario();
     pos.dynMaxBoostDrawdownPct = 2;
     expect(buildSimParams(pos, { years: [] }).dynConfig.maxBoostDrawdownPct).toBeCloseTo(0.02, 10);
-  });
-
-  it('migrates v5 balance overrides to the single no-cut threshold', () => {
-    const v5 = {
-      startBalance: 3000,
-      dynLowBal: 1000,
-      dynMedBal: 3000,
-      dynHighBal: 5000,
-    };
-    const v6 = migrateScenario(v5, 5);
-    // The old Expected override carried the "no cut while ahead" semantics.
-    expect(v6.dynNoCutBal).toBe(3000);
-    expect(v6.dynLowBal).toBeUndefined();
-    expect(v6.dynMedBal).toBeUndefined();
-    expect(v6.dynHighBal).toBeUndefined();
   });
 
   it('applies no minimum withdrawal when all tiers are removed', () => {

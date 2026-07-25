@@ -4,6 +4,11 @@ import handlebars from 'vite-plugin-handlebars';
 import { resolve } from 'path';
 import fs from 'fs';
 import { inlineWorkersInDev } from './scripts/viteInlineWorkersDev.js';
+import {
+  embedLicenseNotice,
+  formatJsBanner,
+  readLicenseText,
+} from './scripts/licenseNotice.js';
 
 // Helper to get all subdirectories for handlebars partials
 function getDirectories(srcPath) {
@@ -11,6 +16,8 @@ function getDirectories(srcPath) {
     .filter(dirent => dirent.isDirectory())
     .map(dirent => resolve(srcPath, dirent.name));
 }
+
+const licenseBanner = formatJsBanner(readLicenseText());
 
 export default defineConfig({
   plugins: [
@@ -23,7 +30,9 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/partials'))
       ],
     }),
-    viteSingleFile()
+    viteSingleFile(),
+    // After singlefile: HTML comment in index + closeBundle re-check on dist/.
+    embedLicenseNotice(),
   ],
   server: {
     watch: {
@@ -45,6 +54,12 @@ export default defineConfig({
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
     reportCompressedSize: false,
+    rollupOptions: {
+      output: {
+        // Survives inside the inlined <script> of the single-file build.
+        banner: licenseBanner,
+      },
+    },
   },
   test: {
     environment: 'node',

@@ -27,17 +27,17 @@ describe('theme', () => {
   it('setTheme toggles html class and persists preference', () => {
     setTheme('dark');
     expect(isDarkMode()).toBe(true);
-    expect(localStorage.getItem('sor:theme')).toBe('dark');
+    expect(JSON.parse(localStorage.getItem('sor:ui')).theme).toBe('dark');
     expect(document.querySelector('meta[name="theme-color"]').getAttribute('content')).toBe('#1e293b');
 
     setTheme('light');
     expect(isDarkMode()).toBe(false);
-    expect(localStorage.getItem('sor:theme')).toBe('light');
+    expect(JSON.parse(localStorage.getItem('sor:ui')).theme).toBe('light');
     expect(document.querySelector('meta[name="theme-color"]').getAttribute('content')).toBe('#4f46e5');
   });
 
   it('initTheme wires the toggle button', () => {
-    localStorage.setItem('sor:theme', 'light');
+    localStorage.setItem('sor:ui', JSON.stringify({ theme: 'light' }));
     initTheme();
     const btn = document.getElementById('themeToggle');
     expect(btn.getAttribute('aria-pressed')).toBe('false');
@@ -45,7 +45,7 @@ describe('theme', () => {
     btn.click();
     expect(isDarkMode()).toBe(true);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(localStorage.getItem('sor:theme')).toBe('dark');
+    expect(JSON.parse(localStorage.getItem('sor:ui')).theme).toBe('dark');
   });
 
   it('themeCssVars emits chrome, status, and percentile CSS variables', () => {

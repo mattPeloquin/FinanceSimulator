@@ -60,6 +60,8 @@ import { setupBalanceLogScaleControl } from './ui/charts/timeline.js';
 import { renderResults } from './ui/results.js';
 import { syncSectionSummaries } from './ui/sectionSummaries.js';
 import { initReport, onNewRun as onReportNewRun } from './ui/report.js';
+import { applyUiPrefs } from './ui/applyUiPrefs.js';
+import { readUiPrefsSnapshot } from './state/uiPrefs.js';
 import { openDialog, showAlert } from './ui/dialogs.js';
 
 const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
@@ -513,12 +515,13 @@ function escapeHtml(str) {
   );
 }
 
-async function persistSession(name, description) {
+async function persistSession(name, description, { includeUi = false } = {}) {
   const previousName = currentSessionName;
   if (!previousName) {
     stashUnsavedScenario();
   }
-  await saveSession(name, readScenarioFromDom(), description);
+  const opts = includeUi ? { ui: readUiPrefsSnapshot() } : {};
+  await saveSession(name, readScenarioFromDom(), description, opts);
   if (previousName && previousName !== name) {
     await deleteSession(previousName);
   }
@@ -530,13 +533,14 @@ async function persistSession(name, description) {
   flushAutosave();
 }
 
-async function persistCopySession(name, description) {
+async function persistCopySession(name, description, { includeUi = false } = {}) {
   const existing = await loadSession(name);
   if (existing) {
     showAlert(`A session named "${name}" already exists. Choose a different name.`);
     return;
   }
-  await saveSession(name, readScenarioFromDom(), description);
+  const opts = includeUi ? { ui: readUiPrefsSnapshot() } : {};
+  await saveSession(name, readScenarioFromDom(), description, opts);
   currentSessionName = name;
   currentSessionDescription = description;
   await refreshSessionList(name);
@@ -545,11 +549,83 @@ async function persistCopySession(name, description) {
   flushAutosave();
 }
 
+/** Ask whether to apply attached view settings. Resolves true = Apply. */
+function promptApplyUiPrefs() {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById('applyUiDialog');
+    if (!dialog) {
+      resolve(false);
+      return;
+    }
+    openDialog(dialog, [
+      {
+        el: document.getElementById('applyUiPrefs'),
+        event: 'click',
+        fn: () => {
+          dialog.close();
+          resolve(true);
+        },
+      },
+      {
+        el: document.getElementById('keepUiMine'),
+        event: 'click',
+        fn: () => {
+          dialog.close();
+          resolve(false);
+        },
+      },
+    ]);
+  });
+}
+
+async function maybeApplyAttachedUi(ui) {
+  if (!ui) return;
+  const apply = await promptApplyUiPrefs();
+  if (apply) applyUiPrefs(ui);
+}
+
+/** Export / Link: confirm with optional include-view checkbox (default off). */
+function promptIncludeUi(title, body) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById('includeUiDialog');
+    const titleEl = document.getElementById('includeUiDialogTitle');
+    const textEl = document.getElementById('includeUiDialogText');
+    const checkbox = document.getElementById('includeUiCheckbox');
+    if (!dialog) {
+      resolve({ confirmed: false, includeUi: false });
+      return;
+    }
+    if (titleEl) titleEl.textContent = title;
+    if (textEl) textEl.textContent = body;
+    if (checkbox) checkbox.checked = false;
+    openDialog(dialog, [
+      {
+        el: document.getElementById('confirmIncludeUi'),
+        event: 'click',
+        fn: () => {
+          const includeUi = !!checkbox?.checked;
+          dialog.close();
+          resolve({ confirmed: true, includeUi });
+        },
+      },
+      {
+        el: document.getElementById('cancelIncludeUi'),
+        event: 'click',
+        fn: () => {
+          dialog.close();
+          resolve({ confirmed: false, includeUi: false });
+        },
+      },
+    ]);
+  });
+}
+
 function openSessionDialog(mode) {
   const dialog = document.getElementById('saveSessionDialog');
   const title = document.getElementById('saveSessionDialogTitle');
   const nameInput = document.getElementById('saveSessionName');
   const descInput = document.getElementById('saveSessionDescription');
+  const includeUiEl = document.getElementById('saveSessionIncludeUi');
   const confirmBtn = document.getElementById('confirmSaveSession');
   const isCopy = mode === 'copy';
 
@@ -557,17 +633,19 @@ function openSessionDialog(mode) {
   confirmBtn.textContent = isCopy ? 'Copy' : 'Save';
   nameInput.value = isCopy ? `Copy of ${currentSessionName}` : (currentSessionName || '');
   descInput.value = currentSessionDescription || '';
+  if (includeUiEl) includeUiEl.checked = false;
 
   const onConfirm = async () => {
     const name = nameInput.value.trim();
     if (!name) return;
     const description = descInput.value.trim();
+    const includeUi = !!includeUiEl?.checked;
     dialog.close();
     try {
       if (isCopy) {
-        await persistCopySession(name, description);
+        await persistCopySession(name, description, { includeUi });
       } else {
-        await persistSession(name, description);
+        await persistSession(name, description, { includeUi });
       }
     } catch (err) {
       showAlert(`Could not ${isCopy ? 'copy' : 'save'} session: ${err.message}`);
@@ -599,6 +677,7 @@ async function handleResetSession() {
     applyScenario(loaded.scenario);
     updateSessionNoteDisplay();
     flushAutosave();
+    await maybeApplyAttachedUi(loaded.ui);
   } catch (err) {
     showAlert(`Could not reset session: ${err.message}`);
   }
@@ -671,24 +750,37 @@ async function handleSelectSession(e) {
     updateSessionActionButtons();
     lastSessionSelectValue = name;
     flushAutosave();
+    await maybeApplyAttachedUi(loaded.ui);
   } catch (err) {
     showAlert(`Could not load session: ${err.message}`);
   }
 }
 
-function handleExportSession() {
+async function handleExportSession() {
+  const { confirmed, includeUi } = await promptIncludeUi(
+    'Export scenario',
+    'Download a JSON file of this scenario. Optionally attach your current view settings.',
+  );
+  if (!confirmed) return;
   exportScenario(
     readScenarioFromDom(),
     currentSessionName || 'scenario',
     currentSessionDescription,
+    includeUi ? { ui: readUiPrefsSnapshot() } : {},
   );
 }
 
 async function handleLinkCopy() {
+  const { confirmed, includeUi } = await promptIncludeUi(
+    'Copy share link',
+    'Copy a link to this scenario. Optionally attach your current view settings so the recipient can match your display.',
+  );
+  if (!confirmed) return;
   const btn = document.getElementById('linkCopyButton');
   const url = buildShareUrl(readScenarioFromDom(), {
     name: currentSessionName || '',
     description: currentSessionDescription || '',
+    ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
   });
   try {
     await navigator.clipboard.writeText(url);
@@ -705,7 +797,7 @@ async function handleLinkCopy() {
 }
 
 /** Apply an imported/shared scenario as an unsaved workbench, then auto-run. */
-async function applyImportedScenario({ scenario, name = '', description = '' }, { statusMessage } = {}) {
+async function applyImportedScenario({ scenario, name = '', description = '', ui } = {}, { statusMessage } = {}) {
   currentSessionName = '';
   currentSessionDescription = description || '';
   applyScenario(scenario);
@@ -719,6 +811,7 @@ async function applyImportedScenario({ scenario, name = '', description = '' }, 
   await refreshSessionList('');
   lastSessionSelectValue = '';
   flushAutosave();
+  await maybeApplyAttachedUi(ui);
   handleRunClick();
 }
 
@@ -840,7 +933,8 @@ function getDefaultCoreUsage() {
 
 // Merge over defaults so fields added after an autosave was written (e.g.
 // smoothWindowPct) still get their default instead of rendering blank.
-// loadAutosave migrates missing Easy Mode to detached before this merge.
+// Unsupported / malformed autosave returns null → defaults. Missing Easy Mode
+// on a non-empty load is detached in applyScenario.
 const autosaved = loadAutosave() || {};
 const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ...(autosaved.scenario || {}) };
     currentSessionName = autosaved.name || '';
@@ -922,16 +1016,18 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
 
   flushAutosave();
 
-  // Share links apply after first paint / history samples are ready so auto-run
-  // matches a user click on Run / Find Best Plan.
-  await maybeLoadSharedScenarioFromUrl();
-
+  // Mark ready before share-link prompts (Apply view settings / replace session)
+  // so the UI can accept dialog clicks without blocking initComplete.
   if (import.meta.env.DEV) {
     window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     window.__TEST_HOOKS__.initComplete = true;
     window.__TEST_HOOKS__.loadUnsavedStash = loadUnsavedStash;
     window.__TEST_HOOKS__.restoreUnsavedScenario = restoreUnsavedScenario;
   }
+
+  // Share links apply after first paint / history samples are ready so auto-run
+  // matches a user click on Run / Find Best Plan.
+  await maybeLoadSharedScenarioFromUrl();
 } catch (err) {
     console.error('Failed to init:', err);
   }
