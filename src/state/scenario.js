@@ -18,7 +18,7 @@ import {
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 13;
 
 // All currency fields are stored and edited in thousands ($000s). Simulation uses dollars.
 export const MONEY_SCALE = 1000;
@@ -47,6 +47,9 @@ const FIELDS = [
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
   field('planRiskTolerancePct', 'planRiskTolerancePct', 'float'),
   field('withdrawalMetric', 'withdrawalMetric', 'string'),
+  field('onPlanMeasure', 'onPlanMeasure', 'string'),
+  field('onPlanYearlyEmphasisPct', 'onPlanYearlyEmphasisPct', 'float'),
+  field('onPlanYearlyLateFloorPct', 'onPlanYearlyLateFloorPct', 'float'),
   // Range input is the canonical control (no paired number box).
   field('earlyWeightSlot', 'earlyWeightSlot', 'int'),
   field('earlyWeightEmphasisPct', 'earlyWeightEmphasisPct', 'float'),
@@ -348,6 +351,31 @@ export function migrateScenario(scenario, schemaVersion = SCHEMA_VERSION) {
         if (tier?.years != null) next.years = tier.years;
         return next;
       });
+    }
+  }
+
+  if (schemaVersion < 12) {
+    // On-plan blend measure + yearly impact curve (Advanced). Missing → defaults.
+    if (migrated.onPlanMeasure == null) {
+      migrated.onPlanMeasure = SCENARIO_DEFAULTS.onPlanMeasure;
+    }
+    if (migrated.onPlanYearlyEmphasisPct == null) {
+      migrated.onPlanYearlyEmphasisPct = SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct;
+    }
+    if (migrated.onPlanYearlyLateFloorPct == null) {
+      migrated.onPlanYearlyLateFloorPct = SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct;
+    }
+  }
+
+  if (schemaVersion < 13) {
+    // Symmetrical end-weights replaced the old early-drop / late-floor curve.
+    // Prior defaults (0, 100) were flat under the old formula; map to (100, 100).
+    if (
+      migrated.onPlanYearlyEmphasisPct === 0
+      && migrated.onPlanYearlyLateFloorPct === 100
+    ) {
+      migrated.onPlanYearlyEmphasisPct = 100;
+      migrated.onPlanYearlyLateFloorPct = 100;
     }
   }
 
@@ -1320,6 +1348,8 @@ const PAIRED_SLIDER_IDS = {
   planRiskTolerancePct: 'planRiskTolerancePctSlider',
   earlyWeightEmphasisPct: 'earlyWeightEmphasisPctSlider',
   earlyWeightLateFloorPct: 'earlyWeightLateFloorPctSlider',
+  onPlanYearlyEmphasisPct: 'onPlanYearlyEmphasisPctSlider',
+  onPlanYearlyLateFloorPct: 'onPlanYearlyLateFloorPctSlider',
 };
 
 // Same scenario value shown in both Base and Specific minimum-withdrawal panels.
@@ -1635,15 +1665,40 @@ export function buildSimParams(scenario, samples) {
       Math.max(num(scenario.scaledHistoricalSmoothing) / 100, 0),
       1,
     ),
-    // Max allowed lifetime spending shortfall vs. plan when packaging results.
+    // Max allowed spending shortfall vs. plan when packaging / grading on-plan.
     shortfallTolerance: planShortfallTolerance(scenario),
+    onPlanScoring: resolveOnPlanScoring(scenario),
     samples,
   };
 }
 
-/** Fraction 0–0.35 from the Easy Mode "Plan Risk Tolerance" setting. */
+/** Fraction 0–0.35 from the independent Plan Risk Tolerance setting. */
 export function planShortfallTolerance(scenario) {
   return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.35);
+}
+
+const ON_PLAN_MEASURES = new Set(['lifetime', 'blend', 'yearly']);
+
+/** Advanced on-plan blend shape (measure + yearly impact curve). */
+export function resolveOnPlanScoring(scenario = {}) {
+  const raw = scenario.onPlanMeasure ?? SCENARIO_DEFAULTS.onPlanMeasure ?? 'blend';
+  const measure = ON_PLAN_MEASURES.has(raw) ? raw : 'blend';
+  const early = scenario.onPlanYearlyEmphasisPct != null
+    ? num(scenario.onPlanYearlyEmphasisPct)
+    : SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct;
+  const late = scenario.onPlanYearlyLateFloorPct != null
+    ? num(scenario.onPlanYearlyLateFloorPct)
+    : SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct;
+  return {
+    measure,
+    yearlyEmphasisPct: Math.min(Math.max(early, 0), 100),
+    yearlyLateFloorPct: Math.min(Math.max(late, 0), 100),
+  };
+}
+
+/** Fraction 0–0.35 for Find Best Plan search depth (not on-plan grading). */
+export function goalSeekSearchAggressiveness(scenario) {
+  return Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 0.35);
 }
 
 function num(v) {
@@ -1694,7 +1749,11 @@ export function buildGoalSeekConfig(scenario) {
   return {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
-    shortfallTolerance: Math.min(Math.max(num(scenario.goalSeekRiskTolerancePct) / 100, 0), 0.35),
+    // On-plan grading uses Plan Risk Tolerance (same r as Run results).
+    shortfallTolerance: planShortfallTolerance(scenario),
+    // Search-only: dyn-adj / balance grid depth and TEB discount.
+    searchAggressiveness: goalSeekSearchAggressiveness(scenario),
+    onPlanScoring: resolveOnPlanScoring(scenario),
     pinBaseWithdrawal: isSpecific ? true : !scenario.goalSeekIncludeBaseWithdrawal,
     includeSpendingOverTime: isSpecific ? false : !!scenario.goalSeekIncludeSpendingOverTime,
     spendingFirstTierYears: isSpecific
@@ -1762,6 +1821,18 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   const planRisk = scenario.planRiskTolerancePct;
   if (!Number.isFinite(planRisk) || planRisk < 0 || planRisk > 35) {
     errors.push('Plan risk tolerance must be between 0 and 35.');
+  }
+  const onPlanMeasure = scenario.onPlanMeasure ?? SCENARIO_DEFAULTS.onPlanMeasure;
+  if (!ON_PLAN_MEASURES.has(onPlanMeasure)) {
+    errors.push('On-plan measure must be lifetime, blend, or yearly.');
+  }
+  const onPlanEmp = scenario.onPlanYearlyEmphasisPct;
+  if (onPlanEmp != null && (!Number.isFinite(onPlanEmp) || onPlanEmp < 0 || onPlanEmp > 100)) {
+    errors.push('On-plan yearly early emphasis must be between 0 and 100.');
+  }
+  const onPlanLate = scenario.onPlanYearlyLateFloorPct;
+  if (onPlanLate != null && (!Number.isFinite(onPlanLate) || onPlanLate < 0 || onPlanLate > 100)) {
+    errors.push('On-plan yearly late floor must be between 0 and 100.');
   }
   if (
     scenario.goalSeekMode &&
@@ -2004,9 +2075,9 @@ export function validateScenario(scenario, { minYear, maxYear }) {
     if (!Number.isFinite(desired) || desired < 65 || desired > 99) {
       errors.push('Find Best Plan desired success % must be between 65 and 99.');
     }
-    const riskTolerance = scenario.goalSeekRiskTolerancePct;
-    if (!Number.isFinite(riskTolerance) || riskTolerance < 0 || riskTolerance > 35) {
-      errors.push('Find Best Plan risk tolerance must be between 0 and 35.');
+    const searchAgg = scenario.goalSeekRiskTolerancePct;
+    if (!Number.isFinite(searchAgg) || searchAgg < 0 || searchAgg > 35) {
+      errors.push('Find Best Plan search aggressiveness must be between 0 and 35.');
     }
     if (scenario.withdrawalStrategy === 'specific') {
       // With a Specific List, each year's amount is fixed as typed — Goal Seek

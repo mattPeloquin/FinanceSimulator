@@ -12,6 +12,12 @@ import {
   spendingTailRate,
   meetsWithdrawalTarget,
   withdrawalTargetSuccessRate,
+  onPlanBlendAlpha,
+  onPlanScore,
+  meetsOnPlanBlend,
+  weightedYearHitRateFromSeries,
+  onPlanYearlyRawCurve,
+  onPlanYearWeights,
   mean,
   median,
   stdDev,
@@ -453,6 +459,122 @@ describe('withdrawalTargetSuccessRate', () => {
     const actualWithdrawn = Float64Array.from([100, 200]);
     expect(withdrawalTargetSuccessRate(actualWithdrawn, 0)).toBeNull();
     expect(withdrawalTargetSuccessRate(actualWithdrawn, -100)).toBeNull();
+  });
+});
+
+describe('onPlanYearlyRawCurve (symmetrical end-weights)', () => {
+  it('is flat when early and late emphasis are equal', () => {
+    const raw = onPlanYearlyRawCurve(10, { earlyEmphasisPct: 100, lateFloorPct: 100 });
+    for (let i = 0; i < raw.length; i++) expect(raw[i]).toBeCloseTo(1, 9);
+  });
+
+  it('front-loads when early > late and back-loads when late > early', () => {
+    const front = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 20 });
+    expect(front[0]).toBeGreaterThan(front[4]);
+    const back = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 20, lateFloorPct: 100 });
+    expect(back[4]).toBeGreaterThan(back[0]);
+    // Symmetry: reversing ends mirrors the curve.
+    for (let i = 0; i < 5; i++) {
+      expect(front[i]).toBeCloseTo(back[4 - i], 9);
+    }
+  });
+
+  it('bends more toward the high end as Early and Late diverge', () => {
+    // Midpoint of a linear 100→20 fade would be 60; a bent curve sits closer to 20.
+    const mild = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 60, lateFloorPct: 40 });
+    const strong = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 0 });
+    const mildMid = mild[2];
+    const strongMid = strong[2];
+    const mildLinearMid = (0.6 + 0.4) / 2;
+    const strongLinearMid = (1.0 + 0.0) / 2;
+    // Mild gap ≈ linear; strong gap pulls the midpoint below the linear average.
+    expect(Math.abs(mildMid - mildLinearMid)).toBeLessThan(0.05);
+    expect(strongMid).toBeLessThan(strongLinearMid - 0.15);
+  });
+
+  it('mean-rescales so average weight is 1', () => {
+    const w = onPlanYearWeights(8, { earlyEmphasisPct: 100, lateFloorPct: 25 });
+    const mean = Array.from(w).reduce((a, b) => a + b, 0) / w.length;
+    expect(mean).toBeCloseTo(1, 9);
+  });
+});
+
+describe('on-plan blend scoring', () => {
+  it('maps blend alpha from Plan RT endpoints', () => {
+    expect(onPlanBlendAlpha('lifetime', 0.1)).toBe(0);
+    expect(onPlanBlendAlpha('yearly', 0.1)).toBe(1);
+    expect(onPlanBlendAlpha('blend', 0)).toBe(1);
+    expect(onPlanBlendAlpha('blend', 0.35)).toBe(0);
+    expect(onPlanBlendAlpha('blend', 0.175)).toBeCloseTo(0.5, 6);
+  });
+
+  it('lifetime mode matches meetsWithdrawalTarget', () => {
+    expect(meetsOnPlanBlend(800, 1000, 0.2, { measure: 'lifetime', yearHitRate: 0 })).toBe(true);
+    expect(meetsOnPlanBlend(799, 1000, 0.2, { measure: 'lifetime', yearHitRate: 1 })).toBe(false);
+  });
+
+  it('blend at RT 0% equals yearly; at RT 35% equals lifetime', () => {
+    // lifetimeRatio 0.9, yearHitRate 0 → fail lifetime at RT 0, pass yearly? year=0 fails yearly
+    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'blend', yearHitRate: 0 })).toBe(false);
+    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 0 })).toBe(false);
+    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 1 })).toBe(true);
+    // At max RT, α=0 so only lifetime matters (0.9 >= 0.65)
+    expect(meetsOnPlanBlend(900, 1000, 0.35, { measure: 'blend', yearHitRate: 0 })).toBe(true);
+    expect(meetsOnPlanBlend(600, 1000, 0.35, { measure: 'blend', yearHitRate: 1 })).toBe(false);
+  });
+
+  it('surplus lifetime can offset some missed years when alpha is mid', () => {
+    // r=0.175 → α=0.5, need score >= 0.825
+    // lifetimeRatio=1.2, yearHitRate=0.5 → score = 0.5*0.5 + 0.5*1.2 = 0.85
+    expect(onPlanScore(1.2, 0.5, 0.5)).toBeCloseTo(0.85, 6);
+    expect(meetsOnPlanBlend(1200, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(true);
+    // lifetimeRatio=1.0, yearHitRate=0.5 → score = 0.75 < 0.825
+    expect(meetsOnPlanBlend(1000, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(false);
+  });
+
+  it('weights year hits with front-loaded or back-loaded curves', () => {
+    const plan = [100, 100, 100, 100];
+    // Miss only year 1.
+    const actual = [50, 100, 100, 100];
+    const flat = weightedYearHitRateFromSeries(actual, plan, 0.05, {
+      earlyEmphasisPct: 100,
+      lateFloorPct: 100,
+    });
+    const early = weightedYearHitRateFromSeries(actual, plan, 0.05, {
+      earlyEmphasisPct: 100,
+      lateFloorPct: 10,
+    });
+    const late = weightedYearHitRateFromSeries(actual, plan, 0.05, {
+      earlyEmphasisPct: 10,
+      lateFloorPct: 100,
+    });
+    expect(flat).toBeCloseTo(0.75, 6);
+    // Front-loaded: missing year 1 hurts more than flat.
+    expect(early).toBeLessThan(flat);
+    // Back-loaded: missing year 1 hurts less than flat.
+    expect(late).toBeGreaterThan(flat);
+  });
+
+  it('blend success rate uses yearly matrix when measure is yearly', () => {
+    // 2 sims, 2 years. Plan 100/yr. Sim0 hits both; sim1 misses year 2.
+    const maxYears = 2;
+    const allYearsNetSpend = Float64Array.from([100, 100, 100, 50]);
+    const actualWithdrawn = Float64Array.from([200, 150]);
+    const context = {
+      measure: 'yearly',
+      yearlyEmphasisPct: 100,
+      yearlyLateFloorPct: 100,
+      allYearsNetSpend,
+      maxYears,
+      horizonYears: 2,
+      planByYearForHorizon: () => [100, 100],
+    };
+    // RT 0 → need yearHitRate >= 1; only sim0 passes
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 200, 0, context)).toBe(0.5);
+    // lifetime measure would pass both (150/200 = 0.75 fails at RT0... 150 < 200)
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 200, 0, { ...context, measure: 'lifetime' })).toBe(0.5);
+    // At RT 25%, lifetime min=150; both pass on lifetime
+    expect(withdrawalTargetSuccessRate(actualWithdrawn, 200, 0.25, { measure: 'lifetime' })).toBe(1);
   });
 });
 

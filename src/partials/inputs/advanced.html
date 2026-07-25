@@ -50,6 +50,44 @@
 
         <div class="space-y-3 p-3 border rounded-lg bg-theme-muted">
             <div>
+                <label for="onPlanMeasure" class="block text-sm font-medium text-theme-body">On-plan measure</label>
+                <select id="onPlanMeasure" class="mt-1 block w-full max-w-md rounded-md input-theme sm:text-sm p-2">
+                    <option value="lifetime">Lifetime total only (legacy)</option>
+                    <option value="blend">Blend lifetime + yearly (default)</option>
+                    <option value="yearly">Yearly path quality only</option>
+                </select>
+                <p class="text-xs text-theme-faint mt-1">How &ldquo;on plan&rdquo; success is graded for Run results and Find Best Plan. <strong>Plan Risk Tolerance</strong> sets the allowed shortfall; in Blend it also shifts weight from yearly path quality toward lifetime as that tolerance rises.</p>
+            </div>
+            <div id="onPlanYearlyCurveControls" class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-theme-body">Yearly impact curve</label>
+                    <p class="text-xs text-theme-faint mt-0.5">Relative weight of early vs late years in yearly path quality. Raise Early to front-load, Late to back-load; set them equal for a flat curve (default). A larger gap between the two bends the curve more toward the higher end.</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="onPlanYearlyEmphasisPct" class="block text-sm font-medium text-theme-body">Early emphasis</label>
+                        <div class="flex items-center gap-3 mt-1">
+                            <input type="range" id="onPlanYearlyEmphasisPctSlider" min="0" max="100" step="1" class="range-theme flex-1">
+                            <input type="number" id="onPlanYearlyEmphasisPct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="onPlanYearlyLateFloorPct" class="block text-sm font-medium text-theme-body">Late emphasis</label>
+                        <div class="flex items-center gap-3 mt-1">
+                            <input type="range" id="onPlanYearlyLateFloorPctSlider" min="0" max="100" step="1" class="range-theme flex-1">
+                            <input type="number" id="onPlanYearlyLateFloorPct" min="0" max="100" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-1 rounded-md border border-theme-border bg-theme-surface/60 p-2 max-w-md">
+                    <svg id="onPlanYearlyPreview" viewBox="0 0 320 64" class="block w-full h-16 text-theme-accent-text" role="img" aria-label="On-plan yearly impact preview chart"></svg>
+                    <p id="onPlanYearlyPreviewCaption" class="text-[10px] text-theme-faint mt-1 leading-tight"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-3 p-3 border rounded-lg bg-theme-muted">
+            <div>
                 <label class="block text-sm font-medium text-theme-body">Early-weight Curve</label>
                 <p class="text-xs text-theme-faint mt-0.5">Used when the Withdrawals slider is not on Total Lifetime. Early emphasis steepens the drop after year 1; Late floor keeps the last years counting (never a hard zero).</p>
             </div>

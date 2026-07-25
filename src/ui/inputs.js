@@ -34,21 +34,13 @@ import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 import { syncAllocationPreview } from './charts/allocationPreview.js';
 import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
-import { weightPreviewSeries } from '../core/statistics.js';
+import { weightPreviewSeries, onPlanYearlyPreviewSeries } from '../core/statistics.js';
 import { suppressAccordionPersist, onChartDetailsOpened } from './charts/chartThumbs.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Redraw the Advanced early-weight curve preview from current form values. */
-export function syncEarlyWeightPreview() {
-  const svg = document.getElementById('earlyWeightPreview');
-  const caption = document.getElementById('earlyWeightPreviewCaption');
-  if (!svg) return;
-  const horizon = Math.max(1, parseInt(document.getElementById('numYears')?.value, 10) || 30);
-  const earlyEmphasisPct = Number(document.getElementById('earlyWeightEmphasisPct')?.value) || 0;
-  const lateFloorPct = Number(document.getElementById('earlyWeightLateFloorPct')?.value) || 0;
-  const preview = weightPreviewSeries(horizon, { earlyEmphasisPct, lateFloorPct });
-  const { weights } = preview;
+/** Draw a year-weight preview polyline into an SVG element. */
+function drawWeightPreviewSvg(svg, weights) {
   const w = 320;
   const h = 64;
   const padX = 4;
@@ -69,25 +61,36 @@ export function syncEarlyWeightPreview() {
   // (HTML parser, not SVG namespace), so the chart looked empty.
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  if (n > 0) {
-    const linePts = coords.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L ');
-    const areaD =
-      `M ${padX} ${(padY + innerH).toFixed(1)} L ${linePts} L ${(padX + innerW).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
-    const lineD = `M ${linePts}`;
-    const area = document.createElementNS(SVG_NS, 'path');
-    area.setAttribute('d', areaD);
-    area.setAttribute('fill', 'currentColor');
-    area.setAttribute('opacity', '0.2');
-    const line = document.createElementNS(SVG_NS, 'path');
-    line.setAttribute('d', lineD);
-    line.setAttribute('fill', 'none');
-    line.setAttribute('stroke', 'currentColor');
-    line.setAttribute('stroke-width', '2');
-    line.setAttribute('stroke-linejoin', 'round');
-    line.setAttribute('stroke-linecap', 'round');
-    svg.appendChild(area);
-    svg.appendChild(line);
-  }
+  if (n <= 0) return;
+  const linePts = coords.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L ');
+  const areaD =
+    `M ${padX} ${(padY + innerH).toFixed(1)} L ${linePts} L ${(padX + innerW).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+  const lineD = `M ${linePts}`;
+  const area = document.createElementNS(SVG_NS, 'path');
+  area.setAttribute('d', areaD);
+  area.setAttribute('fill', 'currentColor');
+  area.setAttribute('opacity', '0.2');
+  const line = document.createElementNS(SVG_NS, 'path');
+  line.setAttribute('d', lineD);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', 'currentColor');
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('stroke-linejoin', 'round');
+  line.setAttribute('stroke-linecap', 'round');
+  svg.appendChild(area);
+  svg.appendChild(line);
+}
+
+/** Redraw the Advanced early-weight curve preview from current form values. */
+export function syncEarlyWeightPreview() {
+  const svg = document.getElementById('earlyWeightPreview');
+  const caption = document.getElementById('earlyWeightPreviewCaption');
+  if (!svg) return;
+  const horizon = Math.max(1, parseInt(document.getElementById('numYears')?.value, 10) || 30);
+  const earlyEmphasisPct = Number(document.getElementById('earlyWeightEmphasisPct')?.value) || 0;
+  const lateFloorPct = Number(document.getElementById('earlyWeightLateFloorPct')?.value) || 0;
+  const preview = weightPreviewSeries(horizon, { earlyEmphasisPct, lateFloorPct });
+  drawWeightPreviewSvg(svg, preview.weights);
   if (caption) {
     const last = horizon;
     const ratio = Number.isFinite(preview.year1VsLast)
@@ -96,6 +99,50 @@ export function syncEarlyWeightPreview() {
     caption.textContent =
       `Full curve at Early Withdrawal (horizon ${horizon} yrs). ` +
       `Year 1 ≈ ${ratio}× year ${last}; late years keep ${preview.rawLateSharePct}% of year 1 on the raw curve.`;
+  }
+}
+
+/** Show/hide yearly impact curve when on-plan measure needs it. */
+export function syncOnPlanYearlyCurveVisibility() {
+  const wrap = document.getElementById('onPlanYearlyCurveControls');
+  const measure = document.getElementById('onPlanMeasure')?.value || 'blend';
+  if (!wrap) return;
+  const show = measure === 'blend' || measure === 'yearly';
+  wrap.classList.toggle('hidden', !show);
+}
+
+/** Redraw the Advanced on-plan yearly impact preview. */
+export function syncOnPlanYearlyPreview() {
+  syncOnPlanYearlyCurveVisibility();
+  const svg = document.getElementById('onPlanYearlyPreview');
+  const caption = document.getElementById('onPlanYearlyPreviewCaption');
+  if (!svg) return;
+  const horizon = Math.max(1, parseInt(document.getElementById('numYears')?.value, 10) || 30);
+  const earlyEmphasisPct = Number(document.getElementById('onPlanYearlyEmphasisPct')?.value);
+  const lateFloorPct = Number(document.getElementById('onPlanYearlyLateFloorPct')?.value);
+  const preview = onPlanYearlyPreviewSeries(horizon, {
+    earlyEmphasisPct: Number.isFinite(earlyEmphasisPct) ? earlyEmphasisPct : 100,
+    lateFloorPct: Number.isFinite(lateFloorPct) ? lateFloorPct : 100,
+  });
+  drawWeightPreviewSvg(svg, preview.weights);
+  if (caption) {
+    const last = horizon;
+    const earlyVsLate = Number.isFinite(preview.year1VsLast)
+      ? preview.year1VsLast.toFixed(1)
+      : '∞';
+    const lateVsEarly = Number.isFinite(preview.yearLastVs1)
+      ? preview.yearLastVs1.toFixed(1)
+      : '∞';
+    if (Math.abs(preview.rawEarlyPct - preview.rawLatePct) < 1) {
+      caption.textContent =
+        `Flat yearly weights (horizon ${horizon} yrs) — every year counts equally.`;
+    } else if (preview.rawEarlyPct >= preview.rawLatePct) {
+      caption.textContent =
+        `Front-loaded (horizon ${horizon} yrs). Year 1 counts ≈ ${earlyVsLate}× year ${last}.`;
+    } else {
+      caption.textContent =
+        `Back-loaded (horizon ${horizon} yrs). Year ${last} counts ≈ ${lateVsEarly}× year 1.`;
+    }
   }
 }
 
@@ -133,6 +180,7 @@ export function setupAccordionResize() {
       }
       if (details.id === 'section-advanced') {
         syncEarlyWeightPreview();
+        syncOnPlanYearlyPreview();
       }
     });
   });
@@ -912,6 +960,32 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   pairEarlyWeightKnob('earlyWeightLateFloorPct', 'earlyWeightLateFloorPctSlider');
   syncEarlyWeightPreview();
 
+  function pairOnPlanYearlyKnob(numberId, sliderId) {
+    const numberEl = document.getElementById(numberId);
+    const sliderEl = document.getElementById(sliderId);
+    if (!numberEl || !sliderEl) return;
+    sliderEl.addEventListener('input', (e) => {
+      numberEl.value = e.target.value;
+      syncOnPlanYearlyPreview();
+      notify();
+    });
+    numberEl.addEventListener('input', (e) => {
+      sliderEl.value = e.target.value;
+      syncOnPlanYearlyPreview();
+      notify();
+    });
+  }
+  pairOnPlanYearlyKnob('onPlanYearlyEmphasisPct', 'onPlanYearlyEmphasisPctSlider');
+  pairOnPlanYearlyKnob('onPlanYearlyLateFloorPct', 'onPlanYearlyLateFloorPctSlider');
+  const onPlanMeasure = document.getElementById('onPlanMeasure');
+  if (onPlanMeasure) {
+    onPlanMeasure.addEventListener('change', () => {
+      syncOnPlanYearlyPreview();
+      notify();
+    });
+  }
+  syncOnPlanYearlyPreview();
+
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
       toggleDistMethod(e.target.value);
@@ -1041,7 +1115,9 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       input.id === 'goalSeekRiskTolerancePctSlider' ||
       input.id === 'planRiskTolerancePctSlider' ||
       input.id === 'earlyWeightEmphasisPctSlider' ||
-      input.id === 'earlyWeightLateFloorPctSlider'
+      input.id === 'earlyWeightLateFloorPctSlider' ||
+      input.id === 'onPlanYearlyEmphasisPctSlider' ||
+      input.id === 'onPlanYearlyLateFloorPctSlider'
     ) return;
     // The Risk Level control notifies through its own module (riskPreset.js).
     if (input.id === 'presetLevel' || input.id === 'presetActive') return;
@@ -1075,6 +1151,8 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     numYearsEl.addEventListener('input', syncAllocationPreview);
     numYearsEl.addEventListener('change', syncEarlyWeightPreview);
     numYearsEl.addEventListener('input', syncEarlyWeightPreview);
+    numYearsEl.addEventListener('change', syncOnPlanYearlyPreview);
+    numYearsEl.addEventListener('input', syncOnPlanYearlyPreview);
   }
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever

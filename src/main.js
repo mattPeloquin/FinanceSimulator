@@ -51,6 +51,7 @@ import {
   toggleGoalSeekMode,
   refreshDynamicAdjustmentPreviews,
   syncEarlyWeightPreview,
+  syncOnPlanYearlyPreview,
 } from './ui/inputs.js';
 import { setupRiskPresetControl, syncRiskPresetUi } from './ui/riskPreset.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
@@ -808,6 +809,7 @@ function applyScenario(scenario) {
   updateAllocationTotal();
   syncAllocationPreview();
   syncEarlyWeightPreview();
+  syncOnPlanYearlyPreview();
   // Reflect the loaded scenario's slider state only — never re-apply the
   // preset patch here; the saved values are the truth.
   syncRiskPresetUi(merged);
@@ -857,6 +859,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
     });
     initReport();
     syncEarlyWeightPreview();
+    syncOnPlanYearlyPreview();
     setupBalanceLogScaleControl();
 
     setupRiskPresetControl({ onChange: scheduleAutosave });

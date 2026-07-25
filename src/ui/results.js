@@ -380,19 +380,26 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   };
   const chartYears = result.maxYears ?? result.numYears;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
+  const onPlanMeasure = result.onPlanMeasure || 'blend';
   const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
   if (onPlanLabel) {
-    onPlanLabel.textContent = `Success Rate (within ${tolerancePct}% of plan)`;
+    onPlanLabel.textContent = `Within ${tolerancePct}% of plan`;
   }
   const onPlanCard = onPlanLabel?.closest('.rounded-lg');
   if (onPlanCard) {
-    onPlanCard.title = earlyWeighted
-      ? `Share of runs whose early-weighted spending reached at least ${100 - tolerancePct}% of the early-weighted plan`
+    const lifetimeLens = earlyWeighted
+      ? `early-weighted spending vs early-weighted plan`
       : useMedianYearly
-        ? `Share of runs whose median yearly withdrawal reached at least ${100 - tolerancePct}% of the planned median per year`
+        ? `median yearly withdrawal vs planned median per year`
         : useMeanYearly
-          ? `Share of runs whose mean yearly withdrawal reached at least ${100 - tolerancePct}% of the planned mean per year`
-          : `Share of runs whose total withdrawn reached at least ${100 - tolerancePct}% of the planned schedule`;
+          ? `mean yearly withdrawal vs planned mean per year`
+          : `total withdrawn vs planned schedule`;
+    const measureNote = onPlanMeasure === 'yearly'
+      ? `Share of runs whose weighted year-hit rate (spend each year within ${tolerancePct}% of that year's plan) cleared the Plan Risk Tolerance floor`
+      : onPlanMeasure === 'lifetime'
+        ? `Share of runs whose ${lifetimeLens} reached at least ${100 - tolerancePct}% of plan`
+        : `Share of runs whose blend of ${lifetimeLens} and yearly path quality cleared the Plan Risk Tolerance floor (Blend shifts toward lifetime as Plan RT rises)`;
+    onPlanCard.title = measureNote;
   }
 
   applyMetricLabels(metric, result.horizonVariable, rankingWeighting, { taxActive });
@@ -531,6 +538,9 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
         seed: result.seed,
         surfaceMeta: result.surfaceMeta,
         shortfallTolerance: result.shortfallTolerance ?? 0.05,
+        onPlanMeasure: result.onPlanMeasure ?? 'blend',
+        onPlanYearlyEmphasisPct: result.onPlanYearlyEmphasisPct ?? 100,
+        onPlanYearlyLateFloorPct: result.onPlanYearlyLateFloorPct ?? 100,
         plannedWithdrawn: result.plannedWithdrawn,
         plannedMedianYearly: result.plannedMedianYearly,
         onPlanBenchmark: plannedBenchmark,

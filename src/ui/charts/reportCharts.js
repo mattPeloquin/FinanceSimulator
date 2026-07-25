@@ -597,7 +597,7 @@ export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = f
  *
  * @param {{number: HTMLElement, onPlanNumber: HTMLElement, onPlanLabel?: HTMLElement, pill: HTMLElement}} els
  */
-export function renderSuccessHero(els, { successRate, onPlanRate, shortfallTolerance }, { dark = false } = {}) {
+export function renderSuccessHero(els, { successRate, onPlanRate, shortfallTolerance, onPlanMeasure }, { dark = false } = {}) {
   if (!els) return;
   const pal = paletteFor(dark);
   const success = Math.min(1, Math.max(0, successRate ?? 0));
@@ -622,7 +622,12 @@ export function renderSuccessHero(els, { successRate, onPlanRate, shortfallToler
   if (els.onPlanLabel) {
     const tol = Number.isFinite(shortfallTolerance) ? shortfallTolerance : 0.05;
     const tolerancePct = Math.round(Math.min(0.35, Math.max(0, tol)) * 100);
-    els.onPlanLabel.textContent = `within ${tolerancePct}% of plan`;
+    const measure = onPlanMeasure || 'blend';
+    els.onPlanLabel.textContent = measure === 'yearly'
+      ? `yearly within ${tolerancePct}% of plan`
+      : measure === 'lifetime'
+        ? `within ${tolerancePct}% of plan`
+        : `blend within ${tolerancePct}% of plan`;
   }
 
   if (els.pill) {

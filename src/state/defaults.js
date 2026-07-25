@@ -49,6 +49,18 @@ export const BASE_DEFAULTS = {
   //   'medianYearly' — median withdrawal per year (horizon-independent)
   withdrawalMetric: 'auto',
 
+  // How on-plan success blends lifetime spend vs year-by-year path quality.
+  //   'lifetime' — aggregate only (legacy)
+  //   'blend'    — mix yearly hit-rate with lifetime (default); Plan RT sets α
+  //   'yearly'   — weighted year-hit rate only
+  onPlanMeasure: 'blend',
+
+  // Advanced on-plan yearly impact curve: relative weight of year 1 vs the last
+  // year (linear blend between). Equal values = flat. Raise Early to front-load,
+  // Late to back-load. Field lateFloorPct kept for save compatibility.
+  onPlanYearlyEmphasisPct: 100,
+  onPlanYearlyLateFloorPct: 100,
+
   // Five-stop Withdrawals slider: how much early-weighted spending matters when
   // ranking futures and on-plan success. 0 = Total Lifetime (flat years),
   // 4 = Early Withdrawal (full Advanced curve). Maps to blend 0/25/50/75/100.

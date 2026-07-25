@@ -19,6 +19,8 @@ import {
   isMeanYearlyMetric,
   isMedianYearlyMetric,
   weightedScheduleScore,
+  weightedYearHitRate,
+  meetsOnPlanBlend,
 } from './statistics.js';
 import {
   plannedScheduleTotal,
@@ -544,6 +546,16 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     withdrawalMetric,
     rankingWeighting,
   );
+  const onPlanScoring = params.onPlanScoring ?? { measure: 'blend', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
+  const onPlanContext = {
+    measure: onPlanScoring.measure ?? 'blend',
+    yearlyEmphasisPct: onPlanScoring.yearlyEmphasisPct ?? 100,
+    yearlyLateFloorPct: onPlanScoring.yearlyLateFloorPct ?? 100,
+    allYearsNetSpend: result.allYearsNetSpend ?? result.allYearsWithdrawals,
+    maxYears,
+    horizonYears: result.horizonYears,
+    planByYearForHorizon: (h) => plannedYearlySchedule(params.portfolio, h),
+  };
 
   const totalNet = result.totalNetSpend ?? result.totalWithdrawn;
   const medianYearlyNet = result.medianYearlyNetSpend ?? result.medianYearlyWithdrawal;
@@ -551,11 +563,34 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
   // 1 = below plan (within horizon but short of the benchmark), 2 = ran out.
   const scatterOutcome = new Uint8Array(n);
+  const onPlanYearWeighting = {
+    earlyEmphasisPct: onPlanContext.yearlyEmphasisPct,
+    lateFloorPct: onPlanContext.yearlyLateFloorPct,
+  };
+  const scatterPlanCache = new Map();
   for (let i = 0; i < n; i++) {
     if (result.depletionYear[i] <= result.horizonYears[i]) {
       scatterOutcome[i] = 2;
-    } else if (perRunBenchmarks[i] > 0 && onPlanActuals[i] < perRunBenchmarks[i] * (1 - tolerance)) {
-      scatterOutcome[i] = 1;
+    } else if (perRunBenchmarks[i] > 0) {
+      const h = result.horizonYears[i];
+      if (!scatterPlanCache.has(h)) {
+        scatterPlanCache.set(h, plannedYearlySchedule(params.portfolio, h));
+      }
+      const yearHitRate = weightedYearHitRate(
+        onPlanContext.allYearsNetSpend,
+        maxYears,
+        i,
+        h,
+        scatterPlanCache.get(h),
+        tolerance,
+        onPlanYearWeighting,
+      );
+      if (!meetsOnPlanBlend(onPlanActuals[i], perRunBenchmarks[i], tolerance, {
+        measure: onPlanContext.measure,
+        yearHitRate,
+      })) {
+        scatterOutcome[i] = 1;
+      }
     }
   }
   // The money-weighted return at which the planned schedule exactly exhausts
@@ -584,8 +619,12 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       onPlanActuals,
       perRunBenchmarks,
       tolerance,
+      onPlanContext,
     ),
     shortfallTolerance: tolerance,
+    onPlanMeasure: onPlanContext.measure,
+    onPlanYearlyEmphasisPct: onPlanContext.yearlyEmphasisPct,
+    onPlanYearlyLateFloorPct: onPlanContext.yearlyLateFloorPct,
     medianBalance: median(result.finalBalance),
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),

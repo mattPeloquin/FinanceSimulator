@@ -14,13 +14,15 @@ import {
   ranksForPercentileWindow,
 } from '../../core/surfaceDrilldown.js';
 import {
-  meetsWithdrawalTarget,
+  meetsOnPlanBlend,
+  weightedYearHitRateFromSeries,
   median,
   isMedianYearlyMetric,
   isMeanYearlyMetric,
   isEarlyWeightingActive,
   weightedScheduleScore,
 } from '../../core/statistics.js';
+import { plannedYearlySchedule } from '../../core/goalSeek.js';
 import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
 import { onThemeChange } from '../theme.js';
 import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
@@ -127,6 +129,9 @@ const surfaceState = {
   drilldownHi: null,
   lastContext: null,
   shortfallTolerance: 0.05,
+  onPlanMeasure: 'blend',
+  onPlanYearlyEmphasisPct: 100,
+  onPlanYearlyLateFloorPct: 100,
   plannedWithdrawn: 0,
   plannedMedianYearly: 0,
   onPlanBenchmark: 0,
@@ -212,9 +217,28 @@ function pathActualWithdrawal(path, withdrawalMetric) {
   return path.totalWithdrawn ?? 0;
 }
 
-function pathBelowPlan(actualWithdrawn, plannedBenchmark, shortfallTolerance) {
+function pathBelowPlan(path, actualWithdrawn, plannedBenchmark, shortfallTolerance) {
   if (plannedBenchmark <= 0) return false;
-  return !meetsWithdrawalTarget(actualWithdrawn ?? 0, plannedBenchmark, shortfallTolerance);
+  const measure = surfaceState.onPlanMeasure || 'blend';
+  const h = path.horizonYears ?? path.withdrawals?.length ?? 0;
+  const portfolio = surfaceState.simParams?.portfolio;
+  let yearHitRate = 1;
+  if (measure !== 'lifetime' && portfolio && h > 0 && path.withdrawals) {
+    const planByYear = plannedYearlySchedule(portfolio, h);
+    yearHitRate = weightedYearHitRateFromSeries(
+      path.withdrawals,
+      planByYear,
+      shortfallTolerance,
+      {
+        earlyEmphasisPct: surfaceState.onPlanYearlyEmphasisPct ?? 100,
+        lateFloorPct: surfaceState.onPlanYearlyLateFloorPct ?? 100,
+      },
+    );
+  }
+  return !meetsOnPlanBlend(actualWithdrawn ?? 0, plannedBenchmark, shortfallTolerance, {
+    measure,
+    yearHitRate,
+  });
 }
 
 function floatThemeForSeries(series) {
@@ -1303,7 +1327,12 @@ function buildColumnsFromPaths(surfacePaths, numYears, {
     const { balances, returns, withdrawals, unadjustedWithdrawals, withdrawalBreakdown, totalWithdrawn, avgReturn, irr, medianYearlyWithdrawal, horizonYears, planBenchmark } = path;
     const pathHorizon = horizonYears ?? numYears;
     const depleted = pathDepleted(balances);
-    const belowPlan = !depleted && pathBelowPlan(pathActualWithdrawal(path, metric), planBenchmark ?? 0, tolerance);
+    const belowPlan = !depleted && pathBelowPlan(
+      path,
+      pathActualWithdrawal(path, metric),
+      planBenchmark ?? 0,
+      tolerance,
+    );
     depletedCols.push(depleted);
     belowPlanCols.push(belowPlan);
     const colPoints = [];
@@ -1672,6 +1701,9 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     seed = 0,
     surfaceMeta = null,
     shortfallTolerance = 0.05,
+    onPlanMeasure = 'blend',
+    onPlanYearlyEmphasisPct = 100,
+    onPlanYearlyLateFloorPct = 100,
     plannedWithdrawn = 0,
     plannedMedianYearly = 0,
     onPlanBenchmark = 0,
@@ -1685,6 +1717,9 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.seed = seed;
   surfaceState.surfaceMeta = surfaceMeta;
   surfaceState.shortfallTolerance = shortfallTolerance;
+  surfaceState.onPlanMeasure = onPlanMeasure;
+  surfaceState.onPlanYearlyEmphasisPct = onPlanYearlyEmphasisPct;
+  surfaceState.onPlanYearlyLateFloorPct = onPlanYearlyLateFloorPct;
   surfaceState.plannedWithdrawn = plannedWithdrawn;
   surfaceState.plannedMedianYearly = plannedMedianYearly;
   surfaceState.onPlanBenchmark = onPlanBenchmark;

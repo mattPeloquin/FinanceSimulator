@@ -90,15 +90,18 @@ function roundToThousand(value) {
   return Math.round(value / DOLLAR_ROUNDING) * DOLLAR_ROUNDING;
 }
 
-// Linear 0→1 scale over the first RISK_ENVELOPE of shortfall tolerance.
-// At 0% RT → 0 (mildest non-zero grids only); at ≥20% → 1 (full grids).
-export function riskEnvelopeScale(shortfallTolerance = DEFAULT_SHORTFALL_TOLERANCE) {
-  const tolerance = Number.isFinite(shortfallTolerance) ? shortfallTolerance : DEFAULT_SHORTFALL_TOLERANCE;
-  return Math.min(Math.max(tolerance, 0) / RISK_ENVELOPE, 1);
+// Linear 0→1 scale over the first RISK_ENVELOPE of search aggressiveness.
+// At 0% → 0 (mildest non-zero grids only); at ≥20% → 1 (full grids).
+export function riskEnvelopeScale(searchAggressiveness = DEFAULT_SHORTFALL_TOLERANCE) {
+  const agg = Number.isFinite(searchAggressiveness) ? searchAggressiveness : DEFAULT_SHORTFALL_TOLERANCE;
+  return Math.min(Math.max(agg, 0) / RISK_ENVELOPE, 1);
 }
 
 function envelopeScaleFromConfig(config) {
-  return riskEnvelopeScale(config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE);
+  // Prefer searchAggressiveness; fall back to shortfallTolerance for older
+  // test/config callers that have not been split yet.
+  const agg = config.searchAggressiveness ?? config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+  return riskEnvelopeScale(agg);
 }
 
 // Scale a %-of-base or %-rate grid's deep end by `scale`, keeping step size and
@@ -183,11 +186,12 @@ export function resolveGlideFractions(config) {
   return filtered;
 }
 
-// Target Ending Balance discounted by Risk Tolerance so legacy slack can fund
-// higher spending (success gate + glide stop), not just be forgiven after the fact.
+// Target Ending Balance discounted by Search Aggressiveness so legacy slack can
+// fund higher spending (success gate + glide stop), not just be forgiven after
+// the fact. Uses search depth — not Plan Risk Tolerance / on-plan grading.
 export function discountedTargetEndingBalance(config) {
-  const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
-  return (config.targetEndingBalance ?? 0) * (1 - shortfallTolerance);
+  const agg = config.searchAggressiveness ?? config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+  return (config.targetEndingBalance ?? 0) * (1 - agg);
 }
 
 // Rounds down: success rate only ever gets easier to hit as spending
@@ -641,11 +645,14 @@ function estimateEvalBudget(params, config) {
 // ---- The search orchestrator -------------------------------------------------
 
 // `config` shape (see state/scenario.js buildGoalSeekConfig):
-//   targetEndingBalance      dollars — success/glide use RT-discounted value
+//   targetEndingBalance      dollars — success/glide use aggressiveness-discounted value
 //   desiredSuccessRate       fraction 0..1
-//   shortfallTolerance       fraction 0..1 — max lifetime spending shortfall vs plan;
-//                            also scales market/balance/glide depth over the first
-//                            0–20% and discounts targetEndingBalance
+//   shortfallTolerance       fraction 0..1 — Plan Risk Tolerance; on-plan blend grading
+//                            (spendingTailRate / plan-ratio floor). Same r as Run results.
+//   searchAggressiveness     fraction 0..1 — Find Best Plan search depth only:
+//                            scales market/balance/glide grids over the first 0–20%
+//                            and discounts targetEndingBalance
+//   onPlanScoring            { measure, yearlyEmphasisPct, yearlyLateFloorPct }
 //   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/HighAdj only;
@@ -744,12 +751,12 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       rankingWeighting,
     );
     const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
-    // Discount Target Ending Balance by Risk Tolerance so legacy slack can fund
-    // higher spending. Legacy success uses this discounted gate whenever a
-    // target is set (not only when Glide is searched); Glide's stop is pinned
-    // to the same number so the discounted slice is actually spendable.
+    // Discount Target Ending Balance by Search Aggressiveness so legacy slack
+    // can fund higher spending. Legacy success uses this discounted gate
+    // whenever a target is set (not only when Glide is searched); Glide's stop
+    // is pinned to the same number so the discounted slice is actually spendable.
     const effectiveTargetEndingBalance = discountedTargetEndingBalance(config);
-    // Split gate: Desired Success % = survive + ending only; Risk Tolerance
+    // Split gate: Desired Success % = survive + ending only; Plan Risk Tolerance
     // floors actual/plan at P(100 − Desired Success %), not as a joint per-run
     // requirement (which left the RT band unused when depletion bound first).
     const legacyRate = legacyGoalSuccessRate(
@@ -765,10 +772,30 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       perRunBenchmarks,
       failPct,
     );
+    // Missing onPlanScoring (older callers/tests) → lifetime-only, matching
+    // pre-blend behavior. Production always passes scoring from buildGoalSeekConfig.
+    const scoring = config.onPlanScoring
+      ?? { measure: 'lifetime', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
+    const nSims = result.numSimulations ?? result.horizonYears?.length ?? 1;
+    const maxYears = params.maxYears
+      ?? params.numYears
+      ?? (result.allYearsNetSpend
+        ? Math.floor(result.allYearsNetSpend.length / Math.max(nSims, 1))
+        : params.numYears);
+    const onPlanContext = {
+      measure: scoring.measure ?? 'blend',
+      yearlyEmphasisPct: scoring.yearlyEmphasisPct ?? 100,
+      yearlyLateFloorPct: scoring.yearlyLateFloorPct ?? 100,
+      allYearsNetSpend: result.allYearsNetSpend ?? result.allYearsWithdrawals,
+      maxYears,
+      horizonYears: result.horizonYears,
+      planByYearForHorizon: (h) => plannedYearlySchedule(working.portfolio, h),
+    };
     const onPlanRate = spendingTailRate(
       actualWithdrawn,
       perRunBenchmarks,
       shortfallTolerance,
+      onPlanContext,
     );
     // Single comparable rate for summaries / pinBase climb: the tighter of
     // the two separate bars (each must clear Desired Success % for feasibility).
@@ -1310,13 +1337,16 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
   notify('Confirming final plan', 1);
 
   const shortfallTolerance = config.shortfallTolerance ?? DEFAULT_SHORTFALL_TOLERANCE;
+  const searchAggressiveness = config.searchAggressiveness
+    ?? config.shortfallTolerance
+    ?? DEFAULT_SHORTFALL_TOLERANCE;
   const plannedTotal = plannedScheduleTotal(working.portfolio, params.numYears);
 
   if (pinBase && !finalMetrics.meetsSplitGate) {
     const isSpecific = params.portfolio.strategy === 'specific';
     const reason = isSpecific
-      ? 'Your Specific List of withdrawals cannot meet the desired success rate even with the best lever settings. Try lowering the amounts in your list, the target ending balance, or the desired success rate, or raising the risk tolerance.'
-      : `Your pinned base withdrawal of $${Math.round(finalBase / DOLLAR_ROUNDING).toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, or raising the risk tolerance.`;
+      ? 'Your Specific List of withdrawals cannot meet the desired success rate even with the best lever settings. Try lowering the amounts in your list, the target ending balance, or the desired success rate, raising Plan Risk Tolerance, or raising Search Aggressiveness.'
+      : `Your pinned base withdrawal of $${Math.round(finalBase / DOLLAR_ROUNDING).toLocaleString('en-US')}k cannot meet the desired success rate even with the best lever settings. Try lowering the base, the target ending balance, or the desired success rate, raising Plan Risk Tolerance, or raising Search Aggressiveness.`;
 
     if (config.includeMarketAdjustments) {
       clampMarketAdjustments(config, working.dynConfig, finalBase);
@@ -1350,6 +1380,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
             }
           : undefined,
         shortfallTolerance,
+        searchAggressiveness,
         plannedScheduleTotal: plannedTotal,
         achievedSuccessRate: finalMetrics.successRateAchieved,
         achievedTailRatio: finalMetrics.tailRatio,
@@ -1390,6 +1421,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
         }
       : undefined,
     shortfallTolerance,
+    searchAggressiveness,
     plannedScheduleTotal: plannedTotal,
     achievedSuccessRate: finalMetrics.successRateAchieved,
     achievedTailRatio: finalMetrics.tailRatio,

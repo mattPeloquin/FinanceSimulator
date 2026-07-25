@@ -1,15 +1,16 @@
 <!-- Headline metrics -->
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div class="bg-theme-accent-subtle border border-theme-accent/40 rounded-lg p-4 text-center">
-            <!-- Two equal-partner rates side by side; card footprint unchanged. -->
-            <div class="grid grid-cols-2 gap-0 h-full items-stretch">
-                <div class="flex flex-col items-center justify-center px-2">
-                    <div class="text-xs uppercase tracking-wider text-theme-accent-text/70">Success Rate (not depleted)</div>
-                    <div id="successRate" class="text-2xl font-bold text-theme-accent-text"></div>
+            <!-- One shared Success Rate header; two partner rates underneath. -->
+            <div class="text-sm uppercase tracking-wider text-theme-accent-text/70 mb-2.5">Success Rate</div>
+            <div class="grid grid-cols-2 gap-0 items-stretch">
+                <div class="flex flex-col items-center justify-center px-1">
+                    <div class="text-xs uppercase tracking-wider text-theme-accent-text/70">Not Depleted</div>
+                    <div id="successRate" class="text-3xl font-bold text-theme-accent-text"></div>
                 </div>
-                <div class="flex flex-col items-center justify-center px-2">
-                    <div id="withdrawalTargetSuccessRateLabel" class="text-xs uppercase tracking-wider text-theme-accent-text/70">Success Rate (on plan)</div>
-                    <div id="withdrawalTargetSuccessRate" class="text-2xl font-bold text-theme-accent-text"></div>
+                <div class="flex flex-col items-center justify-center px-1">
+                    <div id="withdrawalTargetSuccessRateLabel" class="text-xs uppercase tracking-wider text-theme-accent-text/70">Within plan</div>
+                    <div id="withdrawalTargetSuccessRate" class="text-3xl font-bold text-theme-accent-text"></div>
                     <div id="onPlanTaxNote" class="hidden text-xs text-theme-accent-text/60 mt-1">on plan after taxes</div>
                 </div>
             </div>

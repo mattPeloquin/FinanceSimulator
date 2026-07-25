@@ -23,12 +23,12 @@
                 <p class="text-xs text-theme-faint mt-1.5 leading-tight">Minimum chance of never running out and leaving at least the Target Ending Balance.</p>
             </div>
             <div>
-                <label for="goalSeekRiskTolerancePct" class="block text-sm font-medium text-theme-body">Risk Tolerance</label>
+                <label for="goalSeekRiskTolerancePct" class="block text-sm font-medium text-theme-body">Search Aggressiveness</label>
                 <div class="flex items-center gap-3 mt-1">
                     <input type="range" id="goalSeekRiskTolerancePctSlider" min="0" max="35" step="1" class="range-theme flex-1">
                     <input type="number" id="goalSeekRiskTolerancePct" min="0" max="35" step="1" class="w-16 rounded-md input-theme sm:text-sm p-1 text-center">
                 </div>
-                <p class="text-xs text-theme-faint mt-1.5 leading-tight">Depth of dynamic ajustments and allowed spending shortfall vs. plan - 0% = stay on plan; higher = bigger plan, more belt-tightening in bad markets.</p>
+                <p class="text-xs text-theme-faint mt-1.5 leading-tight">How hard Find Best Plan may push dynamic adjustments and target-ending slack while searching — higher = larger candidate plans and more belt-tightening in bad markets. Does <strong>not</strong> set the on-plan shortfall band; that is <strong>Plan Risk Tolerance</strong> above.</p>
             </div>
         </div>
 

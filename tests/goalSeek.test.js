@@ -155,42 +155,44 @@ describe('riskEnvelopeScale / scalePctGridByEnvelope', () => {
     expect(scalePctGridByEnvelope(up, 1).maxPct).toBe(100);
   });
 
-  it('scales floor max cut to 25% at 10% RT and 50% at ≥20% (not equal to RT)', () => {
+  it('scales floor max cut to 25% at 10% aggressiveness and 50% at ≥20%', () => {
     const floorFull = { minPct: 0, maxPct: 50, stepPct: 10 };
-    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.1 }).maxPct).toBeCloseTo(25, 9);
-    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.2 }).maxPct).toBe(50);
-    expect(resolveFloorPenaltyGrid({ shortfallTolerance: 0.35 }).maxPct).toBe(50);
+    expect(resolveFloorPenaltyGrid({ searchAggressiveness: 0.1 }).maxPct).toBeCloseTo(25, 9);
+    expect(resolveFloorPenaltyGrid({ searchAggressiveness: 0.2 }).maxPct).toBe(50);
+    expect(resolveFloorPenaltyGrid({ searchAggressiveness: 0.35 }).maxPct).toBe(50);
     expect(scalePctGridByEnvelope(floorFull, 0)).toEqual({ minPct: 10, maxPct: 10, stepPct: 10 });
   });
 
   it('scales ceiling boost and glide surplus the same way', () => {
-    expect(resolveCeilingBonusGrid({ shortfallTolerance: 0.1 }).maxPct).toBeCloseTo(75, 9);
-    expect(resolveCeilingBonusGrid({ shortfallTolerance: 0.2 }).maxPct).toBe(150);
-    expect(resolveGlideFractions({ shortfallTolerance: 0.1 })).toEqual([0.1, 0.2]);
-    expect(resolveGlideFractions({ shortfallTolerance: 0.2 })).toEqual([0.1, 0.2, 0.4, 0.6]);
-    expect(resolveGlideFractions({ shortfallTolerance: 0 })).toEqual([0.1]);
+    expect(resolveCeilingBonusGrid({ searchAggressiveness: 0.1 }).maxPct).toBeCloseTo(75, 9);
+    expect(resolveCeilingBonusGrid({ searchAggressiveness: 0.2 }).maxPct).toBe(150);
+    expect(resolveGlideFractions({ searchAggressiveness: 0.1 })).toEqual([0.1, 0.2]);
+    expect(resolveGlideFractions({ searchAggressiveness: 0.2 })).toEqual([0.1, 0.2, 0.4, 0.6]);
+    expect(resolveGlideFractions({ searchAggressiveness: 0 })).toEqual([0.1]);
   });
 
-  it('discounts Target Ending Balance by Risk Tolerance', () => {
+  it('discounts Target Ending Balance by Search Aggressiveness (not Plan RT)', () => {
     expect(discountedTargetEndingBalance({
       targetEndingBalance: 1_000_000,
-      shortfallTolerance: 0.2,
+      searchAggressiveness: 0.2,
+      shortfallTolerance: 0,
     })).toBe(800_000);
     expect(discountedTargetEndingBalance({
       targetEndingBalance: 500_000,
-      shortfallTolerance: 0,
+      searchAggressiveness: 0,
+      shortfallTolerance: 0.35,
     })).toBe(500_000);
   });
 
   it('scales market Low candidate extrema at 10% Risk Tolerance', () => {
-    const grid = resolveMarketDownAdjGrid({ shortfallTolerance: 0.1 });
+    const grid = resolveMarketDownAdjGrid({ searchAggressiveness: 0.1 });
     expect(grid.minPct).toBeCloseTo(-25, 9);
     expect(grid.maxPct).toBe(-5);
     const dollars = buildAdjustmentGrid(100_000, grid);
     expect(Math.min(...dollars)).toBe(-25_000);
     expect(Math.max(...dollars)).toBe(-5_000);
 
-    const up = resolveMarketUpAdjGrid({ shortfallTolerance: 0.1 });
+    const up = resolveMarketUpAdjGrid({ searchAggressiveness: 0.1 });
     expect(up.maxPct).toBeCloseTo(50, 9);
     const upDollars = buildAdjustmentGrid(100_000, up);
     expect(Math.max(...upDollars)).toBe(50_000);
@@ -370,6 +372,8 @@ const FAST_LEVER_GRIDS = {
 
 const DEFAULT_GOAL_SEEK_CONFIG = {
   shortfallTolerance: 0.2,
+  searchAggressiveness: 0.2,
+  onPlanScoring: { measure: 'lifetime', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 },
 };
 
 describe('buildPerRunPlanBenchmarks', () => {
@@ -1333,8 +1337,16 @@ describe('runGoalSeek', () => {
       penaltyBonusGrid: { minPct: 0, maxPct: 100, stepPct: 50 },
     };
 
-    const conservative = await seek(params, { ...shared, shortfallTolerance: 0 });
-    const aggressive = await seek(params, { ...shared, shortfallTolerance: 0.4 });
+    const conservative = await seek(params, {
+      ...shared,
+      shortfallTolerance: 0,
+      searchAggressiveness: 0,
+    });
+    const aggressive = await seek(params, {
+      ...shared,
+      shortfallTolerance: 0.4,
+      searchAggressiveness: 0.4,
+    });
 
     expect(conservative.summary.feasible).toBe(true);
     expect(aggressive.summary.feasible).toBe(true);

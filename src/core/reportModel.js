@@ -371,10 +371,12 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
     success: {
       successRate: result.successRate ?? 0,
       onPlanRate: result.withdrawalTargetSuccessRate ?? 0,
+      onPlanMeasure: result.onPlanMeasure ?? 'blend',
     },
-    // Same Plan Risk Tolerance fraction used for the lifetime on-plan rate —
+    // Same Plan Risk Tolerance fraction used for the on-plan rate —
     // the withdrawal band chart uses it as the near-plan color width.
     shortfallTolerance: result.shortfallTolerance ?? 0.05,
+    onPlanMeasure: result.onPlanMeasure ?? 'blend',
     allocation: allocationSummary(scenario || {}),
     taxActive: !!result.withdrawalTaxActive,
     pLow,

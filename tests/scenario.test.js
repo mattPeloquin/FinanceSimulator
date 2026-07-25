@@ -87,6 +87,11 @@ describe('migrateScenario', () => {
     };
     // Pre-v5 saves predate the Risk Level slider: they load detached so the
     // slider never overwrites their hand-built values.
+    const onPlanDefaults = {
+      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
+      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
+      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
+    };
     expect(migrateScenario(s, 4)).toEqual({
       ...s,
       presetActive: false,
@@ -98,6 +103,7 @@ describe('migrateScenario', () => {
       advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
       withdrawalTaxTiers: [],
       enableFeesTaxes: false,
+      ...onPlanDefaults,
     });
   });
   it('adds an empty allocation-over-time schedule when migrating pre-v7 saves', () => {
@@ -116,17 +122,24 @@ describe('migrateScenario', () => {
       withdrawalTaxTiers: [],
       enableFeesTaxes: false,
     };
+    const onPlanDefaults = {
+      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
+      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
+      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
+    };
     expect(migrateScenario(s, 5)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
       ...earlyWeightDefaults,
       ...feesTaxesDefaults,
+      ...onPlanDefaults,
     });
     expect(migrateScenario(s, 6)).toEqual({
       ...s,
       allocationOverTimeTiers: [],
       ...earlyWeightDefaults,
       ...feesTaxesDefaults,
+      ...onPlanDefaults,
     });
   });
   it('adds fees/taxes defaults when migrating pre-v9 saves', () => {
@@ -144,6 +157,9 @@ describe('migrateScenario', () => {
       advisorFeePct: SCENARIO_DEFAULTS.advisorFeePct,
       withdrawalTaxTiers: [],
       enableFeesTaxes: false,
+      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
+      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
+      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
     });
   });
   it('adds enableFeesTaxes when migrating pre-v10 saves', () => {
@@ -157,6 +173,9 @@ describe('migrateScenario', () => {
     expect(migrateScenario(off, 9)).toEqual({
       ...off,
       enableFeesTaxes: false,
+      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
+      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
+      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
     });
     const on = {
       startBalance: 4000,
@@ -188,7 +207,7 @@ describe('migrateScenario', () => {
       spendBrackets: [{ above: 200, taxPct: 18 }],
     }]);
   });
-  it('leaves fully-migrated v11 scenarios untouched when already current', () => {
+  it('adds on-plan blend defaults when migrating pre-v12 saves', () => {
     const s = {
       startBalance: 4000,
       presetActive: true,
@@ -201,7 +220,63 @@ describe('migrateScenario', () => {
       withdrawalTaxTiers: [],
       enableFeesTaxes: false,
     };
-    expect(migrateScenario(s, 11)).toEqual(s);
+    expect(migrateScenario(s, 11)).toEqual({
+      ...s,
+      onPlanMeasure: SCENARIO_DEFAULTS.onPlanMeasure,
+      onPlanYearlyEmphasisPct: SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct,
+      onPlanYearlyLateFloorPct: SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct,
+    });
+  });
+  it('maps flat v12 on-plan defaults (0,100) to symmetrical flat (100,100)', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 4,
+      allocationOverTimeTiers: [],
+      earlyWeightSlot: 0,
+      earlyWeightEmphasisPct: 30,
+      earlyWeightLateFloorPct: 40,
+      advisorFeePct: 0,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
+      onPlanMeasure: 'blend',
+      onPlanYearlyEmphasisPct: 0,
+      onPlanYearlyLateFloorPct: 100,
+    };
+    expect(migrateScenario(s, 12)).toEqual({
+      ...s,
+      onPlanYearlyEmphasisPct: 100,
+      onPlanYearlyLateFloorPct: 100,
+    });
+  });
+  it('leaves fully-migrated v13 scenarios untouched when already current', () => {
+    const s = {
+      startBalance: 4000,
+      presetActive: true,
+      presetLevel: 4,
+      allocationOverTimeTiers: [],
+      earlyWeightSlot: 0,
+      earlyWeightEmphasisPct: 30,
+      earlyWeightLateFloorPct: 40,
+      advisorFeePct: 0,
+      withdrawalTaxTiers: [],
+      enableFeesTaxes: false,
+      onPlanMeasure: 'blend',
+      onPlanYearlyEmphasisPct: 100,
+      onPlanYearlyLateFloorPct: 100,
+    };
+    expect(migrateScenario(s, 13)).toEqual(s);
+  });
+  it('preserves shaped v12 on-plan curves when migrating to symmetrical end-weights', () => {
+    const s = {
+      startBalance: 4000,
+      onPlanMeasure: 'blend',
+      onPlanYearlyEmphasisPct: 80,
+      onPlanYearlyLateFloorPct: 20,
+    };
+    const migrated = migrateScenario(s, 12);
+    expect(migrated.onPlanYearlyEmphasisPct).toBe(80);
+    expect(migrated.onPlanYearlyLateFloorPct).toBe(20);
   });
   it('maps legacy earlyWeightStrengthPct to a 5-stop slot and drops shape', () => {
     const s = {
@@ -511,6 +586,7 @@ describe('buildGoalSeekConfig', () => {
     const s = defaultScenario();
     s.goalSeekTargetEndingBalance = 500;
     s.goalSeekDesiredSuccessPct = 85;
+    s.planRiskTolerancePct = 10;
     s.goalSeekRiskTolerancePct = 20;
     s.goalSeekIncludeSpendingOverTime = true;
     // Defaults (Balanced preset) turn every lever on; pin the rest off so the
@@ -521,11 +597,23 @@ describe('buildGoalSeekConfig', () => {
     const config = buildGoalSeekConfig(s);
     expect(config.targetEndingBalance).toBe(500 * MONEY_SCALE);
     expect(config.desiredSuccessRate).toBeCloseTo(0.85, 6);
-    expect(config.shortfallTolerance).toBeCloseTo(0.2, 6);
+    // On-plan grading uses Plan Risk Tolerance; search depth uses FBP slider.
+    expect(config.shortfallTolerance).toBeCloseTo(0.1, 6);
+    expect(config.searchAggressiveness).toBeCloseTo(0.2, 6);
+    expect(config.onPlanScoring.measure).toBe('blend');
     expect(config.includeSpendingOverTime).toBe(true);
     expect(config.includeMarketAdjustments).toBe(false);
     expect(config.includeBalanceOverrides).toBe(false);
     expect(config.includeGlidePath).toBe(false);
+  });
+
+  it('keeps Plan RT and Search Aggressiveness independent in Goal Seek config', () => {
+    const s = defaultScenario();
+    s.planRiskTolerancePct = 5;
+    s.goalSeekRiskTolerancePct = 25;
+    const config = buildGoalSeekConfig(s);
+    expect(config.shortfallTolerance).toBeCloseTo(0.05, 6);
+    expect(config.searchAggressiveness).toBeCloseTo(0.25, 6);
   });
 
   it('passes the glide-path lever through for both strategies', () => {
@@ -544,12 +632,29 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).desiredSuccessRate).toBe(0);
   });
 
-  it('clamps risk tolerance to 0-0.35', () => {
+  it('clamps search aggressiveness to 0-0.35', () => {
     const s = defaultScenario();
     s.goalSeekRiskTolerancePct = 150;
-    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(0.35);
+    expect(buildGoalSeekConfig(s).searchAggressiveness).toBe(0.35);
     s.goalSeekRiskTolerancePct = -10;
-    expect(buildGoalSeekConfig(s).shortfallTolerance).toBe(0);
+    expect(buildGoalSeekConfig(s).searchAggressiveness).toBe(0);
+  });
+
+  it('passes onPlanScoring from Advanced fields into sim params and Goal Seek', () => {
+    const s = defaultScenario();
+    s.onPlanMeasure = 'yearly';
+    s.onPlanYearlyEmphasisPct = 40;
+    s.onPlanYearlyLateFloorPct = 20;
+    expect(buildSimParams(s, { years: [] }).onPlanScoring).toEqual({
+      measure: 'yearly',
+      yearlyEmphasisPct: 40,
+      yearlyLateFloorPct: 20,
+    });
+    expect(buildGoalSeekConfig(s).onPlanScoring).toEqual({
+      measure: 'yearly',
+      yearlyEmphasisPct: 40,
+      yearlyLateFloorPct: 20,
+    });
   });
 
   it('maps include base withdrawal to pinBaseWithdrawal (inverted)', () => {
@@ -843,23 +948,23 @@ describe('validateScenario', () => {
     expect(validateScenario(s, range).some((e) => e.includes('desired success'))).toBe(false);
   });
 
-  it('flags an out-of-range risk tolerance when Goal Seek is on', () => {
+  it('flags an out-of-range search aggressiveness when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.goalSeekRiskTolerancePct = 150;
     const errors = validateScenario(s, range);
-    expect(errors.some((e) => e.includes('risk tolerance'))).toBe(true);
+    expect(errors.some((e) => e.includes('search aggressiveness'))).toBe(true);
   });
 
-  it('flags a risk tolerance outside the 0-35 range when Goal Seek is on', () => {
+  it('flags a search aggressiveness outside the 0-35 range when Goal Seek is on', () => {
     const s = defaultScenario();
     s.goalSeekMode = true;
     s.goalSeekRiskTolerancePct = 36;
-    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(true);
+    expect(validateScenario(s, range).some((e) => e.includes('search aggressiveness'))).toBe(true);
     s.goalSeekRiskTolerancePct = 0;
-    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
+    expect(validateScenario(s, range).some((e) => e.includes('search aggressiveness'))).toBe(false);
     s.goalSeekRiskTolerancePct = 35;
-    expect(validateScenario(s, range).some((e) => e.includes('risk tolerance'))).toBe(false);
+    expect(validateScenario(s, range).some((e) => e.includes('search aggressiveness'))).toBe(false);
   });
 
   it('requires at least one other lever when base is not included in the search', () => {
