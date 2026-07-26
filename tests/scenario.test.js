@@ -345,7 +345,8 @@ describe('buildSimParams', () => {
 
   it('converts plan risk tolerance from percent to a shortfall fraction', () => {
     const s = defaultScenario();
-    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.10, 6);
+    // defaultScenario overlays the Balanced risk preset (15% plan risk tolerance).
+    expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.15, 6);
     s.planRiskTolerancePct = 20;
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.2, 6);
     s.planRiskTolerancePct = 150;

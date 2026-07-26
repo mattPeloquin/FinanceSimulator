@@ -1,4 +1,4 @@
-import { loadUiPrefs, saveUiPrefs } from '../state/uiPrefs.js';
+import { loadAppPrefs, saveAppPrefs } from '../state/appPrefs.js';
 
 export const themeTokens = {
   meta: { light: '#4f46e5', dark: '#1e293b' },
@@ -121,7 +121,7 @@ const listeners = new Set();
 let systemMedia = null;
 
 function getStoredTheme() {
-  const theme = loadUiPrefs().theme;
+  const theme = loadAppPrefs().theme;
   return theme === 'light' || theme === 'dark' ? theme : null;
 }
 
@@ -156,7 +156,7 @@ export function setTheme(mode, { persist = true } = {}) {
   const next = mode === 'dark' ? 'dark' : 'light';
   const prev = isDarkMode() ? 'dark' : 'light';
   document.documentElement.classList.toggle('dark', next === 'dark');
-  if (persist) saveUiPrefs({ theme: next });
+  if (persist) saveAppPrefs({ theme: next });
   updateMetaThemeColor(next);
   syncToggleUi(next);
   if (prev !== next) {

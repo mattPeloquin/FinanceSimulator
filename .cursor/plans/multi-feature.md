@@ -238,3 +238,17 @@ later phases.)
 - 2026-07-26 — Plan hardened: legacy share links are a silent clean break (open fresh, no
   decode); added app-vs-feature state boundary rule, API sketches, hidden-tab Chart.js
   pitfall, and explicit verification commands.
+- 2026-07-26 — **Phase 1 shipped.** Feature registry (`src/state/features.js`) + tab bar
+  under the title (SOR Plan only); `#feature-sor-plan` wraps inputs/results; title typo
+  fixed ("Finance Simulator"). Storage clean-break:
+  - `fs:app:prefs` — theme + activeFeature (`src/state/appPrefs.js`)
+  - `fs:sor-plan:ui` — report band / accordions / chart view prefs (`uiPrefs.js`)
+  - `fs:sor-plan:autosave` / `fs:sor-plan:unsaved-stash`
+  - No migration of legacy `sor:*` keys. Share/export UI snapshots still carry `theme`;
+    `applyUiPrefs` routes theme into app prefs and feature chrome into `fs:sor-plan:ui`.
+  - Key helpers in `src/state/storageKeys.js`.
+  Rule file added: `.cursor/rules/multi-feature-architecture.mdc` (also listed in
+  `CLAUDE.md`). Vitest: registry + key scheme + appPrefs; smoke e2e asserts tab +
+  feature root. Verification: `npm test`, `npx playwright test`, `npm run build` green.
+  Note for Phase 2: IndexedDB still `sor-sessions` / export type still `sor-scenario`
+  until that phase.

@@ -7,8 +7,9 @@ function parseK(text) {
 
 async function runSimulation(page) {
   await page.click('#runButton');
-  await expect(page.locator('#resultsSection')).toBeVisible();
-  await expect(page.locator('#medianWithdrawn')).not.toBeEmpty({ timeout: 20000 });
+  // Dual Monte Carlo (plan + classic 4%) needs headroom under parallel workers.
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#medianWithdrawn')).not.toBeEmpty({ timeout: 20_000 });
 }
 
 // Goal Seek ("Find Best Plan") is on out of the box; these specs exercise a

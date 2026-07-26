@@ -22,7 +22,7 @@ const THUMB_ZOOM_TIGHT = 2.6;
 const THUMB_W = 144;
 const THUMB_H = 64;
 
-/** When true, accordion toggle handlers must not write to sor:ui-accordions. */
+/** When true, accordion toggle handlers must not write accordion prefs. */
 export let suppressAccordionPersist = false;
 
 /**

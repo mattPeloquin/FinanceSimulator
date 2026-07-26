@@ -1,19 +1,16 @@
-// Browser UI chrome prefs (not scenario inputs).
-// Stored as one localStorage object so DevTools / share / sessions can treat
-// view settings as a single collection.
+// Feature chrome prefs for SOR Plan (report band, accordions, chart view).
+// Stored under fs:sor-plan:ui. App-wide theme / active tab live in appPrefs.js.
+//
+// Snapshots attached to sessions/export/share still include `theme` so a shared
+// link can paint the same look; applyUiPrefs routes theme into app prefs.
 
-export const UI_STORAGE_KEY = 'sor:ui';
+import { loadAppPrefs } from './appPrefs.js';
+import { SOR_PLAN_UI_KEY } from './storageKeys.js';
 
-const LEGACY_KEYS = {
-  theme: 'sor:theme',
-  reportBand: 'sor:report-band',
-  reportThemeMode: 'sor:report-theme-mode',
-  accordions: 'sor:ui-accordions',
-  balanceLogScale: 'sor:ui-balance-log-scale',
-};
+export const UI_STORAGE_KEY = SOR_PLAN_UI_KEY;
 
 export const DEFAULT_UI_PREFS = Object.freeze({
-  theme: null,
+  theme: null, // carried in snapshots / envelopes only; not stored here
   reportBand: Object.freeze({ low: 5, high: 65 }),
   reportThemeMode: null,
   accordions: Object.freeze({}),
@@ -39,6 +36,7 @@ function normalizeAccordions(raw) {
 /**
  * Coerce arbitrary input into a full prefs object.
  * Any failure / garbage → defaults (never throws).
+ * `theme` is accepted for envelope compatibility but not persisted in this key.
  */
 export function normalizeUiPrefs(raw) {
   try {
@@ -82,88 +80,29 @@ function structuredCloneDefaults() {
   };
 }
 
-function readLegacyBundle() {
-  const bundle = {};
-  let found = false;
-
-  try {
-    const theme = localStorage.getItem(LEGACY_KEYS.theme);
-    if (theme === 'light' || theme === 'dark') {
-      bundle.theme = theme;
-      found = true;
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const raw = localStorage.getItem(LEGACY_KEYS.reportBand);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        bundle.reportBand = parsed;
-        found = true;
-      }
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const mode = localStorage.getItem(LEGACY_KEYS.reportThemeMode);
-    if (mode === 'light' || mode === 'dark') {
-      bundle.reportThemeMode = mode;
-      found = true;
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const raw = localStorage.getItem(LEGACY_KEYS.accordions);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        bundle.accordions = parsed;
-        found = true;
-      }
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const raw = localStorage.getItem(LEGACY_KEYS.balanceLogScale);
-    if (raw === '1' || raw === '0') {
-      bundle.balanceLogScale = raw === '1';
-      found = true;
-    }
-  } catch { /* ignore */ }
-
-  return found ? bundle : null;
-}
-
-function clearLegacyKeys() {
-  for (const key of Object.values(LEGACY_KEYS)) {
-    try {
-      localStorage.removeItem(key);
-    } catch { /* ignore */ }
-  }
-}
-
+/** Persist feature chrome only — theme is stripped (lives in fs:app:prefs). */
 function writeUiPrefs(prefs) {
   try {
-    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(prefs));
+    const featureChrome = {
+      reportBand: prefs.reportBand,
+      reportThemeMode: prefs.reportThemeMode,
+      accordions: prefs.accordions,
+      balanceLogScale: prefs.balanceLogScale,
+    };
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(featureChrome));
   } catch {
     /* quota / private mode — non-fatal */
   }
 }
 
-/** Load prefs; migrate legacy keys once if `sor:ui` is absent. */
+/** Load feature chrome prefs; missing/invalid → defaults (no `sor:*` migration). */
 export function loadUiPrefs() {
   try {
     const raw = localStorage.getItem(UI_STORAGE_KEY);
     if (raw) {
+      // Theme is not stored here; leave null so callers that need it use
+      // readUiPrefsSnapshot() (merges app theme) or loadAppPrefs().
       return normalizeUiPrefs(JSON.parse(raw));
-    }
-    const legacy = readLegacyBundle();
-    if (legacy) {
-      const migrated = normalizeUiPrefs(legacy);
-      writeUiPrefs(migrated);
-      clearLegacyKeys();
-      return migrated;
     }
   } catch {
     /* fall through */
@@ -171,7 +110,7 @@ export function loadUiPrefs() {
   return structuredCloneDefaults();
 }
 
-/** Merge a partial update into stored prefs and persist. */
+/** Merge a partial update into stored feature chrome prefs and persist. */
 export function saveUiPrefs(partial = {}) {
   const current = loadUiPrefs();
   const next = normalizeUiPrefs({ ...current, ...partial });
@@ -185,16 +124,24 @@ export function saveUiPrefs(partial = {}) {
   return next;
 }
 
-/** Replace stored prefs entirely (after normalize). */
+/** Replace stored feature chrome prefs entirely (after normalize). */
 export function replaceUiPrefs(prefs) {
   const next = normalizeUiPrefs(prefs);
   writeUiPrefs(next);
   return next;
 }
 
-/** Snapshot of current view settings for attach to session/export/share. */
+/**
+ * Snapshot of view settings for attach to session/export/share.
+ * Merges app theme so shared links still carry the look.
+ */
 export function readUiPrefsSnapshot() {
-  return loadUiPrefs();
+  const feature = loadUiPrefs();
+  const app = loadAppPrefs();
+  return {
+    ...feature,
+    theme: app.theme,
+  };
 }
 
 /**

@@ -4,6 +4,7 @@
 
 - `testing-standards.mdc` — Vitest for math/option matrices; Playwright e2e is smoke-first on core paths only
 - `single-file-architecture.mdc` — client-side only; everything builds to a single HTML file
+- `multi-feature-architecture.mdc` — feature registry, `fs:` namespaces, shared-vs-feature boundaries
 - `tailwind-exclusivity.mdc` — Tailwind only for styling
 - `financial-math-readability.mdc` — financial logic must be heavily commented
 - `anti-thrashing.mdc` — ask the user for guidance after repeated failures

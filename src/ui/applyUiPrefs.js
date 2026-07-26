@@ -1,22 +1,27 @@
 // Apply a normalized UI prefs snapshot to the live DOM + storage.
 // Kept separate from state/uiPrefs.js so theme/report modules can import
 // storage without a circular dependency through apply.
+//
+// Theme is app-wide (fs:app:prefs); report/accordion/chart prefs are
+// feature chrome (fs:sor-plan:ui).
 
 import { replaceUiPrefs, normalizeUiPrefs } from '../state/uiPrefs.js';
+import { saveAppPrefs } from '../state/appPrefs.js';
 import { setTheme } from './theme.js';
 import { applyReportViewPrefs } from './report.js';
 import { applyBalanceLogScalePref } from './charts/timeline.js';
 
 /** Persist prefs and push them into the current page controls. */
 export function applyUiPrefs(raw) {
-  const prefs = replaceUiPrefs(normalizeUiPrefs(raw));
+  const prefs = normalizeUiPrefs(raw);
+  replaceUiPrefs(prefs);
 
-  // Theme: persist already written; setTheme(..., persist:false) only paints.
+  // Theme belongs in app prefs; envelopes may still carry it for share UX.
   if (prefs.theme === 'light' || prefs.theme === 'dark') {
+    saveAppPrefs({ theme: prefs.theme });
     setTheme(prefs.theme, { persist: false });
   } else {
-    // Follow system — clear explicit theme by re-resolving without a stored override.
-    // replaceUiPrefs already stored theme:null; resolve via system.
+    saveAppPrefs({ theme: null });
     const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(dark ? 'dark' : 'light', { persist: false });
   }

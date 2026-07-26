@@ -320,8 +320,11 @@ test('Share link can attach view settings and prompt the recipient', async ({ pa
   await waitForInit(page);
 
   await page.evaluate(() => {
-    localStorage.setItem('sor:ui', JSON.stringify({
+    localStorage.setItem('fs:app:prefs', JSON.stringify({
       theme: 'dark',
+      activeFeature: 'sor-plan',
+    }));
+    localStorage.setItem('fs:sor-plan:ui', JSON.stringify({
       reportBand: { low: 25, high: 75 },
       reportThemeMode: null,
       accordions: {},
@@ -340,8 +343,11 @@ test('Share link can attach view settings and prompt the recipient', async ({ pa
   const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
 
   await page.evaluate(() => {
-    localStorage.setItem('sor:ui', JSON.stringify({
+    localStorage.setItem('fs:app:prefs', JSON.stringify({
       theme: 'light',
+      activeFeature: 'sor-plan',
+    }));
+    localStorage.setItem('fs:sor-plan:ui', JSON.stringify({
       reportBand: { low: 10, high: 90 },
       reportThemeMode: null,
       accordions: {},
@@ -356,7 +362,7 @@ test('Share link can attach view settings and prompt the recipient', async ({ pa
   await expect(applyDialog).toBeHidden();
   await waitForInit(page);
 
-  const theme = await page.evaluate(() => JSON.parse(localStorage.getItem('sor:ui')).theme);
+  const theme = await page.evaluate(() => JSON.parse(localStorage.getItem('fs:app:prefs')).theme);
   expect(theme).toBe('dark');
   await expect(page.locator('#startBalance')).toHaveValue('2,500');
 });

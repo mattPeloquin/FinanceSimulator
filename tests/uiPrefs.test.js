@@ -12,6 +12,8 @@ import {
   loadAccordionState,
   setAccordionOpen,
 } from '../src/state/uiPrefs.js';
+import { APP_PREFS_KEY } from '../src/state/storageKeys.js';
+import { saveAppPrefs } from '../src/state/appPrefs.js';
 
 describe('uiPrefs', () => {
   beforeEach(() => {
@@ -49,33 +51,39 @@ describe('uiPrefs', () => {
     expect(n.balanceLogScale).toBe(true);
   });
 
-  it('load/save round-trips through sor:ui', () => {
-    saveUiPrefs({ theme: 'dark', balanceLogScale: true });
+  it('load/save round-trips feature chrome through fs:sor-plan:ui', () => {
+    saveUiPrefs({ theme: 'dark', balanceLogScale: true, reportThemeMode: 'light' });
     const raw = JSON.parse(localStorage.getItem(UI_STORAGE_KEY));
-    expect(raw.theme).toBe('dark');
+    expect(UI_STORAGE_KEY).toBe('fs:sor-plan:ui');
+    // Theme is app-wide — stripped from the feature key.
+    expect(raw.theme).toBeUndefined();
     expect(raw.balanceLogScale).toBe(true);
-    expect(loadUiPrefs().theme).toBe('dark');
-    expect(readUiPrefsSnapshot().balanceLogScale).toBe(true);
+    expect(raw.reportThemeMode).toBe('light');
+    expect(loadUiPrefs().balanceLogScale).toBe(true);
+    expect(loadUiPrefs().theme).toBeNull();
   });
 
-  it('migrates legacy keys once into sor:ui', () => {
+  it('readUiPrefsSnapshot merges app theme for envelopes', () => {
+    saveUiPrefs({ balanceLogScale: true });
+    saveAppPrefs({ theme: 'dark' });
+    expect(readUiPrefsSnapshot()).toMatchObject({
+      theme: 'dark',
+      balanceLogScale: true,
+    });
+  });
+
+  it('ignores legacy sor:* keys (clean break)', () => {
+    localStorage.setItem('sor:ui', JSON.stringify({ balanceLogScale: true, theme: 'dark' }));
     localStorage.setItem('sor:theme', 'light');
-    localStorage.setItem('sor:report-band', JSON.stringify({ low: 25, high: 75 }));
-    localStorage.setItem('sor:report-theme-mode', 'dark');
     localStorage.setItem('sor:ui-accordions', JSON.stringify({ 'section-a': true }));
-    localStorage.setItem('sor:ui-balance-log-scale', '1');
-
-    const prefs = loadUiPrefs();
-    expect(prefs.theme).toBe('light');
-    expect(prefs.reportBand).toEqual({ low: 25, high: 75 });
-    expect(prefs.reportThemeMode).toBe('dark');
-    expect(prefs.accordions).toEqual({ 'section-a': true });
-    expect(prefs.balanceLogScale).toBe(true);
-
-    expect(localStorage.getItem(UI_STORAGE_KEY)).toBeTruthy();
-    expect(localStorage.getItem('sor:theme')).toBeNull();
-    expect(localStorage.getItem('sor:report-band')).toBeNull();
-    expect(localStorage.getItem('sor:ui-accordions')).toBeNull();
+    expect(loadUiPrefs()).toEqual({
+      theme: null,
+      reportBand: { ...DEFAULT_UI_PREFS.reportBand },
+      reportThemeMode: null,
+      accordions: {},
+      balanceLogScale: false,
+    });
+    expect(localStorage.getItem(APP_PREFS_KEY)).toBeNull();
   });
 
   it('optionalUiFromEnvelope omits invalid attach payloads', () => {
@@ -84,7 +92,7 @@ describe('uiPrefs', () => {
     expect(optionalUiFromEnvelope({ theme: 'dark' }).theme).toBe('dark');
   });
 
-  it('accordion helpers write into sor:ui', () => {
+  it('accordion helpers write into fs:sor-plan:ui', () => {
     setAccordionOpen('section-investment', true);
     expect(loadAccordionState()['section-investment']).toBe(true);
     const stored = JSON.parse(localStorage.getItem(UI_STORAGE_KEY));
@@ -92,9 +100,9 @@ describe('uiPrefs', () => {
   });
 
   it('replaceUiPrefs overwrites the whole collection', () => {
-    saveUiPrefs({ theme: 'dark', balanceLogScale: true });
-    replaceUiPrefs({ ...DEFAULT_UI_PREFS, theme: 'light' });
-    expect(loadUiPrefs().theme).toBe('light');
+    saveUiPrefs({ balanceLogScale: true, reportThemeMode: 'dark' });
+    replaceUiPrefs({ ...DEFAULT_UI_PREFS });
     expect(loadUiPrefs().balanceLogScale).toBe(false);
+    expect(loadUiPrefs().reportThemeMode).toBeNull();
   });
 });

@@ -10,10 +10,11 @@ import {
   setAccordionOpen,
   optionalUiFromEnvelope,
 } from './uiPrefs.js';
+import { SOR_PLAN_AUTOSAVE_KEY, SOR_PLAN_UNSAVED_STASH_KEY } from './storageKeys.js';
 
 export { loadAccordionState, saveAccordionState, setAccordionOpen };
 
-const AUTOSAVE_KEY = 'sor:autosave';
+const AUTOSAVE_KEY = SOR_PLAN_AUTOSAVE_KEY;
 const DB_NAME = 'sor-sessions';
 const STORE = 'sessions';
 const EXPORT_TYPE = 'sor-scenario';
@@ -55,7 +56,7 @@ export function clearAutosave() {
   }
 }
 
-const UNSAVED_STASH_KEY = 'sor:unsaved-stash';
+const UNSAVED_STASH_KEY = SOR_PLAN_UNSAVED_STASH_KEY;
 
 /** Snapshot of the unsaved workbench, kept when switching to a named session. */
 export function saveUnsavedStash(scenario) {
@@ -89,7 +90,7 @@ export function clearUnsavedStash() {
   }
 }
 
-// Accordion open/closed lives in sor:ui (see uiPrefs.js). Re-exported above.
+// Accordion open/closed lives in fs:sor-plan:ui (see uiPrefs.js). Re-exported above.
 
 // ---- Named sessions (IndexedDB) ---------------------------------------------
 

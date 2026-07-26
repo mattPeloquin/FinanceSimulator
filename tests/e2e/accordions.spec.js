@@ -8,8 +8,7 @@ test('Input and results sections default closed when accordion chrome is empty',
   await page.goto('/');
   await waitForInit(page);
   await page.evaluate(() => {
-    localStorage.removeItem('sor:ui-accordions');
-    localStorage.removeItem('sor:ui');
+    localStorage.removeItem('fs:sor-plan:ui');
   });
   await page.reload();
   await waitForInit(page);
@@ -36,7 +35,7 @@ test('Results chart accordion expand persists across refresh', async ({ page }) 
   });
   expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(true);
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui');
+    const raw = localStorage.getItem('fs:sor-plan:ui');
     return raw && JSON.parse(raw).accordions?.['details-surface-chart'] === true;
   });
 
@@ -59,9 +58,9 @@ test('Expanded settings sections survive refresh and stay independent of scenari
   expect(await page.locator('#section-investment').evaluate((el) => el.open)).toBe(true);
   expect(await page.locator('#section-advanced').evaluate((el) => el.open)).toBe(true);
 
-  // Wait until the UI chrome key is written (separate from sor:autosave).
+  // Wait until the UI chrome key is written (separate from fs:sor-plan:autosave).
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui');
+    const raw = localStorage.getItem('fs:sor-plan:ui');
     if (!raw) return false;
     const state = JSON.parse(raw).accordions || {};
     return state['section-investment'] === true && state['section-advanced'] === true;
@@ -69,7 +68,7 @@ test('Expanded settings sections survive refresh and stay independent of scenari
 
   // Clear scenario autosave so a reload would otherwise fall back to defaults —
   // accordion chrome must not depend on it.
-  await page.evaluate(() => localStorage.removeItem('sor:autosave'));
+  await page.evaluate(() => localStorage.removeItem('fs:sor-plan:autosave'));
 
   await page.reload();
   await waitForInit(page);
@@ -81,7 +80,7 @@ test('Expanded settings sections survive refresh and stay independent of scenari
   // Collapsing also persists across refresh.
   await page.locator('#section-investment > summary').click();
   await page.waitForFunction(() => {
-    const raw = localStorage.getItem('sor:ui');
+    const raw = localStorage.getItem('fs:sor-plan:ui');
     return raw && JSON.parse(raw).accordions?.['section-investment'] === false;
   });
 

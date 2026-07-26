@@ -11,16 +11,13 @@
       (function () {
         var theme = null;
         try {
-          var raw = localStorage.getItem('sor:ui');
+          // App-wide prefs (theme, active tab). Clean break from legacy sor:* keys.
+          var raw = localStorage.getItem('fs:app:prefs');
           if (raw) {
             var parsed = JSON.parse(raw);
             if (parsed && (parsed.theme === 'light' || parsed.theme === 'dark')) {
               theme = parsed.theme;
             }
-          } else {
-            // Legacy key used before view prefs were consolidated into sor:ui.
-            var legacy = localStorage.getItem('sor:theme');
-            if (legacy === 'light' || legacy === 'dark') theme = legacy;
           }
         } catch (e) { /* defaults below */ }
         var dark =
@@ -41,6 +38,8 @@
 
             {{> header }}
 
+            <!-- Feature root: SOR Plan (inputs + results). Shared chrome stays outside. -->
+            <div id="feature-sor-plan" role="tabpanel" aria-labelledby="tab-sor-plan" class="space-y-8">
             <!-- Input Parameters Section -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
                 <!-- Left Column: Primary Inputs -->
@@ -77,6 +76,7 @@
             </div>
             {{> loading }}
             {{> advanced }}
+            </div>
         </div>
 
         <p class="text-center text-xs text-theme-faint">

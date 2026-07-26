@@ -1,0 +1,61 @@
+---
+description: Multi-feature shell conventions (registry, namespaces, sessions, jobs)
+alwaysApply: true
+---
+
+# Multi-Feature Architecture
+
+The Finance Simulator is one SPA hosting multiple **features** (not separate apps).
+Users switch features with a tab bar; there is no per-feature runtime isolation.
+Background jobs keep running across tab switches.
+
+## Naming
+
+- **App**: "Finance Simulator"; app-wide prefix is **`fs`**.
+- **Feature ids** (kebab-case): `sor-plan` → "SOR Plan"; `sor-lab` → "SOR Lab".
+- Folders: `src/features/<feature-id>/` for feature-owned logic, UI, and partials.
+- DOM: feature roots `id="feature-<feature-id>"`; new element ids prefixed
+  `<feature-id>-...`. Existing SOR Plan ids are renamed only opportunistically.
+
+## Shared vs feature code
+
+| Lives in | Examples |
+|---|---|
+| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`) | Scenario model, RNG, workers, chart theme, dialogs, header, feature registry, session/job abstractions |
+| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature-specific presets |
+
+Truly shared code stays shared. Feature-specific code must not reach into another
+feature's DOM or module state — consume scenarios only through `scenario.js` /
+session-store interfaces.
+
+## Storage namespaces
+
+- localStorage:
+  - `fs:app:<key>` — genuinely cross-feature prefs only (theme, active tab).
+  - `fs:<feature-id>:<key>` — feature state (autosave, report band, accordions,
+    chart view prefs). **When in doubt, use the feature namespace.**
+- IndexedDB: single `fs-sessions` database, `sessions` store, records keyed by
+  `[feature, name]` (Phase 2+).
+- Export envelope: `type: "fs-scenario"` plus a `feature` field; legacy
+  `sor-scenario` *file* import remains the only backward-compat path.
+- **Clean break**: ignore legacy `sor:*` localStorage keys and the old
+  `sor-sessions` IndexedDB database. Legacy share-link URL params are ignored
+  (open fresh, no decode, no error).
+
+## Feature registry
+
+Register features via `src/state/features.js` (`registerFeature`,
+`setActiveFeature`, `setFeatureBadge`, …). Tab bar under the title is rendered
+from the registry. Active tab persists in `fs:app:prefs`.
+
+## Sessions & jobs (Phase 2+)
+
+- Header session controls bind to the **active feature's** session store.
+- Share/export payloads are feature-aware and self-contained: feature id + state +
+  snapshot copies of cross-feature dependencies. On open/import, embed
+  dependencies as named sessions with collision auto-rename — never overwrite
+  the recipient's existing sessions.
+- Jobs run through a shared job manager; they survive tab switches; results
+  deliver to the owning feature; tabs show busy/progress badges.
+- **Do not render Chart.js into a hidden feature root** (`display:none` sizes to
+  zero). Defer render until `onActivate`, or call `chart.resize()` on activation.

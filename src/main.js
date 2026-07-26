@@ -63,6 +63,20 @@ import { initReport, onNewRun as onReportNewRun } from './ui/report.js';
 import { applyUiPrefs } from './ui/applyUiPrefs.js';
 import { readUiPrefsSnapshot } from './state/uiPrefs.js';
 import { openDialog, showAlert } from './ui/dialogs.js';
+import {
+  registerFeature,
+  mountFeatureTabs,
+  initFeatures,
+} from './state/features.js';
+
+registerFeature({
+  id: 'sor-plan',
+  title: 'SOR Plan',
+  rootId: 'feature-sor-plan',
+  init() {},
+  onActivate() {},
+  onDeactivate() {},
+});
 
 const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 
@@ -924,6 +938,10 @@ async function init() {
     if (import.meta.env.DEV) {
       window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     }
+
+    mountFeatureTabs(document.getElementById('feature-tabs'));
+    initFeatures({});
+
 function getDefaultCoreUsage() {
   const cores = navigator.hardwareConcurrency || 4;
   if (cores >= 8) return 'high';
