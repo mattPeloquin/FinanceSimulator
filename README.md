@@ -8,6 +8,7 @@ The entire simulator is a **single, self-contained HTML file**. Easy Mode and bu
 
 - **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
 - **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
+- **Upgrading from an older build:** Named sessions and old share links from earlier versions are not migrated. Use **Export** before upgrading, then **Import** the JSON file after — that is the supported way to carry scenarios forward.
 - **Run anywhere:** Double-click the `index.html` file and run in your browser.
 - **Designed for vibe coding:**  Follow instructions below if you want to change or extend.
 
@@ -123,7 +124,7 @@ flowchart TD
 | A chart's look or behavior              | `src/ui/charts/` (one file per chart)                                                                |
 | 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, `src/ui/charts/outcomeWindow.js`                                     |
 | The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                      |
-| Saving/loading sessions                 | `src/state/persistence.js`                                                                           |
+| Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js`                                                  |
 
 
 

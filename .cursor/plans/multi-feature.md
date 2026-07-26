@@ -252,3 +252,15 @@ later phases.)
   feature root. Verification: `npm test`, `npx playwright test`, `npm run build` green.
   Note for Phase 2: IndexedDB still `sor-sessions` / export type still `sor-scenario`
   until that phase.
+- 2026-07-26 — **Phase 2 shipped.** Shared infrastructure:
+  - Sessions: `src/state/sessions.js` → IndexedDB `fs-sessions`, keyPath `[feature, name]`;
+    legacy `sor-sessions` deleted on boot (no migrate). Header binds to active feature.
+  - Export/share: `type: "fs-scenario"` + `feature` + `state` + `dependencies[]`;
+    legacy `sor-scenario` *files* still import; legacy uncompressed share `?s=` silently
+    ignored (strip param, open fresh). Share payload gzip via `CompressionStream`.
+  - Jobs: `src/state/jobs.js` — per-feature start/progress/cancel; sim + goal-seek on it;
+    tab busy/progress badges; results deferred until SOR Plan `onActivate` (Chart.js).
+  - Permanent empty **SOR Lab** tab (`#feature-sor-lab`) for tab-switch e2e / Phase 4.
+  - README clean-break note (export before upgrade). Vitest: sessions, jobs, share;
+    e2e: tab-switch mid-run + nonzero chart size. Verification: `npm test`,
+    `npx playwright test`, `npm run build`.

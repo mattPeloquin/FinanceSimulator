@@ -35,3 +35,36 @@ test('High core-usage parallel workers complete a simulation in dev', async ({ p
   await expect(page.locator('#successRate')).toContainText('%');
   await expect(page.locator('#loadingIndicator')).toBeHidden();
 });
+
+test('SOR Plan run survives switching to Lab and charts have size on return', async ({ page }) => {
+  test.slow();
+  await page.goto('/');
+  await disableGoalSeek(page);
+
+  await page.fill('#startBalance', '2500');
+  await page.locator('#section-advanced').evaluate((el) => { el.open = true; });
+  await page.fill('#numSimulations', '800');
+
+  await page.click('#runButton');
+  // Leave mid-run so the job keeps going while Lab is active.
+  await page.click('#tab-sor-lab');
+  await expect(page.locator('#feature-sor-lab')).toBeVisible();
+  await expect(page.locator('#feature-sor-plan')).toBeHidden();
+  await expect(page.locator('#tab-sor-plan .feature-tab-badge')).toBeVisible({ timeout: 5_000 });
+
+  await page.click('#tab-sor-plan');
+  await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
+
+  await page.evaluate(() => {
+    const outcomes = document.getElementById('details-simulation-outcomes');
+    const timelines = document.getElementById('details-average-timelines');
+    if (outcomes) outcomes.open = true;
+    if (timelines) timelines.open = true;
+  });
+
+  const balanceBox = await page.locator('#balanceChart').boundingBox();
+  expect(balanceBox).toBeTruthy();
+  expect(balanceBox.width).toBeGreaterThan(10);
+  expect(balanceBox.height).toBeGreaterThan(10);
+});

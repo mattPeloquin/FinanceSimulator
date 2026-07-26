@@ -64,9 +64,13 @@ describe('feature registry', () => {
 
     mountFeatureTabs(document.getElementById('feature-tabs'));
 
+    const bar = document.getElementById('feature-tabs');
+    expect(bar.classList.contains('feature-tab-bar')).toBe(true);
     const tabs = document.querySelectorAll('#feature-tabs [role="tab"]');
     expect(tabs).toHaveLength(2);
     expect(tabs[0].textContent).toContain('SOR Plan');
+    expect(tabs[0].classList.contains('feature-tab')).toBe(true);
+    expect(tabs[0].dataset.featureId).toBe('sor-plan');
     expect(tabs[1].getAttribute('aria-selected')).toBe('true');
     expect(getActiveFeature().id).toBe('other');
     expect(document.getElementById('feature-sor-plan').classList.contains('hidden')).toBe(true);

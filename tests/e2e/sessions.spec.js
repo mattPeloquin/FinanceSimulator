@@ -30,6 +30,13 @@ test('Saving and restoring a named session', async ({ page }) => {
   const sessionSelect = page.locator('#sessionSelect');
   await expect(sessionSelect).toHaveValue('Playwright Test Session');
 
+  // Sessions live in fs-sessions (feature-keyed IndexedDB), not the legacy DB.
+  const dbName = await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    return (dbs || []).map((d) => d.name);
+  });
+  expect(dbName).toContain('fs-sessions');
+
   // 6. Reload the page completely
   await page.reload();
 

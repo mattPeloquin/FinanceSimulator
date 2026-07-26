@@ -22,17 +22,16 @@ import {
   saveUnsavedStash,
   loadUnsavedStash,
   clearUnsavedStash,
-  saveSession,
-  loadSession,
-  deleteSession,
-  listSessions,
   exportScenario,
   importScenarioFromFile,
+  importEnvelopeDependencies,
   buildShareUrl,
-  decodeScenarioFromShareParam,
+  decodeShareParam,
   peekShareParamFromUrl,
   stripShareParamFromUrl,
 } from './state/persistence.js';
+import * as sessions from './state/sessions.js';
+import * as jobs from './state/jobs.js';
 import {
   getSampleYears,
   computeProfiles,
@@ -67,27 +66,94 @@ import {
   registerFeature,
   mountFeatureTabs,
   initFeatures,
+  getActiveFeature,
+  setActiveFeature,
 } from './state/features.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from './state/storageKeys.js';
+
+/** Minimal Lab workbench until Phase 4 owns real Lab state. */
+const LAB_STUB_STATE = { version: 1 };
+
+/** @type {Map<string, { name: string, description: string, lastSelect: string }>} */
+const sessionUiByFeature = new Map();
+
+let currentSessionName = '';
+let currentSessionDescription = '';
+let suppressSessionSelect = false;
+let lastSessionSelectValue = '';
+
+/** Stashed SOR Plan results when a job finishes while another tab is active. */
+let pendingSorPlanResults = null;
+
+function activeFeatureId() {
+  return getActiveFeature()?.id || FEATURE_SOR_PLAN;
+}
+
+function snapshotSessionUi(featureId) {
+  sessionUiByFeature.set(featureId, {
+    name: currentSessionName,
+    description: currentSessionDescription,
+    lastSelect: lastSessionSelectValue,
+  });
+}
+
+async function restoreSessionUi(featureId) {
+  const saved = sessionUiByFeature.get(featureId) || {
+    name: '',
+    description: '',
+    lastSelect: '',
+  };
+  currentSessionName = saved.name;
+  currentSessionDescription = saved.description;
+  lastSessionSelectValue = saved.lastSelect;
+  await refreshSessionList(currentSessionName);
+  updateSessionNoteDisplay();
+  updateSessionActionButtons();
+}
+
+function readActiveFeatureState() {
+  return activeFeatureId() === FEATURE_SOR_LAB ? { ...LAB_STUB_STATE } : readScenarioFromDom();
+}
+
+function flushPendingSorPlanResults() {
+  if (!pendingSorPlanResults) return;
+  const payload = pendingSorPlanResults;
+  pendingSorPlanResults = null;
+  setLoading(false);
+  paintSorPlanResults(payload);
+}
 
 registerFeature({
-  id: 'sor-plan',
+  id: FEATURE_SOR_PLAN,
   title: 'SOR Plan',
   rootId: 'feature-sor-plan',
   init() {},
-  onActivate() {},
-  onDeactivate() {},
+  onActivate() {
+    flushPendingSorPlanResults();
+    void restoreSessionUi(FEATURE_SOR_PLAN);
+  },
+  onDeactivate() {
+    snapshotSessionUi(FEATURE_SOR_PLAN);
+  },
+});
+
+registerFeature({
+  id: FEATURE_SOR_LAB,
+  title: 'SOR Lab',
+  rootId: 'feature-sor-lab',
+  init() {},
+  onActivate() {
+    void restoreSessionUi(FEATURE_SOR_LAB);
+  },
+  onDeactivate() {
+    snapshotSessionUi(FEATURE_SOR_LAB);
+  },
 });
 
 const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
 
 let historicalSamples = { years: [] };
-let currentWorker = null;
-let currentSubWorkers = [];
 let currentNumCores = 1;
-let currentSessionName = '';
-let currentSessionDescription = '';
-let suppressSessionSelect = false;
-let lastSessionSelectValue = '';
 
 // True once the user hand-edits any log-normal profile field. While set, changing
 // the year range no longer silently overwrites their numbers (see applyHistoryProfiles).
@@ -202,18 +268,11 @@ function resolveRunNumCores(scenario) {
   return resolveNumCores(scenario.parallelCores, navigator.hardwareConcurrency);
 }
 
-function terminateWorkers() {
-  if (currentWorker) currentWorker.terminate();
-  currentWorker = null;
-  for (const w of currentSubWorkers) w.terminate();
-  currentSubWorkers = [];
-}
-
 // Drop in-flight workers before Vite replaces this module so ports/threads
 // from a previous HMR generation cannot outlive the page logic that owns them.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    terminateWorkers();
+    jobs.cancelAll(FEATURE_SOR_PLAN);
   });
 }
 
@@ -222,17 +281,51 @@ if (import.meta.hot) {
 // sub-workers, e.g. when the app is opened directly from disk (file://).
 // Each sub-worker gets one end of a MessageChannel; the other ends are
 // transferred to the master worker, which farms chunks out over them.
-function spawnSubWorkerPorts(numCores) {
+function spawnSubWorkerPorts(numCores, bucket) {
   const masterPorts = [];
   if (numCores <= 1) return masterPorts;
   for (let i = 0; i < numCores; i++) {
     const subWorker = new SimulationWorker();
     const channel = new MessageChannel();
     subWorker.postMessage({ type: 'connect', port: channel.port1 }, [channel.port1]);
-    currentSubWorkers.push(subWorker);
+    bucket.push(subWorker);
     masterPorts.push(channel.port2);
   }
   return masterPorts;
+}
+
+function paintSorPlanResults(payload) {
+  document.getElementById('resultsSection').classList.remove('hidden');
+
+  let reportScenario = payload.reportScenario;
+  if (payload.kind === 'goalSeek') {
+    applyGoalSeekSummaryToDom(payload.goalSeekSummary, payload.scenario.withdrawalStrategy);
+    scheduleAutosave();
+    reportScenario = readScenarioFromDom();
+  }
+
+  onReportNewRun({
+    result: payload.result,
+    params: payload.params,
+    scenario: reportScenario,
+    fourPercentComparison: payload.fourPercentComparison,
+    goalSeekWarning: payload.goalSeekWarning ?? null,
+  });
+  renderResults(payload.result, payload.params, {
+    goalSeekWarning: payload.goalSeekWarning,
+    fourPercentComparison: payload.fourPercentComparison,
+    classicResult: payload.classicResult,
+  });
+}
+
+/** Deliver results now, or stash until SOR Plan is visible (Chart.js sizing). */
+function deliverSorPlanResults(payload) {
+  if (getActiveFeature()?.id === FEATURE_SOR_PLAN) {
+    pendingSorPlanResults = null;
+    paintSorPlanResults(payload);
+  } else {
+    pendingSorPlanResults = payload;
+  }
 }
 
 function runSimulation() {
@@ -248,43 +341,40 @@ function runSimulation() {
   const params = buildSimParams(scenario, historicalSamples);
   currentNumCores = resolveRunNumCores(scenario);
 
+  pendingSorPlanResults = null;
   setLoading(true);
 
-  terminateWorkers();
-  currentWorker = new SimulationWorker();
-  currentWorker.onmessage = (e) => {
-    const msg = e.data;
-    if (msg.type === 'progress') {
-      updateProgress(msg.fraction, msg.stage);
-    } else if (msg.type === 'done') {
+  const subWorkers = [];
+  const job = jobs.start(FEATURE_SOR_PLAN, {
+    createWorker: () => new SimulationWorker(),
+    onCleanup: () => {
+      for (const w of subWorkers) w.terminate();
+      subWorkers.length = 0;
+    },
+    onProgress(fraction, stage) {
+      updateProgress(fraction, stage);
+    },
+    onDone(msg) {
       setLoading(false);
-      document.getElementById('resultsSection').classList.remove('hidden');
       const fourPercentComparison = msg.fourPercentComparison ?? null;
-      onReportNewRun({
+      deliverSorPlanResults({
+        kind: 'sim',
         result: msg.result,
         params,
-        scenario,
-        fourPercentComparison,
-        goalSeekWarning: null,
-      });
-      renderResults(msg.result, params, {
+        reportScenario: scenario,
         fourPercentComparison,
         classicResult: msg.classicResult,
+        goalSeekWarning: null,
       });
-      terminateWorkers();
-    } else if (msg.type === 'error') {
+    },
+    onError(err) {
       setLoading(false);
-      showAlert(`Simulation error: ${msg.message}`);
-      terminateWorkers();
-    }
-  };
-  currentWorker.onerror = (err) => {
-    setLoading(false);
-    showAlert(`Worker error: ${err.message}`);
-    terminateWorkers();
-  };
-  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores);
-  currentWorker.postMessage(
+      showAlert(`Simulation error: ${err.message}`);
+    },
+  });
+
+  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores, subWorkers);
+  job.post(
     { type: 'run', params, numCores: currentNumCores, subWorkerPorts },
     subWorkerPorts,
   );
@@ -351,53 +441,46 @@ function runGoalSeekSearch() {
   const goalSeekConfig = buildGoalSeekConfig(scenario);
   currentNumCores = resolveRunNumCores(scenario);
 
+  pendingSorPlanResults = null;
   setLoading(true);
 
-  terminateWorkers();
-  currentWorker = new SimulationWorker();
-  currentWorker.onmessage = (e) => {
-    const msg = e.data;
-    if (msg.type === 'progress') {
-      updateProgress(msg.fraction, msg.stage);
-    } else if (msg.type === 'done') {
+  const subWorkers = [];
+  const job = jobs.start(FEATURE_SOR_PLAN, {
+    createWorker: () => new SimulationWorker(),
+    onCleanup: () => {
+      for (const w of subWorkers) w.terminate();
+      subWorkers.length = 0;
+    },
+    onProgress(fraction, stage) {
+      updateProgress(fraction, stage);
+    },
+    onDone(msg) {
       setLoading(false);
-      terminateWorkers();
-
-      applyGoalSeekSummaryToDom(msg.goalSeekSummary, scenario.withdrawalStrategy);
-      scheduleAutosave();
-      document.getElementById('resultsSection').classList.remove('hidden');
       const goalSeekWarning = msg.goalSeekSummary.feasible
         ? null
         : msg.goalSeekSummary.reason || 'Find Best Plan could not find a plan meeting your target.';
       const finalParams = msg.finalParams ?? params;
       const fourPercentComparison = msg.fourPercentComparison ?? null;
-      // Post-seek DOM reflects tuned levers — capture that for the report.
-      const postSeekScenario = readScenarioFromDom();
-      onReportNewRun({
+      deliverSorPlanResults({
+        kind: 'goalSeek',
+        goalSeekSummary: msg.goalSeekSummary,
+        scenario,
         result: msg.result,
         params: finalParams,
-        scenario: postSeekScenario,
-        fourPercentComparison,
-        goalSeekWarning,
-      });
-      renderResults(msg.result, finalParams, {
-        goalSeekWarning,
+        reportScenario: scenario,
         fourPercentComparison,
         classicResult: msg.classicResult,
+        goalSeekWarning,
       });
-    } else if (msg.type === 'error') {
+    },
+    onError(err) {
       setLoading(false);
-      showAlert(`Find Best Plan error: ${msg.message}`);
-      terminateWorkers();
-    }
-  };
-  currentWorker.onerror = (err) => {
-    setLoading(false);
-    showAlert(`Worker error: ${err.message}`);
-    terminateWorkers();
-  };
-  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores);
-  currentWorker.postMessage(
+      showAlert(`Find Best Plan error: ${err.message}`);
+    },
+  });
+
+  const subWorkerPorts = spawnSubWorkerPorts(currentNumCores, subWorkers);
+  job.post(
     { type: 'goalSeek', params, goalSeekConfig, numCores: currentNumCores, subWorkerPorts },
     subWorkerPorts,
   );
@@ -415,7 +498,8 @@ function handleRunClick() {
 
 // Stop an in-flight simulation and return the UI to its idle state.
 function cancelSimulation() {
-  terminateWorkers();
+  jobs.cancelAll(FEATURE_SOR_PLAN);
+  pendingSorPlanResults = null;
   setLoading(false);
 }
 
@@ -502,14 +586,14 @@ function updateSessionActionButtons() {
 
 async function refreshSessionList(selectName = currentSessionName) {
   const select = document.getElementById('sessionSelect');
-  let sessions = [];
+  let listed = [];
   try {
-    sessions = await listSessions();
+    listed = await sessions.list(activeFeatureId());
   } catch {
     /* IndexedDB unavailable — leave the list empty */
   }
   const options = ['<option value="">Unsaved session</option>'];
-  for (const s of sessions) {
+  for (const s of listed) {
     options.push(`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`);
   }
   const wasSuppressed = suppressSessionSelect;
@@ -530,37 +614,41 @@ function escapeHtml(str) {
 }
 
 async function persistSession(name, description, { includeUi = false } = {}) {
+  const feature = activeFeatureId();
   const previousName = currentSessionName;
-  if (!previousName) {
+  if (!previousName && feature === FEATURE_SOR_PLAN) {
     stashUnsavedScenario();
   }
   const opts = includeUi ? { ui: readUiPrefsSnapshot() } : {};
-  await saveSession(name, readScenarioFromDom(), description, opts);
+  await sessions.save(feature, name, readActiveFeatureState(), description, opts);
   if (previousName && previousName !== name) {
-    await deleteSession(previousName);
+    await sessions.deleteSession(feature, previousName);
   }
   currentSessionName = name;
   currentSessionDescription = description;
   await refreshSessionList(name);
   updateSessionNoteDisplay();
   lastSessionSelectValue = name;
-  flushAutosave();
+  if (feature === FEATURE_SOR_PLAN) flushAutosave();
+  snapshotSessionUi(feature);
 }
 
 async function persistCopySession(name, description, { includeUi = false } = {}) {
-  const existing = await loadSession(name);
+  const feature = activeFeatureId();
+  const existing = await sessions.load(feature, name);
   if (existing) {
     showAlert(`A session named "${name}" already exists. Choose a different name.`);
     return;
   }
   const opts = includeUi ? { ui: readUiPrefsSnapshot() } : {};
-  await saveSession(name, readScenarioFromDom(), description, opts);
+  await sessions.save(feature, name, readActiveFeatureState(), description, opts);
   currentSessionName = name;
   currentSessionDescription = description;
   await refreshSessionList(name);
   updateSessionNoteDisplay();
   lastSessionSelectValue = name;
-  flushAutosave();
+  if (feature === FEATURE_SOR_PLAN) flushAutosave();
+  snapshotSessionUi(feature);
 }
 
 /** Ask whether to apply attached view settings. Resolves true = Apply. */
@@ -681,16 +769,19 @@ function handleSaveSession() {
 
 async function handleResetSession() {
   if (!currentSessionName) return;
+  const feature = activeFeatureId();
   try {
-    const loaded = await loadSession(currentSessionName);
+    const loaded = await sessions.load(feature, currentSessionName);
     if (!loaded) {
       showAlert(`Could not find saved session "${currentSessionName}".`);
       return;
     }
     currentSessionDescription = loaded.description || '';
-    applyScenario(loaded.scenario);
+    if (feature === FEATURE_SOR_PLAN) {
+      applyScenario(loaded.payload);
+      flushAutosave();
+    }
     updateSessionNoteDisplay();
-    flushAutosave();
     await maybeApplyAttachedUi(loaded.ui);
   } catch (err) {
     showAlert(`Could not reset session: ${err.message}`);
@@ -703,20 +794,37 @@ function handleCopySession() {
 }
 
 async function handleNewSession() {
+  const feature = activeFeatureId();
   if (currentSessionName) {
     try {
-      await saveSession(currentSessionName, readScenarioFromDom(), currentSessionDescription);
+      await sessions.save(
+        feature,
+        currentSessionName,
+        readActiveFeatureState(),
+        currentSessionDescription,
+      );
     } catch (err) {
       showAlert(`Could not save session before starting new: ${err.message}`);
       return;
     }
   }
-  await resetUnsavedToDefaults();
+  if (feature === FEATURE_SOR_PLAN) {
+    await resetUnsavedToDefaults();
+  } else {
+    currentSessionName = '';
+    currentSessionDescription = '';
+    await refreshSessionList('');
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
+    lastSessionSelectValue = '';
+    snapshotSessionUi(feature);
+  }
 }
 
 function handleDeleteSession() {
   const name = currentSessionName || document.getElementById('sessionSelect').value;
   if (!name) return;
+  const feature = activeFeatureId();
 
   const dialog = document.getElementById('confirmDeleteDialog');
   document.getElementById('deleteSessionText').textContent = `Are you sure you want to delete session "${name}"?`;
@@ -724,15 +832,16 @@ function handleDeleteSession() {
   const onDelete = async () => {
     dialog.close();
     try {
-      await deleteSession(name);
+      await sessions.deleteSession(feature, name);
       if (currentSessionName === name) {
         currentSessionName = '';
         currentSessionDescription = '';
         updateSessionNoteDisplay();
-        flushAutosave();
+        if (feature === FEATURE_SOR_PLAN) flushAutosave();
       }
       await refreshSessionList('');
       lastSessionSelectValue = '';
+      snapshotSessionUi(feature);
     } catch (err) {
       showAlert(`Could not delete session: ${err.message}`);
     }
@@ -747,23 +856,37 @@ function handleDeleteSession() {
 async function handleSelectSession(e) {
   if (suppressSessionSelect) return;
   const name = e.target.value;
+  const feature = activeFeatureId();
   if (!name) {
-    await restoreUnsavedScenario();
+    if (feature === FEATURE_SOR_PLAN) {
+      await restoreUnsavedScenario();
+    } else {
+      currentSessionName = '';
+      currentSessionDescription = '';
+      await refreshSessionList('');
+      updateSessionNoteDisplay();
+      updateSessionActionButtons();
+      lastSessionSelectValue = '';
+      snapshotSessionUi(feature);
+    }
     return;
   }
-  if (lastSessionSelectValue === '') {
+  if (lastSessionSelectValue === '' && feature === FEATURE_SOR_PLAN) {
     stashUnsavedScenario();
   }
   try {
-    const loaded = await loadSession(name);
+    const loaded = await sessions.load(feature, name);
     if (!loaded) return;
     currentSessionName = name;
     currentSessionDescription = loaded.description || '';
-    applyScenario(loaded.scenario);
+    if (feature === FEATURE_SOR_PLAN) {
+      applyScenario(loaded.payload);
+      flushAutosave();
+    }
     updateSessionNoteDisplay();
     updateSessionActionButtons();
     lastSessionSelectValue = name;
-    flushAutosave();
+    snapshotSessionUi(feature);
     await maybeApplyAttachedUi(loaded.ui);
   } catch (err) {
     showAlert(`Could not load session: ${err.message}`);
@@ -777,10 +900,13 @@ async function handleExportSession() {
   );
   if (!confirmed) return;
   exportScenario(
-    readScenarioFromDom(),
+    readActiveFeatureState(),
     currentSessionName || 'scenario',
     currentSessionDescription,
-    includeUi ? { ui: readUiPrefsSnapshot() } : {},
+    {
+      feature: activeFeatureId(),
+      ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
+    },
   );
 }
 
@@ -791,7 +917,8 @@ async function handleLinkCopy() {
   );
   if (!confirmed) return;
   const btn = document.getElementById('linkCopyButton');
-  const url = buildShareUrl(readScenarioFromDom(), {
+  const url = await buildShareUrl(readActiveFeatureState(), {
+    feature: activeFeatureId(),
     name: currentSessionName || '',
     description: currentSessionDescription || '',
     ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
@@ -810,12 +937,13 @@ async function handleLinkCopy() {
   }
 }
 
-/** Apply an imported/shared scenario as an unsaved workbench, then auto-run. */
-async function applyImportedScenario({ scenario, name = '', description = '', ui } = {}, { statusMessage } = {}) {
+/** Apply an imported/shared SOR Plan scenario as an unsaved workbench, then auto-run. */
+async function applyImportedScenario({ scenario, state, name = '', description = '', ui } = {}, { statusMessage } = {}) {
+  const planState = scenario || state;
   currentSessionName = '';
   currentSessionDescription = description || '';
-  applyScenario(scenario);
-  saveUnsavedStash(scenario);
+  applyScenario(planState);
+  saveUnsavedStash(planState);
   updateSessionNoteDisplay();
   updateSessionActionButtons();
   const msg =
@@ -825,8 +953,31 @@ async function applyImportedScenario({ scenario, name = '', description = '', ui
   await refreshSessionList('');
   lastSessionSelectValue = '';
   flushAutosave();
+  snapshotSessionUi(FEATURE_SOR_PLAN);
   await maybeApplyAttachedUi(ui);
   handleRunClick();
+}
+
+/** Open a feature-aware envelope: import deps, switch feature, apply state. */
+async function applyImportedEnvelope(loaded, { statusMessage } = {}) {
+  await importEnvelopeDependencies(loaded.dependencies || []);
+  if (loaded.feature && loaded.feature !== activeFeatureId()) {
+    snapshotSessionUi(activeFeatureId());
+    setActiveFeature(loaded.feature);
+    await restoreSessionUi(loaded.feature);
+  }
+  if (loaded.feature === FEATURE_SOR_LAB) {
+    currentSessionName = '';
+    currentSessionDescription = loaded.description || '';
+    updateSessionNoteDisplay();
+    updateSessionActionButtons();
+    await refreshSessionList('');
+    lastSessionSelectValue = '';
+    snapshotSessionUi(FEATURE_SOR_LAB);
+    await maybeApplyAttachedUi(loaded.ui);
+    return;
+  }
+  await applyImportedScenario(loaded, { statusMessage });
 }
 
 function stripShareParamFromHistory() {
@@ -839,7 +990,7 @@ async function handleImportFile(e) {
   if (!file) return;
   try {
     const loaded = await importScenarioFromFile(file);
-    await applyImportedScenario(loaded);
+    await applyImportedEnvelope(loaded);
   } catch (err) {
     showAlert(`Could not import file: ${err.message}`);
   } finally {
@@ -849,23 +1000,28 @@ async function handleImportFile(e) {
 
 /**
  * If the URL carries a share param, load it (confirm when a named session is open).
+ * Legacy (pre-fs) share links are stripped silently — clean break, no alert.
  * Strips the param and auto-runs only after a successful load.
  */
 async function maybeLoadSharedScenarioFromUrl() {
   const param = peekShareParamFromUrl();
   if (!param) return;
 
-  let loaded;
-  try {
-    loaded = decodeScenarioFromShareParam(param);
-  } catch (err) {
-    showAlert(err.message || 'Not a valid simulator scenario link.');
+  const decoded = await decodeShareParam(param);
+  if (decoded.status === 'legacy') {
+    stripShareParamFromHistory();
+    return;
+  }
+  if (decoded.status === 'invalid') {
+    showAlert(decoded.error?.message || 'Not a valid simulator scenario link.');
     return;
   }
 
+  const loaded = decoded.data;
+
   const applyShared = async () => {
     stripShareParamFromHistory();
-    await applyImportedScenario(loaded, {
+    await applyImportedEnvelope(loaded, {
       statusMessage: loaded.name ? `Loaded shared "${loaded.name}".` : 'Loaded shared scenario.',
     });
   };
@@ -939,8 +1095,7 @@ async function init() {
       window.__TEST_HOOKS__ = window.__TEST_HOOKS__ || {};
     }
 
-    mountFeatureTabs(document.getElementById('feature-tabs'));
-    initFeatures({});
+    sessions.discardLegacySessionsDb();
 
 function getDefaultCoreUsage() {
   const cores = navigator.hardwareConcurrency || 4;
@@ -955,8 +1110,27 @@ function getDefaultCoreUsage() {
 // on a non-empty load is detached in applyScenario.
 const autosaved = loadAutosave() || {};
 const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ...(autosaved.scenario || {}) };
+    sessionUiByFeature.set(FEATURE_SOR_PLAN, {
+      name: autosaved.name || '',
+      description: autosaved.description || '',
+      lastSelect: autosaved.name || '',
+    });
+    sessionUiByFeature.set(FEATURE_SOR_LAB, {
+      name: '',
+      description: '',
+      lastSelect: '',
+    });
+    // Seed chrome before tabs mount so onActivate restoreSessionUi sees autosave.
     currentSessionName = autosaved.name || '';
     currentSessionDescription = autosaved.description || '';
+    lastSessionSelectValue = autosaved.name || '';
+
+    mountFeatureTabs(document.getElementById('feature-tabs'));
+    initFeatures({});
+    // If Lab was the persisted tab, session chrome should not keep Plan's name.
+    if (activeFeatureId() !== FEATURE_SOR_PLAN) {
+      await restoreSessionUi(activeFeatureId());
+    }
     
     writeScenarioToDom(initial);
     toggleDistMethod(initial.distMethod);

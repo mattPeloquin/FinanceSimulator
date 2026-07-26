@@ -165,6 +165,7 @@ export function mountFeatureTabs(container) {
   tabsContainer.replaceChildren();
   tabsContainer.setAttribute('role', 'tablist');
   tabsContainer.setAttribute('aria-label', 'Features');
+  tabsContainer.classList.add('feature-tab-bar');
 
   for (const feature of registry.values()) {
     const btn = document.createElement('button');
@@ -173,9 +174,7 @@ export function mountFeatureTabs(container) {
     btn.dataset.featureId = feature.id;
     btn.setAttribute('role', 'tab');
     btn.setAttribute('aria-controls', feature.rootId);
-    btn.className =
-      'feature-tab relative inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium ' +
-      'border-b-2 border-transparent text-theme-faint hover:text-theme-muted transition-colors';
+    btn.className = 'feature-tab';
 
     const label = document.createElement('span');
     label.className = 'feature-tab-label';
@@ -183,9 +182,7 @@ export function mountFeatureTabs(container) {
     btn.appendChild(label);
 
     const badge = document.createElement('span');
-    badge.className =
-      'feature-tab-badge hidden min-w-[1.25rem] text-center text-[10px] font-semibold ' +
-      'rounded px-1 py-0.5 bg-theme-accent-subtle text-theme-accent-text';
+    badge.className = 'feature-tab-badge hidden';
     badge.setAttribute('aria-hidden', 'true');
     btn.appendChild(badge);
 
@@ -223,10 +220,6 @@ function syncTabSelection() {
     const selected = id === activeFeatureId;
     btn.setAttribute('aria-selected', selected ? 'true' : 'false');
     btn.tabIndex = selected ? 0 : -1;
-    btn.classList.toggle('border-theme-accent', selected);
-    btn.classList.toggle('text-theme-heading', selected);
-    btn.classList.toggle('border-transparent', !selected);
-    btn.classList.toggle('text-theme-faint', !selected);
   }
 }
 

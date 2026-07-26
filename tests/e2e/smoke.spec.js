@@ -19,10 +19,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   // Expect the initial state
   await expect(page.locator('h1')).toHaveText('Finance Simulator');
-  await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(1);
+  await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(2);
   await expect(page.locator('#tab-sor-plan')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#tab-sor-plan')).toContainText('SOR Plan');
+  await expect(page.locator('#tab-sor-lab')).toContainText('SOR Lab');
   await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await expect(page.locator('#feature-sor-lab')).toBeHidden();
   await expect(page.locator('#githubLink')).toBeVisible();
   await expect(page.locator('#githubLink')).toHaveAttribute(
     'href',

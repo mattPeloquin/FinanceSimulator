@@ -189,6 +189,105 @@
       print-color-adjust: exact;
     }
   }
+
+  /* Feature selector: full-width equal cells, per-feature tint.
+     Active cell is saturated; inactive is a soft wash of the same hue. */
+  .feature-tab-bar {
+    display: grid;
+    width: 100%;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(var(--theme-border-default));
+    background-color: rgb(var(--theme-border-default));
+    gap: 1px;
+  }
+
+  .feature-tab {
+    @apply relative inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold;
+    @apply transition-colors duration-150 focus:outline-none focus-visible:z-10;
+    @apply focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-accent/50;
+  }
+
+  .feature-tab-label {
+    @apply tracking-wide;
+  }
+
+  .feature-tab-badge {
+    @apply min-w-[1.5rem] text-center text-[10px] font-bold leading-none rounded px-1.5 py-0.5;
+    background-color: rgb(255 255 255 / 0.22);
+    color: inherit;
+  }
+
+  .feature-tab[aria-selected='false'] .feature-tab-badge {
+    background-color: rgb(0 0 0 / 0.08);
+  }
+
+  .dark .feature-tab[aria-selected='false'] .feature-tab-badge {
+    background-color: rgb(255 255 255 / 0.12);
+  }
+
+  /* SOR Plan — teal */
+  .feature-tab[data-feature-id='sor-plan'] {
+    background-color: rgb(13 148 136 / 0.14);
+    color: rgb(15 118 110);
+  }
+  .feature-tab[data-feature-id='sor-plan']:hover {
+    background-color: rgb(13 148 136 / 0.24);
+  }
+  .feature-tab[data-feature-id='sor-plan'][aria-selected='true'] {
+    background-color: rgb(13 148 136);
+    color: rgb(255 255 255);
+  }
+  .dark .feature-tab[data-feature-id='sor-plan'] {
+    background-color: rgb(45 212 191 / 0.12);
+    color: rgb(94 234 212);
+  }
+  .dark .feature-tab[data-feature-id='sor-plan']:hover {
+    background-color: rgb(45 212 191 / 0.2);
+  }
+  .dark .feature-tab[data-feature-id='sor-plan'][aria-selected='true'] {
+    background-color: rgb(20 184 166);
+    color: rgb(15 23 42);
+  }
+
+  /* SOR Lab — amber */
+  .feature-tab[data-feature-id='sor-lab'] {
+    background-color: rgb(217 119 6 / 0.14);
+    color: rgb(180 83 9);
+  }
+  .feature-tab[data-feature-id='sor-lab']:hover {
+    background-color: rgb(217 119 6 / 0.24);
+  }
+  .feature-tab[data-feature-id='sor-lab'][aria-selected='true'] {
+    background-color: rgb(217 119 6);
+    color: rgb(255 255 255);
+  }
+  .dark .feature-tab[data-feature-id='sor-lab'] {
+    background-color: rgb(251 191 36 / 0.12);
+    color: rgb(252 211 77);
+  }
+  .dark .feature-tab[data-feature-id='sor-lab']:hover {
+    background-color: rgb(251 191 36 / 0.2);
+  }
+  .dark .feature-tab[data-feature-id='sor-lab'][aria-selected='true'] {
+    background-color: rgb(245 158 11);
+    color: rgb(15 23 42);
+  }
+
+  /* Fallback for future features — slate */
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab']) {
+    background-color: rgb(var(--theme-bg-muted));
+    color: rgb(var(--theme-text-muted));
+  }
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab']):hover {
+    background-color: rgb(var(--theme-bg-subtle));
+  }
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
+    background-color: rgb(var(--theme-bg-control));
+    color: rgb(var(--theme-on-accent));
+  }
 }
 
 /* Plan Snapshot: print only the report page (browser Save as PDF). */

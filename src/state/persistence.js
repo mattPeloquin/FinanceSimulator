@@ -1,7 +1,5 @@
-// Session persistence:
-//   - autosave of the working scenario to localStorage (instant restore on reload)
-//   - named sessions in IndexedDB
-//   - JSON export / import for sharing
+// Autosave (localStorage) + feature-aware export / import / share links.
+// Named sessions live in `sessions.js` (`fs-sessions` IndexedDB).
 
 import { SCHEMA_VERSION, migrateScenario } from './scenario.js';
 import {
@@ -10,14 +8,19 @@ import {
   setAccordionOpen,
   optionalUiFromEnvelope,
 } from './uiPrefs.js';
-import { SOR_PLAN_AUTOSAVE_KEY, SOR_PLAN_UNSAVED_STASH_KEY } from './storageKeys.js';
+import {
+  SOR_PLAN_AUTOSAVE_KEY,
+  SOR_PLAN_UNSAVED_STASH_KEY,
+  FEATURE_SOR_PLAN,
+} from './storageKeys.js';
+import * as sessions from './sessions.js';
 
 export { loadAccordionState, saveAccordionState, setAccordionOpen };
 
 const AUTOSAVE_KEY = SOR_PLAN_AUTOSAVE_KEY;
-const DB_NAME = 'sor-sessions';
-const STORE = 'sessions';
-const EXPORT_TYPE = 'sor-scenario';
+const EXPORT_TYPE = 'fs-scenario';
+const LEGACY_EXPORT_TYPE = 'sor-scenario';
+const SHARE_PARAM = 's';
 
 // ---- Autosave (localStorage) ------------------------------------------------
 
@@ -90,108 +93,81 @@ export function clearUnsavedStash() {
   }
 }
 
-// Accordion open/closed lives in fs:sor-plan:ui (see uiPrefs.js). Re-exported above.
-
-// ---- Named sessions (IndexedDB) ---------------------------------------------
-
-function openDb() {
-  return new Promise((resolve, reject) => {
-    if (!('indexedDB' in self)) {
-      reject(new Error('IndexedDB is not available in this browser.'));
-      return;
-    }
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'name' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function tx(db, mode) {
-  return db.transaction(STORE, mode).objectStore(STORE);
-}
-
-function requestToPromise(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function saveSession(name, scenario, description = '', { ui } = {}) {
-  const db = await openDb();
-  try {
-    const record = {
-      name,
-      scenario,
-      description: description || '',
-      schemaVersion: SCHEMA_VERSION,
-      savedAt: Date.now(),
-    };
-    const attached = optionalUiFromEnvelope(ui);
-    if (attached) record.ui = attached;
-    await requestToPromise(tx(db, 'readwrite').put(record));
-  } finally {
-    db.close();
-  }
-}
-
-export async function loadSession(name) {
-  const db = await openDb();
-  try {
-    const record = await requestToPromise(tx(db, 'readonly').get(name));
-    if (!record) return null;
-    const out = {
-      scenario: migrateScenario(record.scenario, record.schemaVersion),
-      description: record.description || '',
-    };
-    const ui = optionalUiFromEnvelope(record.ui);
-    if (ui) out.ui = ui;
-    return out;
-  } finally {
-    db.close();
-  }
-}
-
-export async function deleteSession(name) {
-  const db = await openDb();
-  try {
-    await requestToPromise(tx(db, 'readwrite').delete(name));
-  } finally {
-    db.close();
-  }
-}
-
-export async function listSessions() {
-  const db = await openDb();
-  try {
-    const records = await requestToPromise(tx(db, 'readonly').getAll());
-    return records
-      .map((r) => ({ name: r.name, savedAt: r.savedAt }))
-      .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  } finally {
-    db.close();
-  }
-}
-
 // ---- Export / Import (JSON file) + share-link encoding -----------------------
 
-const SHARE_PARAM = 's';
-
-/** Validate a parsed export/share envelope and migrate its scenario. */
+/**
+ * Normalize a parsed export/share envelope.
+ * Accepts `fs-scenario` and legacy `sor-scenario` files.
+ * @returns {{
+ *   feature: string,
+ *   state: object,
+ *   scenario: object,
+ *   name: string,
+ *   description: string,
+ *   dependencies: Array<{ feature: string, name: string, state: object, description?: string }>,
+ *   ui?: object,
+ * }}
+ */
 export function parseScenarioPayload(parsed) {
-  if (!parsed || parsed.type !== EXPORT_TYPE || !parsed.scenario) {
+  if (!parsed || typeof parsed !== 'object') {
     throw new Error('Not a valid simulator scenario file.');
   }
+
+  if (parsed.type === LEGACY_EXPORT_TYPE) {
+    if (!parsed.scenario) {
+      throw new Error('Not a valid simulator scenario file.');
+    }
+    const scenario = migrateScenario(parsed.scenario, parsed.schemaVersion);
+    const out = {
+      feature: FEATURE_SOR_PLAN,
+      state: scenario,
+      scenario,
+      name: parsed.name || '',
+      description: parsed.description || '',
+      dependencies: [],
+    };
+    const ui = optionalUiFromEnvelope(parsed.ui);
+    if (ui) out.ui = ui;
+    return out;
+  }
+
+  if (parsed.type !== EXPORT_TYPE) {
+    throw new Error('Not a valid simulator scenario file.');
+  }
+
+  const feature = parsed.feature || FEATURE_SOR_PLAN;
+  const rawState = parsed.state != null ? parsed.state : parsed.scenario;
+  if (rawState == null) {
+    throw new Error('Not a valid simulator scenario file.');
+  }
+
+  const state =
+    feature === FEATURE_SOR_PLAN
+      ? migrateScenario(rawState, parsed.schemaVersion)
+      : rawState;
+
+  const dependencies = Array.isArray(parsed.dependencies)
+    ? parsed.dependencies
+        .filter((d) => d && typeof d === 'object' && d.feature && d.name != null && d.state != null)
+        .map((d) => ({
+          feature: d.feature,
+          name: String(d.name),
+          state:
+            d.feature === FEATURE_SOR_PLAN
+              ? migrateScenario(d.state, d.schemaVersion ?? parsed.schemaVersion)
+              : d.state,
+          description: d.description || '',
+        }))
+    : [];
+
   const out = {
-    scenario: migrateScenario(parsed.scenario, parsed.schemaVersion),
+    feature,
+    state,
+    // Alias for SOR Plan callers / older tests.
+    scenario: feature === FEATURE_SOR_PLAN ? state : state,
     name: parsed.name || '',
     description: parsed.description || '',
+    dependencies,
   };
   const ui = optionalUiFromEnvelope(parsed.ui);
   if (ui) out.ui = ui;
@@ -221,45 +197,134 @@ function utf8Decode(bytes) {
   return new TextDecoder().decode(bytes);
 }
 
-/**
- * Compact JSON envelope → base64url (no padding) for the `s` query param.
- * Omits exportedAt; includes name/description only when non-empty.
- * Optional `ui` attaches a view-settings snapshot when provided.
- */
-export function encodeScenarioToShareParam(scenario, { name = '', description = '', ui } = {}) {
-  const payload = {
-    type: EXPORT_TYPE,
-    schemaVersion: SCHEMA_VERSION,
-    scenario,
-  };
-  if (name) payload.name = name;
-  if (description) payload.description = description;
-  const attached = optionalUiFromEnvelope(ui);
-  if (attached) payload.ui = attached;
-  return bytesToBase64Url(utf8Encode(JSON.stringify(payload)));
+async function gzipBytes(bytes) {
+  if (typeof CompressionStream === 'undefined') {
+    throw new Error('CompressionStream is not available in this browser.');
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
 }
 
-export function decodeScenarioFromShareParam(param) {
-  if (!param || typeof param !== 'string') {
-    throw new Error('Not a valid simulator scenario link.');
+async function gunzipBytes(bytes) {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('DecompressionStream is not available in this browser.');
   }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/**
+ * Build a compact fs-scenario envelope for share/export.
+ * @param {object} state
+ * @param {{
+ *   feature?: string,
+ *   name?: string,
+ *   description?: string,
+ *   ui?: object,
+ *   dependencies?: object[],
+ *   includeExportedAt?: boolean,
+ * }} [meta]
+ */
+export function buildExportEnvelope(state, meta = {}) {
+  const feature = meta.feature || FEATURE_SOR_PLAN;
+  const payload = {
+    type: EXPORT_TYPE,
+    feature,
+    schemaVersion: SCHEMA_VERSION,
+    state,
+    dependencies: Array.isArray(meta.dependencies) ? meta.dependencies : [],
+  };
+  if (meta.includeExportedAt) {
+    payload.exportedAt = new Date().toISOString();
+  }
+  if (meta.name) payload.name = meta.name;
+  if (meta.description) payload.description = meta.description;
+  const attached = optionalUiFromEnvelope(meta.ui);
+  if (attached) payload.ui = attached;
+  return payload;
+}
+
+/**
+ * Compact JSON envelope → gzip → base64url for the `s` query param.
+ * @param {object} state
+ * @param {{ feature?: string, name?: string, description?: string, ui?: object, dependencies?: object[] }} [meta]
+ */
+export async function encodeScenarioToShareParam(state, meta = {}) {
+  const payload = buildExportEnvelope(state, { ...meta, includeExportedAt: false });
+  const compressed = await gzipBytes(utf8Encode(JSON.stringify(payload)));
+  return bytesToBase64Url(compressed);
+}
+
+/**
+ * Decode a share param.
+ * @returns {Promise<
+ *   | { status: 'ok', data: ReturnType<typeof parseScenarioPayload> }
+ *   | { status: 'legacy' }
+ *   | { status: 'invalid', error: Error }
+ * >}
+ */
+export async function decodeShareParam(param) {
+  if (!param || typeof param !== 'string') {
+    return { status: 'invalid', error: new Error('Not a valid simulator scenario link.') };
+  }
+
+  let bytes;
+  try {
+    bytes = base64UrlToBytes(param);
+  } catch {
+    return { status: 'invalid', error: new Error('Not a valid simulator scenario link.') };
+  }
+
+  let jsonText;
+  try {
+    jsonText = utf8Decode(await gunzipBytes(bytes));
+  } catch {
+    // Uncompressed / pre-fs share links are a silent clean break.
+    return { status: 'legacy' };
+  }
+
   let parsed;
   try {
-    parsed = JSON.parse(utf8Decode(base64UrlToBytes(param)));
+    parsed = JSON.parse(jsonText);
   } catch {
-    throw new Error('Not a valid simulator scenario link.');
+    return { status: 'invalid', error: new Error('Not a valid simulator scenario link.') };
   }
+
+  if (!parsed || parsed.type !== EXPORT_TYPE) {
+    // Compressed but not the new envelope — treat as unusable new-format payload.
+    return { status: 'invalid', error: new Error('Not a valid simulator scenario link.') };
+  }
+
   try {
-    return parseScenarioPayload(parsed);
-  } catch {
+    return { status: 'ok', data: parseScenarioPayload(parsed) };
+  } catch (err) {
+    return {
+      status: 'invalid',
+      error: err instanceof Error ? err : new Error('Not a valid simulator scenario link.'),
+    };
+  }
+}
+
+/** @deprecated Prefer decodeShareParam — throws on invalid; returns null for legacy. */
+export async function decodeScenarioFromShareParam(param) {
+  const result = await decodeShareParam(param);
+  if (result.status === 'legacy') return null;
+  if (result.status === 'invalid') {
     throw new Error('Not a valid simulator scenario link.');
   }
+  return result.data;
 }
 
 /** Build a shareable URL with the scenario in query param `s`. */
-export function buildShareUrl(scenario, meta = {}, baseUrl = typeof location !== 'undefined' ? location.href : '') {
+export async function buildShareUrl(
+  state,
+  meta = {},
+  baseUrl = typeof location !== 'undefined' ? location.href : '',
+) {
   const url = new URL(baseUrl);
-  url.searchParams.set(SHARE_PARAM, encodeScenarioToShareParam(scenario, meta));
+  url.searchParams.set(SHARE_PARAM, await encodeScenarioToShareParam(state, meta));
   return url.toString();
 }
 
@@ -277,17 +342,20 @@ export function stripShareParamFromUrl(href = typeof location !== 'undefined' ? 
   return url.pathname + url.search + url.hash;
 }
 
-export function exportScenario(scenario, name = 'scenario', description = '', { ui } = {}) {
-  const payload = {
-    type: EXPORT_TYPE,
-    schemaVersion: SCHEMA_VERSION,
-    exportedAt: new Date().toISOString(),
+export function exportScenario(
+  state,
+  name = 'scenario',
+  description = '',
+  { ui, feature = FEATURE_SOR_PLAN, dependencies = [] } = {},
+) {
+  const payload = buildExportEnvelope(state, {
+    feature,
     name,
     description: description || '',
-    scenario,
-  };
-  const attached = optionalUiFromEnvelope(ui);
-  if (attached) payload.ui = attached;
+    ui,
+    dependencies,
+    includeExportedAt: true,
+  });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -304,4 +372,22 @@ export async function importScenarioFromFile(file) {
   const text = await file.text();
   const parsed = JSON.parse(text);
   return parseScenarioPayload(parsed);
+}
+
+/**
+ * Import envelope dependencies as named sessions (collision auto-rename).
+ * Never overwrites existing sessions.
+ */
+export async function importEnvelopeDependencies(dependencies = []) {
+  const renamed = [];
+  for (const dep of dependencies) {
+    const finalName = await sessions.importWithRename(
+      dep.feature,
+      dep.name,
+      dep.state,
+      dep.description || '',
+    );
+    renamed.push({ ...dep, name: finalName });
+  }
+  return renamed;
 }
