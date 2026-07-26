@@ -1,16 +1,18 @@
 # 📈 Personal Finance Simulator
 
-Welcome to the Personal Finance Simulator! This interactive tool helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market. 
+Welcome to the Personal Finance Simulator! This interactive tool helps you visualize your financial future, plan for retirement, and understand the risks associated with the stock market.
 
-**[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs in web browser on your device, no apps or user accounts! 
+**[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs in web browser on your device, no apps or user accounts!
 
-The entire simulator is a **single, self-contained HTML file**. Easy Mode and built-in help will get you started.
+The entire simulator is a **single, self-contained HTML file**. One app hosts several features (tabs under the title); Easy Mode and built-in help will get you started.
 
+- **SOR Plan** — Build a retirement spending plan and run Monte Carlo simulations (the main planner).
+- **SOR Lab** — Sensitivity analysis on a saved Plan session: see which inputs move your outcomes most, then change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
 - **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
 - **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
 - **Upgrading from an older build:** Named sessions and old share links from earlier versions are not migrated. Use **Export** before upgrading, then **Import** the JSON file after — that is the supported way to carry scenarios forward.
 - **Run anywhere:** Double-click the `index.html` file and run in your browser.
-- **Designed for vibe coding:**  Follow instructions below if you want to change or extend.
+- **Designed for vibe coding:** Follow instructions below if you want to change or extend.
 
 ---
 
@@ -118,13 +120,14 @@ flowchart TD
 | The math of growth/withdrawals          | `src/core/simulation.js`, `src/core/withdrawal.js`                                                   |
 | Find Best Plan's search logic           | `src/core/goalSeek.js`                                                                               |
 | The historical dataset                  | `src/data/historicalData.js`                                                                         |
-| An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial in `src/partials/inputs/`  |
-| Fees & taxes (AUM fee / withdrawal tax) | `src/partials/inputs/feesTaxes.html`, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
-| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/ui/riskPreset.js` (slider behavior)               |
-| A chart's look or behavior              | `src/ui/charts/` (one file per chart)                                                                |
-| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, `src/ui/charts/outcomeWindow.js`                                     |
-| The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                      |
-| Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js`                                                  |
+| An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial under `src/features/sor-plan/partials/` |
+| Fees & taxes (AUM fee / withdrawal tax) | Plan fees/taxes partial, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
+| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/features/sor-plan/ui/riskPreset.js` |
+| A Plan chart's look or behavior         | `src/features/sor-plan/ui/charts/` (one file per chart) |
+| SOR Lab sensitivity / tornado           | `src/features/sor-lab/`, `src/core/sensitivity.js` |
+| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, Plan chart helpers |
+| The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js` |
+| Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js` |
 
 
 

@@ -30,6 +30,8 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/partials')),
         resolve(__dirname, 'src/features/sor-plan/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/sor-plan/partials')),
+        resolve(__dirname, 'src/features/sor-lab/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/sor-lab/partials')),
       ],
     }),
     viteSingleFile(),

@@ -12,7 +12,7 @@ import { readUiPrefsSnapshot } from '../state/uiPrefs.js';
 import { applyUiPrefs } from './applyUiPrefs.js';
 import { openDialog, showAlert } from './dialogs.js';
 import { getActiveFeature, setActiveFeature } from '../state/features.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../state/storageKeys.js';
+import { FEATURE_SOR_PLAN } from '../state/storageKeys.js';
 
 /** @type {Map<string, { name: string, description: string, lastSelect: string }>} */
 const sessionUiByFeature = new Map();
@@ -35,6 +35,7 @@ const sessionAdapters = new Map();
  * @property {() => void} [beforeLeavingUnsaved]
  * @property {() => void} [afterPersist]
  * @property {() => void} [afterDeleteCurrent]
+ * @property {() => Promise<object[]> | object[]} [getDependencies]
  */
 
 export function registerSessionAdapter(featureId, adapter) {
@@ -152,11 +153,17 @@ export async function refreshSessionList(selectName = currentSessionName) {
   updateSessionActionButtons();
 }
 
+async function resolveDependencies(adapter) {
+  if (!adapter?.getDependencies) return [];
+  const deps = await adapter.getDependencies();
+  return Array.isArray(deps) ? deps : [];
+}
+
 async function persistSession(name, description, { includeUi = false } = {}) {
   const feature = getActiveFeatureId();
   const adapter = sessionAdapters.get(feature);
   const previousName = currentSessionName;
-  if (!previousName && feature === FEATURE_SOR_PLAN) {
+  if (!previousName) {
     adapter?.beforeLeavingUnsaved?.();
   }
   const opts = includeUi ? { ui: readUiPrefsSnapshot() } : {};
@@ -319,7 +326,7 @@ async function handleResetSession() {
       return;
     }
     currentSessionDescription = loaded.description || '';
-    if (feature === FEATURE_SOR_PLAN && adapter) {
+    if (adapter) {
       adapter.applyState(loaded.payload);
       adapter.afterPersist?.();
     }
@@ -381,7 +388,7 @@ function handleDeleteSession() {
         currentSessionName = '';
         currentSessionDescription = '';
         updateSessionNoteDisplay();
-        if (feature === FEATURE_SOR_PLAN) adapter?.afterDeleteCurrent?.();
+        adapter?.afterDeleteCurrent?.();
       }
       await refreshSessionList('');
       lastSessionSelectValue = '';
@@ -416,7 +423,7 @@ async function handleSelectSession(e) {
     }
     return;
   }
-  if (lastSessionSelectValue === '' && feature === FEATURE_SOR_PLAN) {
+  if (lastSessionSelectValue === '') {
     adapter?.beforeLeavingUnsaved?.();
   }
   try {
@@ -424,7 +431,7 @@ async function handleSelectSession(e) {
     if (!loaded) return;
     currentSessionName = name;
     currentSessionDescription = loaded.description || '';
-    if (feature === FEATURE_SOR_PLAN && adapter) {
+    if (adapter) {
       adapter.applyState(loaded.payload);
       adapter.afterPersist?.();
     }
@@ -444,12 +451,16 @@ async function handleExportSession() {
     'Download a JSON file of this scenario. Optionally attach your current view settings.',
   );
   if (!confirmed) return;
+  const feature = getActiveFeatureId();
+  const adapter = sessionAdapters.get(feature);
+  const dependencies = await resolveDependencies(adapter);
   exportScenario(
     readActiveFeatureState(),
     currentSessionName || 'scenario',
     currentSessionDescription,
     {
-      feature: getActiveFeatureId(),
+      feature,
+      dependencies,
       ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
     },
   );
@@ -462,10 +473,14 @@ async function handleLinkCopy() {
   );
   if (!confirmed) return;
   const btn = document.getElementById('linkCopyButton');
+  const feature = getActiveFeatureId();
+  const adapter = sessionAdapters.get(feature);
+  const dependencies = await resolveDependencies(adapter);
   const url = await buildShareUrl(readActiveFeatureState(), {
-    feature: getActiveFeatureId(),
+    feature,
     name: currentSessionName || '',
     description: currentSessionDescription || '',
+    dependencies,
     ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
   });
   try {
@@ -484,7 +499,7 @@ async function handleLinkCopy() {
 
 /** Open a feature-aware envelope: import deps, switch feature, apply state. */
 export async function applyImportedEnvelope(loaded, { statusMessage } = {}) {
-  await importEnvelopeDependencies(loaded.dependencies || []);
+  const renames = await importEnvelopeDependencies(loaded.dependencies || []);
   if (loaded.feature && loaded.feature !== getActiveFeatureId()) {
     snapshotSessionUi(getActiveFeatureId());
     setActiveFeature(loaded.feature);
@@ -493,19 +508,22 @@ export async function applyImportedEnvelope(loaded, { statusMessage } = {}) {
   const feature = loaded.feature || FEATURE_SOR_PLAN;
   const adapter = sessionAdapters.get(feature);
   if (adapter?.applyImported) {
-    await adapter.applyImported(loaded, { statusMessage });
+    await adapter.applyImported(loaded, { statusMessage, renames });
     return;
   }
-  if (feature === FEATURE_SOR_LAB) {
-    currentSessionName = '';
-    currentSessionDescription = loaded.description || '';
-    updateSessionNoteDisplay();
-    updateSessionActionButtons();
-    await refreshSessionList('');
-    lastSessionSelectValue = '';
-    snapshotSessionUi(FEATURE_SOR_LAB);
-    await maybeApplyAttachedUi(loaded.ui);
+  // Fallback when a feature has no custom import hook: clear named session,
+  // apply payload through applyState when present, then optional UI prefs.
+  currentSessionName = '';
+  currentSessionDescription = loaded.description || '';
+  if (adapter?.applyState && loaded.state) {
+    adapter.applyState(loaded.state);
   }
+  updateSessionNoteDisplay();
+  updateSessionActionButtons();
+  await refreshSessionList('');
+  lastSessionSelectValue = '';
+  snapshotSessionUi(feature);
+  await maybeApplyAttachedUi(loaded.ui);
 }
 
 function stripShareParamFromHistory() {

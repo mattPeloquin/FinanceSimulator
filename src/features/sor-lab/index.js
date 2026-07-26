@@ -5,23 +5,69 @@ import {
   restoreSessionUi,
   snapshotSessionUi,
 } from '../../ui/sessionChrome.js';
+import {
+  readLabState,
+  applyLabState,
+  applyImportedLab,
+  resetLabToDefaults,
+  getLabDependencies,
+  registerLabUiHooks,
+  defaultLabConfig,
+} from './session.js';
+import { handleLabRunClick, cancelLabRun, flushPendingSorLabResults } from './run.js';
+import { bindLabConfig, renderLabConfig } from './ui/config.js';
+import {
+  bindLabResults,
+  applyLabViewPrefs,
+  clearLabResults,
+  renderLabCharts,
+} from './ui/results.js';
 
-/** Minimal Lab workbench until Phase 4 owns real Lab state. */
-const LAB_STUB_STATE = { version: 1 };
-
-export function registerSorLab() {
-  registerSessionAdapter(FEATURE_SOR_LAB, {
-    getState: () => ({ ...LAB_STUB_STATE }),
-    applyState: () => {},
+async function initLabDom() {
+  registerLabUiHooks({
+    onStateApplied: (config) => {
+      void renderLabConfig();
+      applyLabViewPrefs(config.view);
+    },
+    onResultsCleared: () => clearLabResults(),
   });
 
+  registerSessionAdapter(FEATURE_SOR_LAB, {
+    getState: () => readLabState(),
+    applyState: (state) => applyLabState(state),
+    applyImported: (loaded, opts) => applyImportedLab(loaded, opts),
+    onNewSession: () => resetLabToDefaults(),
+    getDependencies: () => getLabDependencies(),
+  });
+
+  // Start from defaults (or leave whatever applyState set during session restore).
+  if (!readLabState().scenarioRef) {
+    applyLabState(defaultLabConfig());
+  }
+
+  bindLabConfig();
+  bindLabResults();
+  await renderLabConfig();
+  applyLabViewPrefs(readLabState().view);
+
+  document.getElementById('sor-lab-run')?.addEventListener('click', () => {
+    void handleLabRunClick();
+  });
+  document.getElementById('sor-lab-cancel')?.addEventListener('click', cancelLabRun);
+}
+
+export function registerSorLab() {
   registerFeature({
     id: FEATURE_SOR_LAB,
     title: 'SOR Lab',
     rootId: 'feature-sor-lab',
-    init() {},
+    init: initLabDom,
     onActivate() {
+      flushPendingSorLabResults();
       void restoreSessionUi(FEATURE_SOR_LAB);
+      void renderLabConfig();
+      // Resize charts that may have painted while hidden.
+      renderLabCharts();
     },
     onDeactivate() {
       snapshotSessionUi(FEATURE_SOR_LAB);

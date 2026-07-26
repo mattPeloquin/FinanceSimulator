@@ -9,10 +9,27 @@ import { runMonteCarlo } from '../core/simulation.js';
 import { buildRunResult } from '../core/resultPackaging.js';
 import { runGoalSeek } from '../core/goalSeek.js';
 import {
+  summarizeSweepPoint,
+  assembleLabSweepResult,
+} from '../core/sensitivity.js';
+import {
   buildClassicFourPercentParams,
   buildFourPercentComparison,
 } from '../core/fourPercentComparison.js';
 import { ParallelPool } from './parallelPool.js';
+
+/** Re-attach shared historical arrays stripped before transfer. */
+function restoreSharedArrays(pointParams, baseParams) {
+  return {
+    ...pointParams,
+    samples: baseParams.samples,
+    scaledHistoricalShocks: baseParams.scaledHistoricalShocks,
+    logNormal: {
+      ...(pointParams.logNormal || {}),
+      chol: baseParams.logNormal?.chol ?? null,
+    },
+  };
+}
 
 /** After the user's run, re-simulate a flat real 4% rule on the same paths. */
 async function packageWithFourPercentComparison(pool, params, userRaw, {
@@ -180,5 +197,56 @@ self.onmessage = async (e) => {
       pool.terminate();
     }
     return;
+  }
+
+  // SOR Lab: sweep design points with common random numbers, summarize each
+  // into a MetricBundle, assemble a visualization-agnostic LabSweepResult.
+  if (type === 'sensitivity') {
+    const {
+      baseParams,
+      designPoints,
+      variableDefs,
+      baselineRef,
+      meta,
+    } = e.data || {};
+    try {
+      const started = Date.now();
+      const evaluated = [];
+      const total = Array.isArray(designPoints) ? designPoints.length : 0;
+      for (let i = 0; i < total; i++) {
+        const point = designPoints[i];
+        const pointParams = restoreSharedArrays(point.params, baseParams);
+        const raw = await pool.run(pointParams);
+        const bundle = summarizeSweepPoint(raw, pointParams);
+        evaluated.push({
+          kind: point.kind,
+          variableId: point.variableId,
+          value: point.value,
+          bundle,
+        });
+        self.postMessage({
+          type: 'progress',
+          stage: point.kind === 'baseline'
+            ? 'Baseline'
+            : `Sweeping ${point.variableId || 'variable'}`,
+          fraction: (i + 1) / total,
+        });
+      }
+      const result = assembleLabSweepResult({
+        evaluated,
+        variableDefs: variableDefs || [],
+        baselineRef: baselineRef || null,
+        meta: {
+          ...(meta || {}),
+          startedAt: meta?.startedAt ?? started,
+          durationMs: Date.now() - started,
+        },
+      });
+      self.postMessage({ type: 'done', result });
+    } catch (err) {
+      self.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });
+    } finally {
+      pool.terminate();
+    }
   }
 };

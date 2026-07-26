@@ -190,31 +190,14 @@ Done when: `src/features/sor-plan/` owns all SOR-specific code, `src/main.js` is
 bootstrap, imports updated, all tests pass, no visible change. Update the architecture rule
 file if boundaries shifted.
 
-### Phase 4 — SOR Lab (tornado MVP)
+### Phase 4 — SOR Lab (sensitivity sweep) — shipped
 
-- `src/features/sor-lab/` scaffold: partials + logic + ui, registered as the second tab.
-- Scenario picker over saved SOR Plan sessions (live references via the session store).
-- Metric selector (default success rate), parameter list with built-in low/high presets
-  and per-parameter override.
-- Sensitivity runner: build perturbed sim params via `buildSimParams`, run through the job
-  manager + `src/workers/parallelPool.js`, with common random numbers across all bars.
-- Tornado chart: horizontal bars, Chart.js, themed via the shared chart theme.
-- Lab sessions saved under the `sor-lab` namespace in `fs-sessions`.
-- Lab share links/exports embed snapshots of referenced SOR Plan scenarios via the Phase 2
-  dependency-snapshot mechanism; sanity-check link length against practical URL limits
-  (file export is the fallback for oversized payloads).
-- Tests: Vitest for perturbation building, common-random-number plumbing, and metric
-  extraction; one Playwright smoke for a Lab run.
-- Exit tasks: README update — the "one tool, several features" story, brief SOR Lab blurb
-  (inline help in the app carries the detail).
-- Open items to finalize at phase start: exact parameter list, preset low/high ranges,
-  metric list beyond success rate.
-- Design note: scenario-vs-scenario comparison is a likely follow-on — keep the Lab data
-  model open to referencing multiple scenarios rather than baking in a single-scenario
-  assumption.
-
-Done when: user can pick a saved scenario, run a tornado analysis that survives tab
-switches, see ranked sensitivity bars, save/share the analysis, all tests pass.
+See status log. Summary of the shipped design (supersedes the earlier "tornado MVP"
+sketch): one run sweeps every live Plan parameter across wide default envelopes,
+stores visualization-agnostic response curves with full percentile bundles, and
+drives tornado + response-curve views from selectors. Metric / band / filters are
+post-run. Results stay in memory; share/export carry Lab config + Plan dependency
+snapshots (pinned seed reproduces curves).
 
 ## Risks to keep in mind
 
@@ -280,3 +263,19 @@ later phases.)
   - Architecture rule updated for the shared-vs-feature table. htmlhint covers
     `src/features/**/partials/**`. Verification: `npm test`, `npx playwright test`,
     `npm run build` green.
+- 2026-07-26 — **Phase 4 shipped.** SOR Lab sensitivity explorer:
+  - Session chrome generalized: adapter-driven load/reset/delete for all features;
+    `getDependencies()` on export/share; import renames passed to `applyImported`
+    (`requestedName` preserved on dependency import).
+  - Shared `src/core/sensitivity.js` — MetricBundle + LabSweepResult, summarize /
+    assemble; worker `sensitivity` message loops ParallelPool with CRN-pinned seed.
+  - Lab feature: variable registry (gated, wide envelopes, allocation reparams,
+    sentinels), sweep builder, run orchestration with hidden-tab deferral, config +
+    results UI, tornado + response-curve charts, pure selectors in `ui/select.js`.
+  - **Decisions:** sweep-everything (user toggles/ranges for next run); results not
+    persisted in sessions (config + Plan snapshot only; same seed reproduces);
+    excluded CRN-hostile / grading / run-mechanic fields documented in
+    `variables.js`; rate metrics use sampling-error whiskers (no outcome band).
+  - Tests: `tests/sensitivity.test.js`; e2e `tests/e2e/sorLab.spec.js`. README +
+    architecture rule updated. Verification: `npm test` green; Playwright Lab +
+    serial/full suite green (parallel 10-worker reloads can flake on Vite load).

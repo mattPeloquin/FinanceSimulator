@@ -1,0 +1,164 @@
+{{!-- SOR Lab feature root contents --}}
+<div class="space-y-6">
+  <div class="rounded-xl border border-theme-border bg-theme-card px-5 py-5 space-y-3">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="space-y-1 min-w-0">
+        <h2 class="text-xl font-semibold text-theme-heading">SOR Lab</h2>
+        <p class="text-sm text-theme-body max-w-2xl">
+          Explore which Plan inputs move your outcomes. One run sweeps every live
+          setting across a wide range; then change the metric, percentile band, or
+          filters without re-running. Narrowing a sweep range or picking another
+          Plan session needs a fresh run.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="sor-lab-run"
+          class="inline-flex items-center rounded-lg bg-theme-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+          Run sensitivity
+        </button>
+        <button type="button" id="sor-lab-cancel"
+          class="hidden inline-flex items-center rounded-lg border border-theme-border px-3 py-2 text-sm text-theme-body hover:bg-theme-muted/40">
+          Cancel
+        </button>
+      </div>
+    </div>
+    <p id="sor-lab-status" class="text-xs text-theme-muted" aria-live="polite"></p>
+    <p id="sor-lab-cost" class="text-xs text-theme-faint"></p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <section class="rounded-xl border border-theme-border bg-theme-card px-5 py-4 space-y-4" aria-labelledby="sor-lab-config-heading">
+      <h3 id="sor-lab-config-heading" class="text-base font-semibold text-theme-heading">Configuration</h3>
+
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-theme-body">SOR Plan session</span>
+        <select id="sor-lab-scenario" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+          <option value="">Select a saved Plan session…</option>
+        </select>
+      </label>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-theme-body">Sweep points</span>
+          <select id="sor-lab-sweep-points" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+            <option value="5">5</option>
+            <option value="7" selected>7</option>
+            <option value="9">9</option>
+          </select>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-theme-body">Paths per point</span>
+          <select id="sor-lab-paths" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+            <option value="1000">1,000</option>
+            <option value="2000" selected>2,000</option>
+            <option value="5000">5,000</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <h4 class="text-sm font-semibold text-theme-heading">Variables</h4>
+          <button type="button" id="sor-lab-reset-envelopes" class="text-xs text-theme-accent hover:underline">
+            Reset ranges
+          </button>
+        </div>
+        <p class="text-xs text-theme-muted">
+          Checked variables are swept. Edit low/high to change the next run’s envelope.
+        </p>
+        <div id="sor-lab-variable-list" class="max-h-96 overflow-y-auto space-y-3 pr-1"></div>
+      </div>
+    </section>
+
+    <section class="rounded-xl border border-theme-border bg-theme-card px-5 py-4 space-y-4" aria-labelledby="sor-lab-results-heading">
+      <h3 id="sor-lab-results-heading" class="text-base font-semibold text-theme-heading">Results</h3>
+
+      <div id="sor-lab-loading" class="hidden flex-col gap-2 rounded-lg border border-theme-border bg-theme-muted/30 px-4 py-3">
+        <div class="flex items-center justify-between gap-2 text-sm text-theme-body">
+          <span id="sor-lab-loading-text">Running sensitivity…</span>
+          <span id="sor-lab-loading-pct" class="tabular-nums text-theme-muted">0%</span>
+        </div>
+        <div class="h-2 overflow-hidden rounded-full bg-theme-muted">
+          <div id="sor-lab-progress-bar" class="h-full w-0 bg-theme-accent transition-all duration-150"></div>
+        </div>
+      </div>
+
+      <div id="sor-lab-results-empty" class="rounded-lg border border-dashed border-theme-border px-4 py-8 text-center text-sm text-theme-muted">
+        Run a sensitivity sweep to see ranked impact bars and response curves.
+        Results stay in memory for this session — re-run after a reload (same seed reproduces the curves).
+      </div>
+
+      <div id="sor-lab-results-panel" class="hidden space-y-4">
+        <p id="sor-lab-stale-banner" class="hidden rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-theme-body">
+          Configuration changed since this run. Charts still show the last result — run again to refresh.
+        </p>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Metric</span>
+            <select id="sor-lab-metric" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading"></select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Show</span>
+            <select id="sor-lab-category" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="all">All variables</option>
+              <option value="decision">Decisions only</option>
+              <option value="uncertainty">Uncertainties only</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Band low</span>
+            <select id="sor-lab-band-low" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading"></select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Band high</span>
+            <select id="sor-lab-band-high" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading"></select>
+          </label>
+        </div>
+        <p id="sor-lab-band-note" class="text-xs text-theme-muted hidden">
+          Rate metrics are single numbers across all paths — the band control is disabled; whiskers show sampling error instead.
+        </p>
+
+        <div class="flex flex-wrap items-center gap-4 text-sm text-theme-body">
+          <label class="inline-flex items-center gap-2">
+            <span class="font-medium">Bar style</span>
+            <select id="sor-lab-bar-style" class="rounded-lg border border-theme-border bg-theme-input px-2 py-1 text-sm">
+              <option value="band">Band (P-low–P-high)</option>
+              <option value="median">Median only</option>
+            </select>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <span class="font-medium">Top</span>
+            <input id="sor-lab-top-n" type="number" min="3" max="40" value="15"
+              class="w-16 rounded-lg border border-theme-border bg-theme-input px-2 py-1 text-sm tabular-nums" />
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input id="sor-lab-show-noise" type="checkbox" class="rounded border-theme-border" />
+            <span>Show below noise floor</span>
+          </label>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="text-sm font-semibold text-theme-heading">Tornado</h4>
+          <div class="relative h-80 w-full">
+            <canvas id="sor-lab-tornado" aria-label="Tornado sensitivity chart"></canvas>
+          </div>
+          <p id="sor-lab-noise-label" class="text-xs text-theme-faint"></p>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="text-sm font-semibold text-theme-heading">Response curve</h4>
+            <select id="sor-lab-curve-variable" class="rounded-lg border border-theme-border bg-theme-input px-2 py-1 text-sm max-w-xs"></select>
+          </div>
+          <div class="relative h-64 w-full">
+            <canvas id="sor-lab-curve" aria-label="Variable response curve"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

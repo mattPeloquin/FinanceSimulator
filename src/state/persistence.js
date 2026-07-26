@@ -381,13 +381,14 @@ export async function importScenarioFromFile(file) {
 export async function importEnvelopeDependencies(dependencies = []) {
   const renamed = [];
   for (const dep of dependencies) {
+    const requestedName = dep.name;
     const finalName = await sessions.importWithRename(
       dep.feature,
       dep.name,
       dep.state,
       dep.description || '',
     );
-    renamed.push({ ...dep, name: finalName });
+    renamed.push({ ...dep, requestedName, name: finalName });
   }
   return renamed;
 }

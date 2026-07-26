@@ -6,6 +6,7 @@ import {
   SOR_PLAN_UI_KEY,
   SOR_PLAN_AUTOSAVE_KEY,
   SOR_PLAN_UNSAVED_STASH_KEY,
+  SOR_LAB_UI_KEY,
   FEATURE_SOR_PLAN,
   FEATURE_SOR_LAB,
 } from '../src/state/storageKeys.js';
@@ -24,6 +25,7 @@ describe('storageKeys', () => {
     expect(SOR_PLAN_UI_KEY).toBe('fs:sor-plan:ui');
     expect(SOR_PLAN_AUTOSAVE_KEY).toBe('fs:sor-plan:autosave');
     expect(SOR_PLAN_UNSAVED_STASH_KEY).toBe('fs:sor-plan:unsaved-stash');
+    expect(SOR_LAB_UI_KEY).toBe('fs:sor-lab:ui');
   });
 
   it('rejects empty key segments', () => {
