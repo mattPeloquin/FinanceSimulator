@@ -5,10 +5,10 @@
 // from the app's theme toggle, so it never looks jarring next to the rest of
 // the UI while still always printing light.
 
-import { buildPlanSnapshot } from '../core/reportModel.js';
-import { loadUiPrefs, saveUiPrefs, DEFAULT_UI_PREFS } from '../state/uiPrefs.js';
-import { isDarkMode, onThemeChange } from './theme.js';
-import { formatK, formatPercent } from './format.js';
+import { buildPlanSnapshot } from '../../../core/reportModel.js';
+import { loadUiPrefs, saveUiPrefs, DEFAULT_UI_PREFS } from '../../../state/uiPrefs.js';
+import { isDarkMode, onThemeChange } from '../../../ui/theme.js';
+import { formatK, formatPercent } from '../../../ui/format.js';
 import {
   drawWithdrawalBand,
   drawBalanceFan,

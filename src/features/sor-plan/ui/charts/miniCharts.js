@@ -1,14 +1,14 @@
 // Allocation sparkline mini-charts showing each asset class vs inflation.
-import { formatPct1 } from '../../core/precision.js';
-import { Chart } from './chartSetup.js';
+import { formatPct1 } from '../../../../core/precision.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import {
   getMiniChartSeries,
   averageRealReturn,
   sparklineRange,
   sparklineZeroTopPct,
-} from '../../core/history.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange, isDarkMode, themeRgba, themeTokens } from '../theme.js';
+} from '../../../../core/history.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, isDarkMode, themeRgba, themeTokens } from '../../../../ui/theme.js';
 
 const MINI_CHARTS = [
   {

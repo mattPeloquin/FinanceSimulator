@@ -264,3 +264,19 @@ later phases.)
   - README clean-break note (export before upgrade). Vitest: sessions, jobs, share;
     e2e: tab-switch mid-run + nonzero chart size. Verification: `npm test`,
     `npx playwright test`, `npm run build`.
+- 2026-07-26 — **Phase 3 shipped.** SOR Plan refactored into feature structure
+  (zero intentional UX change):
+  - **3a**: Partials → `src/features/sor-plan/partials/{inputs,results}/`; header →
+    `src/partials/shared/`; Vite Handlebars `partialDirectory` includes feature tree.
+  - **3b**: Thin `src/main.js` bootstrap; Plan modules
+    `src/features/sor-plan/{index,run,session,history}.js`; Lab stub
+    `src/features/sor-lab/index.js`; shared header chrome `src/ui/sessionChrome.js`
+    with per-feature adapters. `initFeatures` is async so Plan init can await
+    session list refresh before chrome binds.
+  - **3c**: Plan UI under `src/features/sor-plan/ui/` (inputs, riskPreset, results,
+    report, sectionSummaries, SOR charts). Shared remain: `scenario.js` /
+    `defaults.js` / **`presets/`** (intentional: core + Lab need them), `uiPrefs.js`,
+    `chartTheme` / `chartSetup` / `returnColors`, dialogs/theme/format/applyUiPrefs.
+  - Architecture rule updated for the shared-vs-feature table. htmlhint covers
+    `src/features/**/partials/**`. Verification: `npm test`, `npx playwright test`,
+    `npm run build` green.

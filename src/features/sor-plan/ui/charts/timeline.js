@@ -1,13 +1,13 @@
 // Balance and withdrawal timeline charts across the tracked percentiles.
-import { Chart } from './chartSetup.js';
-import { formatK } from '../format.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { formatK } from '../../../../ui/format.js';
 import {
   getChartTheme,
   percentileColors,
   sampleRunTooltipOptions,
-} from './chartTheme.js';
-import { onThemeChange, isDarkMode } from '../theme.js';
-import { loadUiPrefs, saveUiPrefs } from '../../state/uiPrefs.js';
+} from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, isDarkMode } from '../../../../ui/theme.js';
+import { loadUiPrefs, saveUiPrefs } from '../../../../state/uiPrefs.js';
 import { formatWithdrawnLine } from './withdrawalTooltipFormat.js';
 
 function getColors() {

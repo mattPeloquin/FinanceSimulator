@@ -8,8 +8,8 @@
 import { replaceUiPrefs, normalizeUiPrefs } from '../state/uiPrefs.js';
 import { saveAppPrefs } from '../state/appPrefs.js';
 import { setTheme } from './theme.js';
-import { applyReportViewPrefs } from './report.js';
-import { applyBalanceLogScalePref } from './charts/timeline.js';
+import { applyReportViewPrefs } from '../features/sor-plan/ui/report.js';
+import { applyBalanceLogScalePref } from '../features/sor-plan/ui/charts/timeline.js';
 
 /** Persist prefs and push them into the current page controls. */
 export function applyUiPrefs(raw) {

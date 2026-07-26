@@ -1,7 +1,7 @@
 // 3D topography column chart. ECharts + ECharts-GL are heavy, so they are
 // lazy-loaded (dynamic import) the first time this chart is drawn.
-import { formatK, formatPercent } from '../format.js';
-import { Chart } from './chartSetup.js';
+import { formatK, formatPercent } from '../../../../ui/format.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import {
   formatWithdrawnLine,
   formatWithdrawalBreakdownLine,
@@ -12,7 +12,7 @@ import {
   percentileLabelForRank,
   sampleOverviewPaths,
   ranksForPercentileWindow,
-} from '../../core/surfaceDrilldown.js';
+} from '../../../../core/surfaceDrilldown.js';
 import {
   meetsOnPlanBlend,
   weightedYearHitRateFromSeries,
@@ -21,13 +21,13 @@ import {
   isMeanYearlyMetric,
   isEarlyWeightingActive,
   weightedScheduleScore,
-} from '../../core/statistics.js';
-import { plannedYearlySchedule } from '../../core/goalSeek.js';
-import { getChartTheme, sampleRunTooltipOptions } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
-import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
-import { CLASSIC_FOUR_PERCENT_RATE } from '../../core/fourPercentComparison.js';
-import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from './returnColors.js';
+} from '../../../../core/statistics.js';
+import { plannedYearlySchedule } from '../../../../core/goalSeek.js';
+import { getChartTheme, sampleRunTooltipOptions } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
+import { buildGiftOverlaySeries } from '../../../../core/withdrawal.js';
+import { CLASSIC_FOUR_PERCENT_RATE } from '../../../../core/fourPercentComparison.js';
+import { RETURN_MIN, RETURN_MAX, lerpColor, colorForReturn } from '../../../../ui/charts/returnColors.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, SURFACE_EMPHASIS_MAX_RATIO, yearAtDisplayCoord } from './yearEmphasis.js';
 import {

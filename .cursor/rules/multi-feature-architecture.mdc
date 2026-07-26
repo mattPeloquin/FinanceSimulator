@@ -21,12 +21,13 @@ Background jobs keep running across tab switches.
 
 | Lives in | Examples |
 |---|---|
-| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`) | Scenario model, RNG, workers, chart theme, dialogs, header, feature registry, session/job abstractions |
-| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature-specific presets |
+| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`) | Scenario model + defaults/presets, RNG, workers, chart theme/setup, dialogs, header, session chrome, feature registry, session/job abstractions |
+| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature charts, run orchestration |
 
-Truly shared code stays shared. Feature-specific code must not reach into another
-feature's DOM or module state — consume scenarios only through `scenario.js` /
-session-store interfaces.
+Truly shared code stays shared. Risk-preset *data* (`src/state/presets/`) stays
+shared with the scenario model; only the Easy Mode UI lives under the feature.
+Feature-specific code must not reach into another feature's DOM or module state —
+consume scenarios only through `scenario.js` / session-store interfaces.
 
 ## Storage namespaces
 

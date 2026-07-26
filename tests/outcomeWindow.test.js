@@ -8,7 +8,7 @@ import {
   onOutcomeWindowChange,
   clampOutcomeLowerPct,
   clampOutcomeUpperPct,
-} from '../src/ui/charts/outcomeWindow.js';
+} from '../src/features/sor-plan/ui/charts/outcomeWindow.js';
 
 describe('outcomeWindow', () => {
   beforeEach(() => {

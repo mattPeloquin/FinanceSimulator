@@ -10,7 +10,7 @@
     "build": "npm run lint && vite build",
     "preview": "vite preview",
     "lint": "npm run lint:html && npm run lint:js",
-    "lint:html": "htmlhint \"index.html\" \"src/partials/**/*.html\"",
+    "lint:html": "htmlhint \"index.html\" \"src/partials/**/*.html\" \"src/features/**/partials/**/*.html\"",
     "lint:js": "eslint .",
     "postinstall": "node scripts/postinstall-playwright.js",
     "setup:e2e": "playwright install chromium",

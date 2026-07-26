@@ -1,12 +1,12 @@
 // Live sparkline of the market-return adjustment curve: adjustment (y) as a
 // function of real portfolio return (x), for the low / expected / high
 // anchors currently in the form.
-import { Chart } from './chartSetup.js';
-import { getDynamicAdjustment } from '../../core/withdrawal.js';
-import { readDynConfigFromDom } from '../../state/scenario.js';
-import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { getDynamicAdjustment } from '../../../../core/withdrawal.js';
+import { readDynConfigFromDom } from '../../../../state/scenario.js';
+import { formatK } from '../../../../ui/format.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
 
 const SAMPLE_POINTS = 80;
 

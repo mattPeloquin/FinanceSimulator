@@ -16,16 +16,16 @@ import {
   readSpendingOverTimeTiersFromDom,
   normalizeMajorEvents,
   readMajorEventsFromDom,
-} from '../../state/scenario.js';
+} from '../../../../state/scenario.js';
 import {
   buildWithdrawalFloorSeries,
   buildGiftingSeries,
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
   buildMajorEventsSeries,
-} from '../../core/withdrawal.js';
+} from '../../../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
-import { onThemeChange } from '../theme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
 
 let previewChart = null;
 let pendingFrame = null;

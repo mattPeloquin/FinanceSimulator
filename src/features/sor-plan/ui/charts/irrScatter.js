@@ -6,7 +6,7 @@
 //
 // Rendered straight to a canvas (fillRect per point) — the population can be
 // tens of thousands of paths, which is far past what Chart.js scatters handle.
-import { Chart } from './chartSetup.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
 import {
   getChartTheme,
@@ -14,13 +14,13 @@ import {
   sampleRunTooltipOptions,
   applySampleRunDomTooltipStyle,
   SAMPLE_RUN_TOOLTIP_STYLE,
-} from './chartTheme.js';
-import { onThemeChange, isDarkMode } from '../theme.js';
-import { formatPercent, formatK } from '../format.js';
-import { regeneratePath } from '../../core/simulation.js';
-import { median, percentileValue } from '../../core/statistics.js';
-import { historicalIrrBand } from '../../core/historicalIrr.js';
-import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
+} from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, isDarkMode } from '../../../../ui/theme.js';
+import { formatPercent, formatK } from '../../../../ui/format.js';
+import { regeneratePath } from '../../../../core/simulation.js';
+import { median, percentileValue } from '../../../../core/statistics.js';
+import { historicalIrrBand } from '../../../../core/historicalIrr.js';
+import { percentileLabelForRank } from '../../../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 
 // Outcome status colors, one triplet per mode, in outcome-code order

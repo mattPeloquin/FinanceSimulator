@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setupWithdrawalFloorList, setupSpecificWithdrawalFloorList } from '../src/ui/inputs.js';
-import { setupRiskPresetControl, applyPresetLevel } from '../src/ui/riskPreset.js';
+import { setupWithdrawalFloorList, setupSpecificWithdrawalFloorList } from '../src/features/sor-plan/ui/inputs.js';
+import { setupRiskPresetControl, applyPresetLevel } from '../src/features/sor-plan/ui/riskPreset.js';
 import { PRESETS, DEFAULT_PRESET_LEVEL } from '../src/state/presets/index.js';
 import {
   readWithdrawalFloorsFromDom,

@@ -20,8 +20,8 @@
 // with nearest-neighbor so columns stay crisp horizontally. Data arrives
 // pre-aggregated from resultPackaging — the renderer rebands the per-run
 // source to fill the plot width for the active Show from/to window.
-import { bandWithdrawalHeatmap } from '../../core/resultPackaging.js';
-import { Chart } from './chartSetup.js';
+import { bandWithdrawalHeatmap } from '../../../../core/resultPackaging.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import { withdrawalComparisonDatasets, withdrawalChartTooltipCallbacks } from './surface3d.js';
 import {
   getChartTheme,
@@ -29,12 +29,12 @@ import {
   sampleRunTooltipOptions,
   applySampleRunDomTooltipStyle,
   SAMPLE_RUN_TOOLTIP_STYLE,
-} from './chartTheme.js';
-import { onThemeChange, isDarkMode } from '../theme.js';
-import { formatK, formatPercent } from '../format.js';
-import { regeneratePath, chartPathFromRegen } from '../../core/simulation.js';
-import { withdrawalTaxSeriesActive } from '../../core/feesTaxes.js';
-import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
+} from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, isDarkMode } from '../../../../ui/theme.js';
+import { formatK, formatPercent } from '../../../../ui/format.js';
+import { regeneratePath, chartPathFromRegen } from '../../../../core/simulation.js';
+import { withdrawalTaxSeriesActive } from '../../../../core/feesTaxes.js';
+import { percentileLabelForRank } from '../../../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, EMPHASIS_DEFAULT } from './yearEmphasis.js';
 import {

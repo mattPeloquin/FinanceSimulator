@@ -144,10 +144,10 @@ export function setActiveFeature(id, { persist = true } = {}) {
  * Call each feature's init once. Safe to call after DOM is ready.
  * @param {object} [ctx]
  */
-export function initFeatures(ctx = {}) {
+export async function initFeatures(ctx = {}) {
   for (const feature of registry.values()) {
     try {
-      feature.init(ctx);
+      await feature.init(ctx);
     } catch (err) {
       console.error(`init failed for ${feature.id}`, err);
     }

@@ -1,5 +1,5 @@
 // Shared sample-run / timeline tooltip lines for withdrawals vs the original plan.
-import { formatK } from '../format.js';
+import { formatK } from '../../../../ui/format.js';
 
 export function formatWithdrawnLine(wd, unadj) {
   if (wd < 0) return `Deposit: ${formatK(-wd)}`;

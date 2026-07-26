@@ -7,8 +7,8 @@ import { FIELDS } from '../src/state/scenario.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // index.html is assembled from Handlebars partials at build time (see
-// vite.config.js). Mirror that here: collect every src/partials/**/*.html file
-// by name and recursively substitute {{> name }} references.
+// vite.config.js). Mirror that here: collect shared + feature partial HTML
+// by basename and recursively substitute {{> name }} references.
 function loadPartials(dir, partials = {}) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -27,7 +27,9 @@ function inlinePartials(source, partials) {
   );
 }
 
-const partials = loadPartials(join(__dirname, '..', 'src', 'partials'));
+const root = join(__dirname, '..', 'src');
+const partials = loadPartials(join(root, 'partials'));
+loadPartials(join(root, 'features', 'sor-plan', 'partials'), partials);
 const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials);
 
 // Required non-field element ids the app wires up at runtime.

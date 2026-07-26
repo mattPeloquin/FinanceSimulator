@@ -1,10 +1,10 @@
 // Shared line-chart builder for the small withdrawal-schedule "spark charts"
 // used by both the Base + Spending Over Time and Specific List sections, so
 // the two look and behave identically (same axes, tooltip, and total label).
-import { Chart } from './chartSetup.js';
-import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { buildGiftOverlaySeries } from '../../core/withdrawal.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { formatK } from '../../../../ui/format.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { buildGiftOverlaySeries } from '../../../../core/withdrawal.js';
 
 // `floorSeries`, when given and it contains any positive value, is drawn as a
 // dashed reference line — a guide for the minimum-withdrawal backstop that

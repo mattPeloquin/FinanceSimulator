@@ -22,19 +22,19 @@ import {
   writeWithdrawalTaxTiersToDom,
   normalizeWithdrawalTaxTiers,
   MONEY_SCALE,
-} from '../state/scenario.js';
-import { formatPct1, roundPct1 } from '../core/precision.js';
-import { buildWithdrawalTaxSeries, grossUpNet } from '../core/feesTaxes.js';
-import { normalizeYearRange } from '../data/historicalData.js';
-import { Chart } from './charts/chartSetup.js';
+} from '../../../state/scenario.js';
+import { formatPct1, roundPct1 } from '../../../core/precision.js';
+import { buildWithdrawalTaxSeries, grossUpNet } from '../../../core/feesTaxes.js';
+import { normalizeYearRange } from '../../../data/historicalData.js';
+import { Chart } from '../../../ui/charts/chartSetup.js';
 import { syncWithdrawalPreview, syncWithdrawalPreviewFromForm, destroyWithdrawalPreviewChart } from './charts/withdrawalPreview.js';
 import { syncGuardrailPreview } from './charts/guardrailPreview.js';
 import { syncWithdrawalAdjPreview } from './charts/withdrawalAdjPreview.js';
 import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 import { syncAllocationPreview } from './charts/allocationPreview.js';
-import { loadAccordionState, setAccordionOpen } from '../state/persistence.js';
-import { weightPreviewSeries, onPlanYearlyPreviewSeries } from '../core/statistics.js';
+import { loadAccordionState, setAccordionOpen } from '../../../state/persistence.js';
+import { weightPreviewSeries, onPlanYearlyPreviewSeries } from '../../../core/statistics.js';
 import { suppressAccordionPersist, onChartDetailsOpened } from './charts/chartThumbs.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

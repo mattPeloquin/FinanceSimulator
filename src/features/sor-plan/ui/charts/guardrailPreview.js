@@ -1,12 +1,12 @@
 // Live sparkline of the balance-based spending scale: multiplier (y) as a
 // function of portfolio balance (x), for the floor/ceiling values currently in
 // the form. Lets users see the ramp they configured instead of guessing.
-import { Chart } from './chartSetup.js';
-import { balanceScaleMultiplier } from '../../core/withdrawal.js';
-import { parseCurrency, MONEY_SCALE } from '../../state/scenario.js';
-import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { balanceScaleMultiplier } from '../../../../core/withdrawal.js';
+import { parseCurrency, MONEY_SCALE } from '../../../../state/scenario.js';
+import { formatK } from '../../../../ui/format.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
 
 const SAMPLE_POINTS = 80;
 

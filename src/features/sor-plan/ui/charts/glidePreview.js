@@ -4,7 +4,7 @@
 // Years where the portfolio sits above this declining path recycle surplus
 // into extra spending, so the chart shows exactly when the lever can engage.
 // Hidden while the glide target is blank (lever off).
-import { Chart } from './chartSetup.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import {
   parseCurrency,
   MONEY_SCALE,
@@ -13,15 +13,15 @@ import {
   readSpendingOverTimeTiersFromDom,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
-} from '../../state/scenario.js';
+} from '../../../../state/scenario.js';
 import {
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
   buildGlideRequiredBalances,
-} from '../../core/withdrawal.js';
-import { formatK } from '../format.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange } from '../theme.js';
+} from '../../../../core/withdrawal.js';
+import { formatK } from '../../../../ui/format.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
 
 let sparkChart = null;
 let pendingFrame = null;

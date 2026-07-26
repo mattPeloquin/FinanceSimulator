@@ -3,7 +3,7 @@
 // can preview the chart while the section is closed. Uses the current
 // light/dark theme fill — never a forced print/light palette.
 
-import { Chart } from './chartSetup.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 
 const CHART_THUMB_IDS = {
   'details-surface-chart': 'surfaceChartThumb',

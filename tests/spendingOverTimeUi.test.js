@@ -7,7 +7,7 @@ import {
 import {
   toggleSpendingBonusSearchable,
   setupSpendingOverTimeTierList,
-} from '../src/ui/inputs.js';
+} from '../src/features/sor-plan/ui/inputs.js';
 
 function mountDom({ goalSeek = true, includeSpending = true } = {}) {
   document.body.innerHTML = `

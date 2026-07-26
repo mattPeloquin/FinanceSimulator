@@ -1,5 +1,5 @@
 // Renders the results section: headline metrics, percentile cards, and charts.
-import { formatK, formatPercent } from './format.js';
+import { formatK, formatPercent } from '../../../ui/format.js';
 import { drawTimelineCharts } from './charts/timeline.js';
 import { drawDistributionChart, drawAllYearsDistributionChart, drawIrrDistributionChart } from './charts/distribution.js';
 import { drawIrrScatter } from './charts/irrScatter.js';
@@ -22,7 +22,7 @@ import {
   isEarlyWeightingActive,
   median,
   withdrawalMetricLabels,
-} from '../core/statistics.js';
+} from '../../../core/statistics.js';
 
 const PERCENTILE_KEYS = ['p10', 'p20', 'p30', 'p40', 'p50', 'p60'];
 

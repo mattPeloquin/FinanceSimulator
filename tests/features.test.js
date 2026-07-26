@@ -127,7 +127,7 @@ describe('feature registry', () => {
     expect(badge.classList.contains('hidden')).toBe(true);
   });
 
-  it('initFeatures calls each feature init once', () => {
+  it('initFeatures calls each feature init once', async () => {
     const seen = [];
     registerFeature({
       id: 'sor-plan',
@@ -141,7 +141,7 @@ describe('feature registry', () => {
       rootId: 'feature-other',
       init: (ctx) => seen.push(['other', ctx.ok]),
     });
-    initFeatures({ ok: true });
+    await initFeatures({ ok: true });
     expect(seen).toEqual([
       ['sor-plan', true],
       ['other', true],

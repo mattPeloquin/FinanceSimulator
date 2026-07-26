@@ -9,10 +9,10 @@ import {
   normalizeGiftingTiers,
   readGiftingTiersFromDom,
   toDollars,
-} from '../../state/scenario.js';
-import { buildSpecificWithdrawalFloorSeries, buildGiftingSeries } from '../../core/withdrawal.js';
+} from '../../../../state/scenario.js';
+import { buildSpecificWithdrawalFloorSeries, buildGiftingSeries } from '../../../../core/withdrawal.js';
 import { buildSchedulePreviewChart, renderSchedulePreviewTotal } from './schedulePreviewChart.js';
-import { onThemeChange } from '../theme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
 
 let previewChart = null;
 let pendingFrame = null;

@@ -1,7 +1,7 @@
 // Live stacked-bar preview of Adjust allocation over time: each bar is one
 // simulation year, stacked by asset category. Uses the same interpolated
 // series the Monte Carlo engine consumes so the chart matches the run.
-import { Chart } from './chartSetup.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
 import {
   ALLOCATION_KEYS,
   ALLOCATION_LABELS,
@@ -9,13 +9,13 @@ import {
   normalizeAllocationOverTimeTiers,
   readAllocationOverTimeTiersFromDom,
   readStaticAllocationFromDom,
-} from '../../state/scenario.js';
+} from '../../../../state/scenario.js';
 import {
   buildAllocationOverTimeSeries,
   allocationKeyToEngine,
-} from '../../core/allocation.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange, themeTokens } from '../theme.js';
+} from '../../../../core/allocation.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, themeTokens } from '../../../../ui/theme.js';
 
 let previewChart = null;
 let pendingFrame = null;

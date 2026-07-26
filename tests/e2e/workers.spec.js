@@ -19,7 +19,8 @@ test('High core-usage parallel workers complete a simulation in dev', async ({ p
   // module), not a `?worker_file` module Worker — the latter shares the page ESM
   // cache and can hang after HMR until the browser process is killed.
   const workerImport = await page.evaluate(async () => {
-    const text = await (await fetch('/src/main.js')).text();
+    // Worker factory lives on the Plan run module (main.js is a thin bootstrap).
+    const text = await (await fetch('/src/features/sor-plan/run.js')).text();
     const match = text.match(/SimulationWorker from ["']([^"']+)["']/);
     return match ? match[1] : '';
   });

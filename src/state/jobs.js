@@ -87,7 +87,12 @@ export function start(feature, options) {
       } catch {
         /* ignore */
       }
-      options.onDone?.(msg);
+      try {
+        options.onDone?.(msg);
+      } catch (err) {
+        console.error(`job onDone failed for ${feature}`, err);
+        options.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
     } else if (msg?.type === 'error') {
       clearBadge(feature);
       cleanup(feature);

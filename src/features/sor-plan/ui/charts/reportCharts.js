@@ -2,11 +2,11 @@
 // Theme-aware on screen (light/dark); the report UI re-renders everything with
 // a forced-light palette before printing so a dark-mode PDF never wastes ink.
 
-import { Chart } from './chartSetup.js';
-import { formatK, formatPercent } from '../format.js';
-import { MONEY_SCALE, ALLOCATION_LABELS, ALLOCATION_CHART_KEYS } from '../../state/scenario.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { formatK, formatPercent } from '../../../../ui/format.js';
+import { MONEY_SCALE, ALLOCATION_LABELS, ALLOCATION_CHART_KEYS } from '../../../../state/scenario.js';
 import { smoothColumnSeries } from './withdrawalHeatmap.js';
-import { themeHex, themeTokens } from '../theme.js';
+import { themeHex, themeTokens } from '../../../../ui/theme.js';
 
 // Resolve the report palette for a mode. Print always uses 'light'.
 // Exported so report.js can build matching HTML legends (colored dots next

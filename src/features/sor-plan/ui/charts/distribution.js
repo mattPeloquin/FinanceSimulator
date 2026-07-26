@@ -1,8 +1,8 @@
 // Histograms of average annual and individual year real returns.
-import { Chart } from './chartSetup.js';
-import { getChartTheme, chartJsTooltip } from './chartTheme.js';
-import { onThemeChange, isDarkMode, themeHex, themeRgba } from '../theme.js';
-import { closestHistogramBin } from '../../core/statistics.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
+import { onThemeChange, isDarkMode, themeHex, themeRgba } from '../../../../ui/theme.js';
+import { closestHistogramBin } from '../../../../core/statistics.js';
 
 // Reference markers in priority order when two land on the same bin.
 const MARKERS = [

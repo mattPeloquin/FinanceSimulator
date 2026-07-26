@@ -5,7 +5,7 @@ import {
   saveAccordionState,
   setAccordionOpen,
 } from '../src/state/persistence.js';
-import { setupAccordionResize } from '../src/ui/inputs.js';
+import { setupAccordionResize } from '../src/features/sor-plan/ui/inputs.js';
 
 describe('accordion persistence', () => {
   beforeEach(() => {

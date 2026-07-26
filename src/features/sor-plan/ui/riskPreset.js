@@ -29,12 +29,12 @@ import {
   writeWithdrawalFloorsToDom,
   writeSpecificWithdrawalFloorsToDom,
   writeGiftingTiersToDom,
-} from '../state/scenario.js';
+} from '../../../state/scenario.js';
 import {
   presetForLevel,
   computeDerivedPresetValues,
   DEFAULT_PRESET_LEVEL,
-} from '../state/presets/index.js';
+} from '../../../state/presets/index.js';
 import {
   toggleDistMethod,
   refreshDynamicAdjustmentPreviews,

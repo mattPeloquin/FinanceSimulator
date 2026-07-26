@@ -5,10 +5,10 @@
 // tooltip, and the line chart's own hover highlights the matching bar.
 // Shared by the 3D chart's sample-run dialog and the sequence-risk scatter's
 // drill-down.
-import { Chart } from './chartSetup.js';
-import { getChartTheme } from './chartTheme.js';
-import { formatK } from '../format.js';
-import { returnColorWithAlpha } from './returnColors.js';
+import { Chart } from '../../../../ui/charts/chartSetup.js';
+import { getChartTheme } from '../../../../ui/charts/chartTheme.js';
+import { formatK } from '../../../../ui/format.js';
+import { returnColorWithAlpha } from '../../../../ui/charts/returnColors.js';
 
 const BAR_ALPHA = 0.72; // non-highlighted bars; the hovered bar goes fully opaque
 

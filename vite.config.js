@@ -27,7 +27,9 @@ export default defineConfig({
     handlebars({
       partialDirectory: [
         resolve(__dirname, 'src/partials'),
-        ...getDirectories(resolve(__dirname, 'src/partials'))
+        ...getDirectories(resolve(__dirname, 'src/partials')),
+        resolve(__dirname, 'src/features/sor-plan/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/sor-plan/partials')),
       ],
     }),
     viteSingleFile(),

@@ -8,14 +8,14 @@ import {
   normalizeGiftingTiers,
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
-} from '../state/scenario.js';
-import { allocationSummary } from '../core/reportModel.js';
+} from '../../../state/scenario.js';
+import { allocationSummary } from '../../../core/reportModel.js';
 import {
   buildSpendingOverTimeSeries,
   buildBaseWithdrawalSchedule,
   buildGiftingSeries,
-} from '../core/withdrawal.js';
-import { formatK } from './format.js';
+} from '../../../core/withdrawal.js';
+import { formatK } from '../../../ui/format.js';
 
 const DIST_METHOD_SHORT = {
   resampling: 'Historical resampling',

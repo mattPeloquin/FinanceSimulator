@@ -211,3 +211,23 @@ test('Historical IRR band survives a year selection shorter than the horizon', a
   await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
 });
+
+test('Find Best Plan completes and shows results', async ({ page }) => {
+  // Goal Seek runs many Monte Carlo passes; keep sims low for a stable smoke.
+  test.slow();
+  await page.goto('/');
+  await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
+
+  await expect(page.locator('#runButton')).toHaveText('Find Best Plan');
+  await page.fill('#startBalance', '2000');
+  await page.press('#startBalance', 'Enter');
+  await page.locator('#section-advanced').evaluate((el) => { el.open = true; });
+  await page.fill('#numSimulations', '400');
+  await page.selectOption('#parallelCores', 'med');
+
+  await page.click('#runButton');
+  await expect(page.locator('#loadingIndicator')).toBeVisible();
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator('#loadingIndicator')).toBeHidden();
+  await expect(page.locator('#successRate')).toContainText('%');
+});
