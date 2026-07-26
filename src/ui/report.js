@@ -247,8 +247,7 @@ function renderFull({ forceLight = false } = {}) {
   if (bandLabel && snap.band) {
     bandLabel.textContent = `${snap.band.lowLabel}–${snap.band.highLabel}`;
   }
-  const taxNote = document.getElementById('reportBandTaxNote');
-  if (taxNote) taxNote.classList.toggle('hidden', !snap.taxActive);
+  setTaxNotesVisible(snap.taxActive);
 
   const depNote = document.getElementById('reportDepletionNote');
   const depWrap = document.getElementById('reportDepletionChartWrap');
@@ -325,9 +324,19 @@ export function ensureReportPainted() {
   applyThemeOverrideClass();
 }
 
+/** Show/hide every Plan Snapshot "after taxes" badge from one taxActive flag. */
+function setTaxNotesVisible(taxActive) {
+  for (const id of ['planReportTaxNote', 'reportTitleTaxNote', 'reportBandTaxNote']) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !taxActive);
+  }
+}
+
 export function onNewRun(run) {
   lastRun = run;
   dirty = true;
+  // Accordion badge should update even while the report stays closed.
+  setTaxNotesVisible(!!run?.result?.withdrawalTaxActive);
   const details = document.getElementById('details-plan-report');
   if (details?.open) {
     renderFull();

@@ -32,7 +32,8 @@ import {
 } from './chartTheme.js';
 import { onThemeChange, isDarkMode } from '../theme.js';
 import { formatK, formatPercent } from '../format.js';
-import { regeneratePath } from '../../core/simulation.js';
+import { regeneratePath, chartPathFromRegen } from '../../core/simulation.js';
+import { withdrawalTaxSeriesActive } from '../../core/feesTaxes.js';
 import { percentileLabelForRank } from '../../core/surfaceDrilldown.js';
 import { createLinkedBalanceBars } from './balanceBars.js';
 import { heatmapRowLayout, EMPHASIS_DEFAULT } from './yearEmphasis.js';
@@ -1064,30 +1065,32 @@ function renderPathChart(col, simIndex) {
 
   const hm = state.heatmap;
   const re = regeneratePath(state.params, state.seed, simIndex);
+  const useNetSpend = withdrawalTaxSeriesActive(state.params.portfolio?.withdrawalTaxSeries);
+  const display = chartPathFromRegen(re, { useNetSpend });
   const outcomeIndex = state.outcome ? state.outcome[simIndex] : 0;
   const pctLabel = percentileLabelForRank(hm.colCenterRank[col], hm.numSimulations);
-  const meanYr = re.horizonYears > 0 ? re.totalWithdrawn / re.horizonYears : 0;
+  const meanYr = display.horizonYears > 0 ? display.totalWithdrawn / display.horizonYears : 0;
   // Skip "Met plan" / "Ran out" prefixes (legend/color already signal outcome).
   // Keep "Below plan", and the depleted-year note without a "Ran out" label.
   const outcomeBits = [];
   if (outcomeIndex === 1) outcomeBits.push('Below plan');
-  if (outcomeIndex === 2 && re.depletionYear !== Infinity) {
-    outcomeBits.push(`ran out year ${re.depletionYear}`);
+  if (outcomeIndex === 2 && display.depletionYear !== Infinity) {
+    outcomeBits.push(`ran out year ${display.depletionYear}`);
   }
 
   if (titleEl) titleEl.textContent = `Simulation #${simIndex + 1} · ${pctLabel}`;
   if (metaEl) {
     metaEl.textContent = [
       ...outcomeBits,
-      `Avg Return ${formatPercent(re.avgReturn)}`,
-      `Total ${formatK(re.totalWithdrawn)}`,
+      `Avg Return ${formatPercent(display.avgReturn)}`,
+      `Total ${formatK(display.totalWithdrawn)}`,
       `Mean / Year ${formatK(meanYr)}`,
-      `End Balance ${formatK(re.finalBalance)}`,
+      `End Balance ${formatK(display.finalBalance)}`,
     ].join(' · ');
   }
   container.classList.remove('hidden');
 
-  const { withdrawals, unadjustedWithdrawals, balances, returns } = re.path;
+  const { withdrawals, unadjustedWithdrawals, balances, returns, withdrawalBreakdown } = display;
   const series = {
     labels: withdrawals.map((_, y) => y + 1),
     actualData: withdrawals,
@@ -1103,7 +1106,7 @@ function renderPathChart(col, simIndex) {
     bal: balances[dataIndex + 1],
     wd: withdrawals[dataIndex],
     unadj: unadjustedWithdrawals[dataIndex],
-    breakdown: re.path.withdrawalBreakdown?.[dataIndex] ?? null,
+    breakdown: withdrawalBreakdown?.[dataIndex] ?? null,
   });
 
   const theme = getChartTheme();

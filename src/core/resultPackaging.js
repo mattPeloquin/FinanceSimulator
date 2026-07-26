@@ -3,7 +3,7 @@
 // normal "Run Simulation" and the Goal Seek search's final confirmation run
 // can share the exact same rendering path.
 
-import { regeneratePath } from './simulation.js';
+import { regeneratePath, chartPathFromRegen } from './simulation.js';
 import {
   rankByWithdrawn,
   percentileIndex,
@@ -80,8 +80,14 @@ export function buildWithdrawalHeatmapSource(
   planByYear,
   maxYears,
   classicByYear = null,
+  { useNetSpend = false } = {},
 ) {
-  const matrix = result.allYearsWithdrawals;
+  // When withdrawal tax is modeled, Plan Snapshot charts show spend you keep
+  // (net). Otherwise use portfolio withdrawals (gross), which match net when
+  // tax is off.
+  const matrix = (useNetSpend && result.allYearsNetSpend)
+    ? result.allYearsNetSpend
+    : result.allYearsWithdrawals;
   const span = Math.max(1, hiRank - loRank + 1);
   const sourceValues = new Float32Array(span * maxYears);
   sourceValues.fill(NaN);
@@ -223,7 +229,15 @@ export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, planByYear
 // averaging the band of runs whose withdrawal rank sits within ±halfW of the
 // target rank. When horizons differ, each year renormalizes weights over runs
 // still active at that year.
-function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetric = null) {
+function smoothedPercentile(
+  params,
+  result,
+  rankW,
+  centerRank,
+  halfW,
+  rankedMetric = null,
+  { useNetSpend = false } = {},
+) {
   const lo = Math.max(0, centerRank - halfW);
   const hi = Math.min(rankW.length - 1, centerRank + halfW);
 
@@ -282,12 +296,15 @@ function smoothedPercentile(params, result, rankW, centerRank, halfW, rankedMetr
 
   for (const e of entries) {
     const p = e.path;
+    // When tax is on, average the after-tax net series so Outcomes timelines
+    // and Explore share the same spend basis as the headline cards.
+    const wdSeries = (useNetSpend && p.netSpend) ? p.netSpend : p.withdrawals;
     for (let t = 0; t < p.balances.length; t++) {
       balances[t] += e.w * p.balances[t];
       weightByYearBal[t] += e.w;
     }
-    for (let t = 0; t < p.withdrawals.length; t++) {
-      withdrawals[t] += e.w * p.withdrawals[t];
+    for (let t = 0; t < wdSeries.length; t++) {
+      withdrawals[t] += e.w * wdSeries[t];
       returns[t] += e.w * p.returns[t];
       unadjustedWithdrawals[t] += e.w * (p.unadjustedWithdrawals?.[t] ?? 0);
       weightByYearWd[t] += e.w;
@@ -335,6 +352,7 @@ function buildSurfacePathEntry(
   withdrawalMetric,
   rankingWeighting,
   rankedMetric,
+  { useNetSpend = false } = {},
 ) {
   const re = regeneratePath(params, result.baseSeed, simIndex);
   const h = re.horizonYears;
@@ -344,15 +362,20 @@ function buildSurfacePathEntry(
       weightedPlannedBenchmark(params.portfolio, h, withdrawalMetric, rankingWeighting),
     );
   }
+  const display = chartPathFromRegen(re, { useNetSpend });
+  // Prefer packaged per-run arrays so surface totals stay consistent with the
+  // rest of the result package (and with ranking when early-weighting is on).
+  const totalWithdrawn = useNetSpend
+    ? (result.totalNetSpend?.[simIndex] ?? result.totalWithdrawn[simIndex])
+    : result.totalWithdrawn[simIndex];
+  const medianYearlyWithdrawal = useNetSpend
+    ? (result.medianYearlyNetSpend?.[simIndex] ?? result.medianYearlyWithdrawal[simIndex])
+    : result.medianYearlyWithdrawal[simIndex];
   return {
-    balances: re.path.balances,
-    returns: re.path.returns,
-    withdrawals: re.path.withdrawals,
-    unadjustedWithdrawals: re.path.unadjustedWithdrawals,
-    withdrawalBreakdown: re.path.withdrawalBreakdown,
-    totalWithdrawn: result.totalWithdrawn[simIndex],
-    earlyWeightedScore: rankedMetric ? rankedMetric[simIndex] : result.totalWithdrawn[simIndex],
-    medianYearlyWithdrawal: result.medianYearlyWithdrawal[simIndex],
+    ...display,
+    totalWithdrawn,
+    earlyWeightedScore: rankedMetric ? rankedMetric[simIndex] : totalWithdrawn,
+    medianYearlyWithdrawal,
     avgReturn: result.avgReturn[simIndex],
     irr: result.irr[simIndex],
     horizonYears: h,
@@ -440,6 +463,10 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   };
   const earlyWeightingActive = isEarlyWeightingActive(rankingWeighting);
 
+  const taxSeries = params.portfolio?.withdrawalTaxSeries;
+  const taxActive = withdrawalTaxSeriesActive(taxSeries);
+  const advisorFeeActive = (params.portfolio?.advisorFeeRate ?? 0) > 0;
+
   const rankedMetric = perRunWithdrawalMetric(result, withdrawalMetric, rankingWeighting);
   const rankW = rankByWithdrawn(result, withdrawalMetric, rankingWeighting);
   const halfW = Math.round((params.smoothFraction || 0) * n);
@@ -453,6 +480,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       centerRank,
       halfW,
       rankedMetric,
+      { useNetSpend: taxActive },
     );
   }
 
@@ -473,6 +501,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
       withdrawalMetric,
       rankingWeighting,
       rankedMetric,
+      { useNetSpend: taxActive },
     ));
   }
 
@@ -480,6 +509,8 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   // of year index (growth factors accumulate by year, and specific-withdrawal
   // lists are pre-fitted to maxYears in buildSimParams), so one per-year array
   // is the correct plan for every run regardless of its sampled horizon.
+  // Plan amounts are net spend targets; when tax is on the band uses net spend
+  // too so the plan line and cloud share one after-tax dollar scale.
   const heatmapPlanByYear = Float64Array.from(plannedYearlySchedule(params.portfolio, maxYears));
   // Flat classic 4% of start — second baseline for the "vs 4%" delta encoding.
   const heatmapClassicByYear = buildClassicFourPercentByYear(params.portfolio?.start, maxYears);
@@ -494,6 +525,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     heatmapPlanByYear,
     maxYears,
     heatmapClassicByYear,
+    { useNetSpend: taxActive },
   );
 
   const histogram = buildHistogram(result.avgReturn, HISTOGRAM_BINS);
@@ -506,9 +538,6 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const plannedWithdrawn = plannedScheduleTotal(params.portfolio, endpointYears);
   const plannedMedianYearly = plannedScheduleMedianYearly(params.portfolio, endpointYears);
   const plannedMeanYearly = plannedScheduleMeanYearly(params.portfolio, endpointYears);
-  const taxSeries = params.portfolio?.withdrawalTaxSeries;
-  const taxActive = withdrawalTaxSeriesActive(taxSeries);
-  const advisorFeeActive = (params.portfolio?.advisorFeeRate ?? 0) > 0;
   const netPlanSchedule = plannedYearlySchedule(params.portfolio, endpointYears);
   const grossPlanSchedule = taxActive
     ? grossUpPlanSchedule(netPlanSchedule, taxSeries)
@@ -682,7 +711,11 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     returnScatter: {
       avgReturn: result.avgReturn,
       irr: result.irr,
+      // Gross portfolio outflows (tax + spend). Kept for IRR scatter axes.
       totalWithdrawn: result.totalWithdrawn,
+      // Spend kept after withdrawal tax — Plan Snapshot metric bands use this
+      // when tax is active so headlines match the Outcomes "after taxes" view.
+      totalNetSpend: result.totalNetSpend ?? result.totalWithdrawn,
       horizonYears: result.horizonYears,
       finalBalance: result.finalBalance,
       outcome: scatterOutcome,

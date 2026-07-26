@@ -2,7 +2,10 @@
 <details id="details-plan-report" class="group border rounded-lg">
     <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
         <div class="min-w-0 flex-1">
-            <span class="block">Plan Snapshot (one-page report)</span>
+            <span class="flex items-center gap-2 flex-wrap">
+                Plan Snapshot (one-page report)
+                <span id="planReportTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span>
+            </span>
             <p class="text-xs font-normal text-theme-faint mt-0.5">Printable one-page summary of success, spending bands, and your plan.</p>
         </div>
         <span class="ml-auto flex items-center gap-2 shrink-0">
@@ -94,9 +97,13 @@
                         </div>
                     </div>
                     <!-- Middle: two equal-weight verdict stats, colored to match the donut rings
-                         (not depleted = success/green, on plan = accent/purple), with the pill above. -->
+                         (not depleted = success/green, on plan = accent/purple), with status
+                         (+ optional after-taxes) pills above. -->
                     <div class="shrink-0 flex flex-col items-center justify-center md:w-[2in]">
-                        <span id="reportVerdictPill" class="inline-flex mb-2 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold"></span>
+                        <div class="flex items-center justify-center gap-3 flex-wrap mb-2">
+                            <span id="reportTitleTaxNote" class="hidden inline-flex px-1.5 py-0.5 rounded-full border border-theme-accent/40 bg-theme-accent-subtle text-theme-accent-text print:bg-slate-100 print:text-slate-700 print:border-slate-300 text-[10px] font-semibold uppercase tracking-wider">after taxes</span>
+                            <span id="reportVerdictPill" class="inline-flex px-1.5 py-0.5 rounded-full border text-[10px] font-semibold"></span>
+                        </div>
                         <div class="grid grid-cols-2 gap-3 text-center w-full">
                             <div class="flex flex-col items-center">
                                 <span id="reportHeroSuccess" class="text-3xl leading-none font-extrabold">—</span>
@@ -123,7 +130,7 @@
                             <span class="inline-block w-1.5 h-5 rounded-sm bg-theme-accent print:bg-slate-800" aria-hidden="true"></span>
                             Withdrawal possibilities
                         </h4>
-                        <span class="inline-flex items-center rounded-full bg-theme-accent-subtle text-theme-accent-text print:bg-slate-100 print:text-slate-700 px-2 py-0.5 text-[10px] font-semibold"><span id="reportBandLabel"></span><span id="reportBandTaxNote" class="hidden"> · gross (before taxes)</span></span>
+                        <span class="inline-flex items-center rounded-full bg-theme-accent-subtle text-theme-accent-text print:bg-slate-100 print:text-slate-700 px-2 py-0.5 text-[10px] font-semibold"><span id="reportBandLabel"></span><span id="reportBandTaxNote" class="hidden"> · after taxes</span></span>
                     </div>
                     <div class="h-[3.2in] w-full relative">
                         <canvas id="reportBandCanvas" class="w-full h-full"></canvas>

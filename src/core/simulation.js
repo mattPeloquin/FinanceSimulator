@@ -267,11 +267,13 @@ export function simulatePath(
 
   const balances = collectPath ? [balance] : null;
   const withdrawals = collectPath ? [] : null;
+  // Parallel net-spend series for Explore / Outcomes charts when tax is on.
+  const netSpend = collectPath ? [] : null;
   const returns = collectPath ? [] : null;
   const unadjustedWithdrawals = collectPath ? [] : null;
   // Per-year dollar attribution of actual withdrawal vs plan (chart tooltips only).
   const withdrawalBreakdown = collectPath ? [] : null;
-  // Per-year actual portfolio outflows (gross) — heatmap / IRR cash flows.
+  // Per-year actual portfolio outflows (gross) — IRR cash flows / pre-tax views.
   const yearlyWithdrawals = new Array(horizonYears);
   // Per-year net spending delivered (ex tax, ex major-event outflows) — on-plan.
   const yearlyNetSpend = new Array(horizonYears);
@@ -774,6 +776,7 @@ export function simulatePath(
 
     if (balances) balances.push(balance);
     if (withdrawals) withdrawals.push(actualWithdrawal);
+    if (netSpend) netSpend.push(netSpendDelivered);
     if (unadjustedWithdrawals) unadjustedWithdrawals.push(unadjustedTarget);
   }
 
@@ -819,7 +822,14 @@ export function simulatePath(
   };
 
   if (collectPath) {
-    summary.path = { balances, withdrawals, returns, unadjustedWithdrawals, withdrawalBreakdown };
+    summary.path = {
+      balances,
+      withdrawals,
+      netSpend,
+      returns,
+      unadjustedWithdrawals,
+      withdrawalBreakdown,
+    };
   }
 
   return summary;
@@ -932,4 +942,32 @@ export function runMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
 export function regeneratePath(params, baseSeed, index) {
   const rng = createRng(deriveSeed(baseSeed >>> 0, index));
   return simulatePath(params, rng, true);
+}
+
+/**
+ * Shape a simulatePath / regeneratePath summary for Explore, heatmap, and
+ * Outcomes timeline charts. When useNetSpend is true (withdrawal tax on),
+ * plotted withdrawals are what you keep after tax — same basis as Outcomes
+ * cards and Plan Snapshot.
+ */
+export function chartPathFromRegen(re, { useNetSpend = false } = {}) {
+  const path = re?.path || {};
+  const netSeries = path.netSpend;
+  const useNet = !!(useNetSpend && netSeries);
+  return {
+    balances: path.balances,
+    returns: path.returns,
+    withdrawals: useNet ? netSeries : path.withdrawals,
+    unadjustedWithdrawals: path.unadjustedWithdrawals,
+    withdrawalBreakdown: path.withdrawalBreakdown,
+    totalWithdrawn: useNet ? (re.totalNetSpend ?? re.totalWithdrawn) : re.totalWithdrawn,
+    medianYearlyWithdrawal: useNet
+      ? (re.medianYearlyNetSpend ?? re.medianYearlyWithdrawal)
+      : re.medianYearlyWithdrawal,
+    avgReturn: re.avgReturn,
+    irr: re.irr,
+    horizonYears: re.horizonYears,
+    finalBalance: re.finalBalance,
+    depletionYear: re.depletionYear,
+  };
 }

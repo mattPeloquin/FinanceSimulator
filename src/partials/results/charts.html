@@ -4,7 +4,10 @@
     <details id="details-surface-chart" class="group border rounded-lg">
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
             <div class="min-w-0 flex-1">
-                <span id="surfaceChartTitle" class="block">Explore Specific Paths</span>
+                <span class="flex items-center gap-2 flex-wrap">
+                    <span id="surfaceChartTitle">Explore Specific Paths</span>
+                    <span id="surfaceTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span>
+                </span>
                 <p class="text-xs font-normal text-theme-faint mt-0.5">3D sample paths by outcome percentile — click a column to inspect a run.</p>
             </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">
@@ -45,7 +48,10 @@
     <details id="details-withdrawal-heatmap" class="group border rounded-lg">
         <summary class="cursor-pointer select-none px-4 py-3 font-semibold text-theme-body flex items-center gap-3">
             <div class="min-w-0 flex-1">
-                <span class="block">Withdrawal Heatmap</span>
+                <span class="flex items-center gap-2 flex-wrap">
+                    Withdrawal Heatmap
+                    <span id="heatmapTaxNote" class="hidden inline-flex items-center bg-theme-accent-subtle text-theme-accent-text text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">after taxes</span>
+                </span>
                 <p class="text-xs font-normal text-theme-faint mt-0.5">Year-by-year withdrawals for every run, ranked by outcome.</p>
             </div>
             <span class="ml-auto flex items-center gap-2 shrink-0">

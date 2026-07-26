@@ -206,6 +206,8 @@ function applyMetricLabels(metric, horizonVariable, weighting = null, { taxActiv
   const descEl = document.getElementById('outcomesDescription');
   if (descEl && horizonNote) descEl.textContent += horizonNote;
   setNoteVisible('outcomesTaxNote', taxActive);
+  setNoteVisible('surfaceTaxNote', taxActive);
+  setNoteVisible('heatmapTaxNote', taxActive);
 
   const deltaTitle = earlyWeighted
     ? 'Difference from the planned early-weighted spending'

@@ -247,6 +247,28 @@ describe('buildRunResult withdrawal tax packaging', () => {
     expect(packaged.medianNetSpend).toBeLessThan(packaged.medianWithdrawn);
     expect(packaged.plannedGrossTotal).toBeGreaterThan(packaged.plannedWithdrawn);
     expect(packaged.percentiles.p50.totalNetSpend).toBeLessThan(packaged.percentiles.p50.totalWithdrawn);
+    // Scatter + heatmap use after-tax net spend for Plan Snapshot when tax is on.
+    expect(packaged.returnScatter.totalNetSpend).toBe(raw.totalNetSpend);
+    const hm = packaged.withdrawalHeatmap;
+    for (const i of [0, 10, 20]) {
+      const simIndex = hm.sourceSimIndex[i];
+      for (const j of [0, 4, 9]) {
+        expect(hm.sourceValues[i * numYears + j]).toBe(
+          raw.allYearsNetSpend[simIndex * numYears + j],
+        );
+        expect(hm.sourceValues[i * numYears + j]).toBeLessThan(
+          raw.allYearsWithdrawals[simIndex * numYears + j],
+        );
+      }
+    }
+    // Explore surface paths and Outcomes percentile timelines also plot net spend.
+    const simAtP5 = packaged.surfaceMeta.rankW[packaged.surfaceMeta.p5Rank];
+    const surface = packaged.surfacePaths[0];
+    expect(surface.totalWithdrawn).toBeCloseTo(raw.totalNetSpend[simAtP5], 3);
+    expect(surface.totalWithdrawn).toBeLessThan(raw.totalWithdrawn[simAtP5]);
+    expect(surface.withdrawals[0]).toBeCloseTo(raw.allYearsNetSpend[simAtP5 * numYears], 3);
+    // Path year-0 net should sit near the planned base (spend), not the grossed-up outflow.
+    expect(packaged.percentiles.p50.path.withdrawals[0]).toBeCloseTo(40_000, -2);
   });
 
   it('leaves tax inactive and planned gross equal to net when tax is off', () => {

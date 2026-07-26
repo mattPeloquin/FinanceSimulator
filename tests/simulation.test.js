@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { simulatePath, runMonteCarlo, regeneratePath, sumWithdrawalBreakdown } from '../src/core/simulation.js';
+import {
+  simulatePath,
+  runMonteCarlo,
+  regeneratePath,
+  chartPathFromRegen,
+  sumWithdrawalBreakdown,
+} from '../src/core/simulation.js';
 import { formatWithdrawalBreakdownLine } from '../src/ui/charts/surface3d.js';
 import { createRng, deriveSeed } from '../src/core/rng.js';
 import { successRate } from '../src/core/statistics.js';
@@ -254,9 +260,44 @@ describe('regeneratePath', () => {
       // The regenerated path arrays are populated and self-consistent.
       expect(re.path.balances.length).toBe(params.numYears + 1);
       expect(re.path.withdrawals.length).toBe(params.numYears);
+      expect(re.path.netSpend.length).toBe(params.numYears);
       expect(re.path.returns.length).toBe(params.numYears);
       expect(re.path.balances[re.path.balances.length - 1]).toBeCloseTo(re.finalBalance, 6);
     }
+  });
+});
+
+describe('chartPathFromRegen', () => {
+  it('switches plotted withdrawals to net spend when requested', () => {
+    const numYears = 8;
+    const taxSeries = Array.from({ length: numYears }, () => ({
+      taxRate: 0.25,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const params = lognormalParams({
+      numYears,
+      numSimulations: 1,
+      allocation: { usLgGrowth: 0, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 1 },
+      logNormal: {
+        ...logNormalProfiles,
+        cash: { mean: 0.04, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+      },
+      portfolio: {
+        start: 1_000_000,
+        base: 40_000,
+        withdrawalTaxSeries: taxSeries,
+      },
+      dynConfig: { enabled: false },
+    });
+    const re = regeneratePath(params, 1, 0);
+    const gross = chartPathFromRegen(re, { useNetSpend: false });
+    const net = chartPathFromRegen(re, { useNetSpend: true });
+    expect(gross.withdrawals[0]).toBe(re.path.withdrawals[0]);
+    expect(net.withdrawals[0]).toBe(re.path.netSpend[0]);
+    expect(net.totalWithdrawn).toBe(re.totalNetSpend);
+    expect(net.totalWithdrawn).toBeLessThan(gross.totalWithdrawn);
   });
 });
 

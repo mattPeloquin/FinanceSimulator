@@ -87,6 +87,13 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await expect(page.locator('#reportFourPctSpend')).toBeVisible();
   await expect(page.locator('#reportFourPctSurvival')).toBeVisible();
 
+  // Tax-mode badges stay hidden until withdrawal tax is active.
+  // In-report after-taxes pill shares a row with the status pill.
+  await expect(page.locator('#planReportTaxNote')).toBeHidden();
+  await expect(page.locator('#reportTitleTaxNote')).toBeHidden();
+  await expect(page.locator('#reportBandTaxNote')).toBeHidden();
+  await expect(page.locator('#reportVerdictPill').locator('xpath=..').locator('#reportTitleTaxNote')).toHaveCount(1);
+
   // Generated date + simulation count moved to the footer.
   await expect(page.locator('#reportFooterMeta')).toContainText(/simulations/i);
 

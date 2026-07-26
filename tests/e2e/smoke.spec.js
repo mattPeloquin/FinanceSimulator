@@ -106,6 +106,10 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#details-withdrawal-heatmap > summary')).toContainText(
     'Year-by-year withdrawals',
   );
+  // After-taxes accordion pills exist but stay hidden when tax mode is off.
+  await expect(page.locator('#surfaceTaxNote')).toBeHidden();
+  await expect(page.locator('#heatmapTaxNote')).toBeHidden();
+  await expect(page.locator('#outcomesTaxNote')).toBeHidden();
 
   // Chart canvases sit inside closed-by-default <details>; open the ones we assert.
   await page.locator('#details-simulation-outcomes').evaluate((el) => { el.open = true; });

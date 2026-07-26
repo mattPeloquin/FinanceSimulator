@@ -149,21 +149,15 @@ export function seriesPercentileBand(values, pLow, pHigh) {
 
 /**
  * Deterministic "Plan" column values for the snapshot metric grid.
- * Spending rows use the planned schedule (gross when withdrawal tax is on, so
- * they sit on the same dollar scale as the simulation totalWithdrawn series).
+ * Spending rows use the planned net schedule (what you spend / receive) so they
+ * stay on the same after-tax dollar scale as the simulation bands when tax is on.
  * End Balance is the Target Ending Balance from Find Best Plan ($000s on the
  * scenario → dollars here). Avg Return is the break-even / required IRR that
  * funds the planned schedule — the plan's natural return counterpart.
  */
 function planMetricValues(result, scenario) {
-  const taxActive = !!result?.withdrawalTaxActive;
-  // Portfolio withdrawals are gross of withdrawal tax; match that scale when tax is on.
-  const planTotal = taxActive
-    ? (result.plannedGrossTotal ?? result.plannedWithdrawn)
-    : result?.plannedWithdrawn;
-  const planMean = taxActive
-    ? (result.plannedGrossMeanYearly ?? result.plannedMeanYearly)
-    : result?.plannedMeanYearly;
+  const planTotal = result?.plannedWithdrawn;
+  const planMean = result?.plannedMeanYearly;
 
   const targetK = scenario?.goalSeekTargetEndingBalance;
   const targetNum = targetK == null || targetK === '' ? NaN : Number(targetK);
@@ -181,9 +175,8 @@ function planMetricValues(result, scenario) {
 /**
  * Compact headline bands for the Plan Snapshot verdict card: Mean / Year,
  * Total Withdrawn, End Balance, and Avg Return. Columns are Plan (deterministic
- * schedule) then P-low / median / P-high from the report sliders. Dollar series
- * come from the packaged returnScatter (gross withdrawals — same source as the
- * IRR scatter).
+ * schedule) then P-low / median / P-high from the report sliders. When withdrawal
+ * tax is active, spending rows use after-tax net spend (same basis as Outcomes).
  */
 export function snapshotMetricBands(result, pLow, pHigh, scenario = null) {
   const scatter = result?.returnScatter;
@@ -199,11 +192,17 @@ export function snapshotMetricBands(result, pLow, pHigh, scenario = null) {
     };
   }
 
+  const taxActive = !!result?.withdrawalTaxActive;
+  // Net spend when tax is on; otherwise portfolio withdrawals (= net with tax off).
+  const spendTotals = taxActive
+    ? (scatter.totalNetSpend ?? scatter.totalWithdrawn)
+    : scatter.totalWithdrawn;
+
   const plan = planMetricValues(result, scenario);
-  const meanYearly = meanYearlyWithdrawals(scatter.totalWithdrawn, scatter.horizonYears);
+  const meanYearly = meanYearlyWithdrawals(spendTotals, scatter.horizonYears);
   const rows = [
     { id: 'meanYear', label: 'Mean / Year', kind: 'dollars', plan: plan.meanYear, ...seriesPercentileBand(meanYearly, pLow, pHigh) },
-    { id: 'total', label: 'Total Withdrawn', kind: 'dollars', plan: plan.total, ...seriesPercentileBand(scatter.totalWithdrawn, pLow, pHigh) },
+    { id: 'total', label: 'Total Withdrawn', kind: 'dollars', plan: plan.total, ...seriesPercentileBand(spendTotals, pLow, pHigh) },
     { id: 'endBalance', label: 'End Balance', kind: 'dollars', plan: plan.endBalance, ...seriesPercentileBand(scatter.finalBalance, pLow, pHigh) },
     { id: 'avgReturn', label: 'Avg Return', kind: 'percent', plan: plan.avgReturn, ...seriesPercentileBand(scatter.avgReturn, pLow, pHigh) },
   ];

@@ -187,6 +187,60 @@ describe('buildPlanSnapshot', () => {
     expect(snap.shortfallTolerance).toBe(packaged.shortfallTolerance);
     expect(snap.planBullets.some((b) => /base/i.test(b))).toBe(true);
     expect(snap.nextMoves).toBeUndefined();
+    expect(snap.taxActive).toBe(false);
+  });
+
+  it('uses after-tax net spend for metric bands when tax is active', () => {
+    const numYears = 15;
+    const taxSeries = Array.from({ length: numYears }, () => ({
+      taxRate: 0.2,
+      applyToGifts: true,
+      spendBrackets: [],
+    }));
+    const taxedParams = params({
+      numYears,
+      numSimulations: 80,
+      seed: 11,
+      allocation: { usLgGrowth: 0, usLgValue: 0, usSmMid: 0, exUs: 0, bond: 0, cash: 1 },
+      logNormal: {
+        ...logNormalProfiles,
+        cash: { mean: 0.04, stdDev: 0 },
+        inflation: { mean: 0, stdDev: 0 },
+      },
+      portfolio: {
+        start: 1_000_000,
+        base: 40_000,
+        advisorFeeRate: 0,
+        withdrawalTaxSeries: taxSeries,
+      },
+      dynConfig: { enabled: false },
+    });
+    const taxedPackaged = buildRunResult(taxedParams, runMonteCarlo(taxedParams));
+    expect(taxedPackaged.withdrawalTaxActive).toBe(true);
+
+    const snap = buildPlanSnapshot(taxedPackaged, {
+      ...scenario,
+      numYears,
+      enableFeesTaxes: true,
+      withdrawalTaxTiers: [{ taxPct: 20, spendBrackets: [] }],
+    }, null, { pLow: 10, pHigh: 90 });
+    expect(snap.taxActive).toBe(true);
+
+    const totalRow = snap.metrics.rows.find((r) => r.id === 'total');
+    const meanRow = snap.metrics.rows.find((r) => r.id === 'meanYear');
+    // Plan column stays on the net schedule (what you spend), not grossed-up.
+    expect(totalRow.plan).toBe(taxedPackaged.plannedWithdrawn);
+    expect(meanRow.plan).toBe(taxedPackaged.plannedMeanYearly);
+    expect(totalRow.plan).toBeLessThan(taxedPackaged.plannedGrossTotal);
+
+    // Simulation columns are after-tax net, not portfolio gross outflows.
+    expect(totalRow.median).toBeLessThan(taxedPackaged.medianWithdrawn);
+    expect(Math.abs(totalRow.median - taxedPackaged.medianNetSpend))
+      .toBeLessThan(Math.abs(totalRow.median - taxedPackaged.medianWithdrawn));
+
+    // Withdrawal cloud plan line is the net schedule (same dollars as Plan column).
+    const planYearSum = snap.band.plan.reduce((a, b) => a + b, 0);
+    expect(planYearSum).toBeCloseTo(taxedPackaged.plannedWithdrawn, 3);
   });
 
   it('mentions fees when enableFeesTaxes is on', () => {

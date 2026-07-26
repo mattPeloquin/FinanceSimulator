@@ -1,7 +1,8 @@
 // Rank-window helpers for 3D surface overview sampling and drill-down.
-import { regeneratePath } from './simulation.js';
+import { regeneratePath, chartPathFromRegen } from './simulation.js';
 import { mulberry32, deriveSeed } from './rng.js';
 import { percentileIndex } from './statistics.js';
+import { withdrawalTaxSeriesActive } from './feesTaxes.js';
 
 export const SURFACE_DRILLDOWN_SAMPLES = 200;
 export const SURFACE_OVERVIEW_SAMPLES = 200;
@@ -52,19 +53,9 @@ export function percentileLabelForRank(rank, n, decimals = 0) {
   return 'P' + Math.round(pct);
 }
 
-function pathEntryFromRegen(re) {
-  return {
-    balances: re.path.balances,
-    returns: re.path.returns,
-    withdrawals: re.path.withdrawals,
-    unadjustedWithdrawals: re.path.unadjustedWithdrawals,
-    withdrawalBreakdown: re.path.withdrawalBreakdown,
-    totalWithdrawn: re.totalWithdrawn,
-    medianYearlyWithdrawal: re.medianYearlyWithdrawal,
-    avgReturn: re.avgReturn,
-    irr: re.irr,
-    horizonYears: re.horizonYears,
-  };
+function pathEntryFromRegen(re, params) {
+  const useNetSpend = withdrawalTaxSeriesActive(params?.portfolio?.withdrawalTaxSeries);
+  return chartPathFromRegen(re, { useNetSpend });
 }
 
 // Sample ~200 paths evenly across [loRank, hiRank] for the 3D overview.
@@ -77,7 +68,7 @@ export function sampleOverviewPaths(loRank, hiRank, meta, params, seed, count = 
     const rankIndex = Math.min(loRank + i * step, hiRank);
     const simIndex = rankW[rankIndex];
     const re = regeneratePath(params, seed, simIndex);
-    paths.push(pathEntryFromRegen(re));
+    paths.push(pathEntryFromRegen(re, params));
   }
   return paths;
 }
@@ -90,7 +81,7 @@ export function buildDrilldownPaths(centerRank, meta, params, seed, count = SURF
   const paths = ranks.map((rank) => {
     const simIndex = rankW[rank];
     const re = regeneratePath(params, seed, simIndex);
-    return pathEntryFromRegen(re);
+    return pathEntryFromRegen(re, params);
   });
   return { paths, lo, hi, centerRank };
 }
