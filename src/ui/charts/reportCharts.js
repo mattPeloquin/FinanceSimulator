@@ -647,7 +647,7 @@ export function drawFourPctMetric(canvas, metric, fourPct, { dark = false } = {}
   canvas.style.display = '';
   const pal = paletteFor(dark);
 
-  // Each metric gets its own honest scale: 'spend' is median spend in $k,
+  // Each metric gets its own honest scale: 'spend' is mean spend $/yr in $k,
   // 'survival' is survival in %. The old drawFourPctBars forced both onto one
   // shared axis, which misrepresented whichever metric was smaller.
   let userVal;

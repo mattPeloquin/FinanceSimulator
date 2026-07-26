@@ -130,12 +130,20 @@ export function isClassicFourPercentEquivalent(params) {
   return true;
 }
 
-/** Spending side for deltas/headlines: net when tax is modeled, else withdrawn. */
+/**
+ * Spending side for deltas/headlines: net when tax is modeled, else spend-only
+ * withdrawn (deposits floored at $0). Falls back to raw totals when the
+ * spend-only fields are absent (older fixtures / partial mocks).
+ */
 function primarySpend(result, metric, taxActive) {
   if (!taxActive) {
-    if (isMedianYearlyMetric(metric)) return result.medianYearlyWithdrawn;
-    if (isMeanYearlyMetric(metric)) return result.meanYearlyWithdrawn;
-    return result.medianWithdrawn;
+    if (isMedianYearlyMetric(metric)) {
+      return result.medianYearlySpendWithdrawn ?? result.medianYearlyWithdrawn;
+    }
+    if (isMeanYearlyMetric(metric)) {
+      return result.meanYearlySpendWithdrawn ?? result.meanYearlyWithdrawn;
+    }
+    return result.medianSpendWithdrawn ?? result.medianWithdrawn;
   }
   if (isMedianYearlyMetric(metric)) {
     return result.medianYearlyNetSpend ?? result.medianYearlyWithdrawn;
@@ -144,6 +152,20 @@ function primarySpend(result, metric, taxActive) {
     return result.meanYearlyNetSpend ?? result.meanYearlyWithdrawn;
   }
   return result.medianNetSpend ?? result.medianWithdrawn;
+}
+
+/** Lifetime / mean-yearly spend for vs-4% deltas (ignore deposit inflows). */
+function spendTotalsForComparison(result, taxActive) {
+  if (taxActive) {
+    return {
+      median: result.medianNetSpend ?? result.medianWithdrawn ?? 0,
+      meanYearly: result.meanYearlyNetSpend ?? result.meanYearlyWithdrawn ?? 0,
+    };
+  }
+  return {
+    median: result.medianSpendWithdrawn ?? result.medianWithdrawn ?? 0,
+    meanYearly: result.meanYearlySpendWithdrawn ?? result.meanYearlyWithdrawn ?? 0,
+  };
 }
 
 /**
@@ -166,23 +188,18 @@ export function buildFourPercentComparison(userResult, classicResult, params) {
     || !!userResult.advisorFeeActive;
   const userPrimarySpend = primarySpend(userResult, metric, taxActive);
   const classicPrimarySpend = primarySpend(classicResult, metric, taxActive);
-  const userMedianSpend = taxActive
-    ? (userResult.medianNetSpend ?? userResult.medianWithdrawn ?? 0)
-    : (userResult.medianWithdrawn ?? 0);
-  const classicMedianSpend = taxActive
-    ? (classicResult.medianNetSpend ?? classicResult.medianWithdrawn ?? 0)
-    : (classicResult.medianWithdrawn ?? 0);
-  const userMeanYearlySpend = taxActive
-    ? (userResult.meanYearlyNetSpend ?? userResult.meanYearlyWithdrawn ?? 0)
-    : (userResult.meanYearlyWithdrawn ?? 0);
-  const classicMeanYearlySpend = taxActive
-    ? (classicResult.meanYearlyNetSpend ?? classicResult.meanYearlyWithdrawn ?? 0)
-    : (classicResult.meanYearlyWithdrawn ?? 0);
+  const userSpend = spendTotalsForComparison(userResult, taxActive);
+  const classicSpend = spendTotalsForComparison(classicResult, taxActive);
+  const userMedianSpend = userSpend.median;
+  const classicMedianSpend = classicSpend.median;
+  const userMeanYearlySpend = userSpend.meanYearly;
+  const classicMeanYearlySpend = classicSpend.meanYearly;
 
   return {
     equivalent: isClassicFourPercentEquivalent(params),
     classicRate: CLASSIC_FOUR_PERCENT_RATE,
-    userYear1Rate,
+    // Deposit years are not a negative withdrawal rate — floor at 0% for the verdict.
+    userYear1Rate: Math.max(0, userYear1Rate),
     withdrawalTaxActive: taxActive,
     advisorFeeActive: feeActive,
     sharedCostsActive: taxActive || feeActive,
@@ -196,7 +213,8 @@ export function buildFourPercentComparison(userResult, classicResult, params) {
     // Headline classic spending (net when tax on).
     classicMedianWithdrawn: classicMedianSpend,
     classicMedianNetSpend: classicResult.medianNetSpend ?? classicResult.medianWithdrawn ?? 0,
-    userMeanYearlyWithdrawn: userResult.meanYearlyWithdrawn ?? 0,
+    // Headline mean $/yr for verdict + Plan Snapshot bars (spend-only when tax off).
+    userMeanYearlyWithdrawn: userMeanYearlySpend,
     userMeanYearlyNetSpend: userResult.meanYearlyNetSpend ?? userResult.meanYearlyWithdrawn ?? 0,
     classicMeanYearlyWithdrawn: classicMeanYearlySpend,
     classicMeanYearlyNetSpend: classicResult.meanYearlyNetSpend ?? classicResult.meanYearlyWithdrawn ?? 0,

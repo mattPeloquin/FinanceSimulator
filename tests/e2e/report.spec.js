@@ -55,17 +55,21 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   expect(verdictBox).toBeTruthy();
   expect(donutBox.x).toBeGreaterThan(verdictBox.x);
 
-  await expect(page.locator('#reportBandLabel')).toContainText('P10–P90');
+  await expect(page.locator('#reportBandLabel')).toContainText('P5–P65');
 
   await page.locator('#reportPxLow').fill('25');
   await expect(page.locator('#reportPxLowLabel')).toHaveText('P25');
   await expect(page.locator('#reportBandLabel')).toContainText('P25');
 
-  // Left-column headline metrics: P-low / median / P-high; side headers follow the sliders.
+  // Left-column headline metrics: Plan + P-low / median / P-high; side headers follow the sliders.
   await expect(page.locator('#reportSnapMetrics')).toBeVisible();
+  await expect(page.locator('#reportSnapColPlan')).toHaveText('Plan');
   await expect(page.locator('#reportSnapColLow')).toHaveText('P25');
+  await expect(page.locator('#reportSnapMeanPlan')).not.toHaveText('—');
+  await expect(page.locator('#reportSnapTotalPlan')).not.toHaveText('—');
   await expect(page.locator('#reportSnapMeanMed')).not.toHaveText('—');
   await expect(page.locator('#reportSnapRetMed')).toContainText('%');
+  await expect(page.locator('#reportSnapRetPlan')).toContainText('%');
 
   // Two equal-weight hero stats: not depleted + on plan, plus a status pill.
   const heroNumber = page.locator('#reportHeroSuccess');
@@ -79,6 +83,7 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
 
   // 4% comparison is split into two minimized charts on honest scales.
   await expect(page.locator('#reportFourPctBars')).toHaveCount(0);
+  await expect(page.getByText('Mean spend ($k)')).toBeVisible();
   await expect(page.locator('#reportFourPctSpend')).toBeVisible();
   await expect(page.locator('#reportFourPctSurvival')).toBeVisible();
 

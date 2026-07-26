@@ -148,16 +148,48 @@ export function seriesPercentileBand(values, pLow, pHigh) {
 }
 
 /**
- * Compact headline bands for the Plan Snapshot verdict card: Mean / Year,
- * Total Withdrawn, End Balance, and Avg Return. Side columns follow the
- * report's "Show from / to" percentile sliders; the middle column is always
- * the median (P50). Dollar series come from the packaged returnScatter
- * (gross withdrawals — same source as the IRR scatter).
+ * Deterministic "Plan" column values for the snapshot metric grid.
+ * Spending rows use the planned schedule (gross when withdrawal tax is on, so
+ * they sit on the same dollar scale as the simulation totalWithdrawn series).
+ * End Balance is the Target Ending Balance from Find Best Plan ($000s on the
+ * scenario → dollars here). Avg Return is the break-even / required IRR that
+ * funds the planned schedule — the plan's natural return counterpart.
  */
-export function snapshotMetricBands(result, pLow, pHigh) {
+function planMetricValues(result, scenario) {
+  const taxActive = !!result?.withdrawalTaxActive;
+  // Portfolio withdrawals are gross of withdrawal tax; match that scale when tax is on.
+  const planTotal = taxActive
+    ? (result.plannedGrossTotal ?? result.plannedWithdrawn)
+    : result?.plannedWithdrawn;
+  const planMean = taxActive
+    ? (result.plannedGrossMeanYearly ?? result.plannedMeanYearly)
+    : result?.plannedMeanYearly;
+
+  const targetK = scenario?.goalSeekTargetEndingBalance;
+  const targetNum = targetK == null || targetK === '' ? NaN : Number(targetK);
+  const planEnd = Number.isFinite(targetNum) ? targetNum * MONEY_SCALE : NaN;
+
+  const planReturn = result?.returnScatter?.requiredIrr;
+  return {
+    meanYear: Number.isFinite(planMean) ? planMean : NaN,
+    total: Number.isFinite(planTotal) ? planTotal : NaN,
+    endBalance: planEnd,
+    avgReturn: planReturn == null || Number.isNaN(planReturn) ? NaN : planReturn,
+  };
+}
+
+/**
+ * Compact headline bands for the Plan Snapshot verdict card: Mean / Year,
+ * Total Withdrawn, End Balance, and Avg Return. Columns are Plan (deterministic
+ * schedule) then P-low / median / P-high from the report sliders. Dollar series
+ * come from the packaged returnScatter (gross withdrawals — same source as the
+ * IRR scatter).
+ */
+export function snapshotMetricBands(result, pLow, pHigh, scenario = null) {
   const scatter = result?.returnScatter;
   if (!scatter?.totalWithdrawn || !scatter?.finalBalance || !scatter?.avgReturn) {
     return {
+      planLabel: 'Plan',
       lowLabel: `P${pLow}`,
       medianLabel: 'Med',
       highLabel: `P${pHigh}`,
@@ -167,15 +199,17 @@ export function snapshotMetricBands(result, pLow, pHigh) {
     };
   }
 
+  const plan = planMetricValues(result, scenario);
   const meanYearly = meanYearlyWithdrawals(scatter.totalWithdrawn, scatter.horizonYears);
   const rows = [
-    { id: 'meanYear', label: 'Mean / Year', kind: 'dollars', ...seriesPercentileBand(meanYearly, pLow, pHigh) },
-    { id: 'total', label: 'Total Withdrawn', kind: 'dollars', ...seriesPercentileBand(scatter.totalWithdrawn, pLow, pHigh) },
-    { id: 'endBalance', label: 'End Balance', kind: 'dollars', ...seriesPercentileBand(scatter.finalBalance, pLow, pHigh) },
-    { id: 'avgReturn', label: 'Avg Return', kind: 'percent', ...seriesPercentileBand(scatter.avgReturn, pLow, pHigh) },
+    { id: 'meanYear', label: 'Mean / Year', kind: 'dollars', plan: plan.meanYear, ...seriesPercentileBand(meanYearly, pLow, pHigh) },
+    { id: 'total', label: 'Total Withdrawn', kind: 'dollars', plan: plan.total, ...seriesPercentileBand(scatter.totalWithdrawn, pLow, pHigh) },
+    { id: 'endBalance', label: 'End Balance', kind: 'dollars', plan: plan.endBalance, ...seriesPercentileBand(scatter.finalBalance, pLow, pHigh) },
+    { id: 'avgReturn', label: 'Avg Return', kind: 'percent', plan: plan.avgReturn, ...seriesPercentileBand(scatter.avgReturn, pLow, pHigh) },
   ];
 
   return {
+    planLabel: 'Plan',
     lowLabel: `P${pLow}`,
     medianLabel: 'Med',
     highLabel: `P${pHigh}`,
@@ -242,17 +276,16 @@ function headerFromScenario(scenario, result) {
 
 function buildFourPct(comparison) {
   if (!comparison) return null;
+  // Spend bars show mean $/year (spend-only / net), not lifetime median totals.
+  const userMeanYearly = comparison.withdrawalTaxActive
+    ? (comparison.userMeanYearlyNetSpend ?? comparison.userMeanYearlyWithdrawn ?? 0)
+    : (comparison.userMeanYearlyWithdrawn ?? 0);
+  const classicMeanYearly = comparison.classicMeanYearlyWithdrawn ?? 0;
   return {
-    userSpend: comparison.classicMedianWithdrawn != null
-      ? (comparison.userMedianNetSpend ?? comparison.userMedianWithdrawn ?? 0)
-      : 0,
-    classicSpend: comparison.classicMedianWithdrawn ?? 0,
-    // Prefer primary-spend fields when present for metric-aware bars.
-    userPrimary: comparison.userPrimaryWithdrawn
-      ?? comparison.userMedianNetSpend
-      ?? comparison.userMedianWithdrawn
-      ?? 0,
-    classicPrimary: comparison.classicPrimaryWithdrawn ?? comparison.classicMedianWithdrawn ?? 0,
+    userSpend: userMeanYearly,
+    classicSpend: classicMeanYearly,
+    userPrimary: userMeanYearly,
+    classicPrimary: classicMeanYearly,
     userSurvival: comparison.userSuccessRate ?? 0,
     classicSurvival: comparison.classicSuccessRate ?? 0,
     userYear1Rate: comparison.userYear1Rate ?? 0,
@@ -361,8 +394,8 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
     footerLine: header.footerLine,
     // Verdict prose was removed; empty array keeps the model shape stable.
     verdict: [],
-    // Left-column headline bands (P-low / median / P-high) on the verdict card.
-    metrics: snapshotMetricBands(result, pLow, pHigh),
+    // Left-column headline bands (Plan + P-low / median / P-high) on the verdict card.
+    metrics: snapshotMetricBands(result, pLow, pHigh, scenario),
     band,
     fan,
     depletion,

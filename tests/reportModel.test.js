@@ -109,10 +109,11 @@ describe('seriesPercentileBand', () => {
 });
 
 describe('snapshotMetricBands', () => {
-  it('builds four headline rows with side columns following the band sliders', () => {
+  it('builds four headline rows with Plan + side columns following the band sliders', () => {
     const p = params();
     const packaged = buildRunResult(p, runMonteCarlo(p));
-    const metrics = snapshotMetricBands(packaged, 10, 90);
+    const metrics = snapshotMetricBands(packaged, 10, 90, { goalSeekTargetEndingBalance: 250 });
+    expect(metrics.planLabel).toBe('Plan');
     expect(metrics.lowLabel).toBe('P10');
     expect(metrics.highLabel).toBe('P90');
     expect(metrics.rows.map((r) => r.id)).toEqual([
@@ -129,6 +130,17 @@ describe('snapshotMetricBands', () => {
       expect(row.low).toBeLessThanOrEqual(row.median);
       expect(row.median).toBeLessThanOrEqual(row.high);
     }
+    const mean = metrics.rows.find((r) => r.id === 'meanYear');
+    const total = metrics.rows.find((r) => r.id === 'total');
+    const endBal = metrics.rows.find((r) => r.id === 'endBalance');
+    const avgRet = metrics.rows.find((r) => r.id === 'avgReturn');
+    // Plan spending matches the packaged planned schedule.
+    expect(mean.plan).toBe(packaged.plannedMeanYearly);
+    expect(total.plan).toBe(packaged.plannedWithdrawn);
+    // Target ending balance is stored in $000s on the scenario.
+    expect(endBal.plan).toBe(250_000);
+    // Avg Return plan cell is the break-even / required IRR.
+    expect(avgRet.plan).toBe(packaged.returnScatter.requiredIrr);
     // Wider band should move the sides outward (or hold) vs a tighter band.
     const tight = snapshotMetricBands(packaged, 25, 75);
     const meanWide = metrics.rows.find((r) => r.id === 'meanYear');

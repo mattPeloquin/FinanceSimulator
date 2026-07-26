@@ -43,22 +43,17 @@ export function formatJsBanner(licenseText) {
 }
 
 /**
- * Prepend the HTML license comment when missing; replace a prior copy when present.
+ * Append the HTML license comment when missing; replace a prior copy when present.
  * @param {string} html
  * @param {string} licenseText
  * @returns {string}
  */
 export function ensureHtmlLicenseComment(html, licenseText) {
   const comment = formatHtmlComment(licenseText);
-  const withoutPrior = String(html).replace(
-    /<!--\s*\n?\s*Finance Simulator — MIT License[\s\S]*?-->\s*/m,
-    '',
-  );
-  // Keep a leading doctype on its own line when present.
-  if (/^\s*<!DOCTYPE/i.test(withoutPrior)) {
-    return withoutPrior.replace(/^(\s*<!DOCTYPE[^>]*>\s*)/i, `$1${comment}\n`);
-  }
-  return `${comment}\n${withoutPrior}`;
+  const withoutPrior = String(html)
+    .replace(/<!--\s*\n?\s*Finance Simulator — MIT License[\s\S]*?-->\s*/m, '')
+    .replace(/\s+$/, '');
+  return `${withoutPrior}\n${comment}\n`;
 }
 
 /**

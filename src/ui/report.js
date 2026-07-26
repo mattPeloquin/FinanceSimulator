@@ -20,12 +20,32 @@ import {
   allocationLegendItems,
 } from './charts/reportCharts.js';
 
-/** Map snapshot metric row ids → DOM id prefixes for the three band cells. */
+/** Map snapshot metric row ids → DOM ids for Plan + P-low / Med / P-high cells. */
 const SNAP_METRIC_ELS = {
-  meanYear: { low: 'reportSnapMeanLow', med: 'reportSnapMeanMed', high: 'reportSnapMeanHigh' },
-  total: { low: 'reportSnapTotalLow', med: 'reportSnapTotalMed', high: 'reportSnapTotalHigh' },
-  endBalance: { low: 'reportSnapBalLow', med: 'reportSnapBalMed', high: 'reportSnapBalHigh' },
-  avgReturn: { low: 'reportSnapRetLow', med: 'reportSnapRetMed', high: 'reportSnapRetHigh' },
+  meanYear: {
+    plan: 'reportSnapMeanPlan',
+    low: 'reportSnapMeanLow',
+    med: 'reportSnapMeanMed',
+    high: 'reportSnapMeanHigh',
+  },
+  total: {
+    plan: 'reportSnapTotalPlan',
+    low: 'reportSnapTotalLow',
+    med: 'reportSnapTotalMed',
+    high: 'reportSnapTotalHigh',
+  },
+  endBalance: {
+    plan: 'reportSnapBalPlan',
+    low: 'reportSnapBalLow',
+    med: 'reportSnapBalMed',
+    high: 'reportSnapBalHigh',
+  },
+  avgReturn: {
+    plan: 'reportSnapRetPlan',
+    low: 'reportSnapRetLow',
+    med: 'reportSnapRetMed',
+    high: 'reportSnapRetHigh',
+  },
 };
 
 function formatSnapValue(value, kind) {
@@ -36,20 +56,24 @@ function formatSnapValue(value, kind) {
   return k === '' ? '—' : k;
 }
 
-/** Fill the left-column P-low / median / P-high headline metrics. */
+/** Fill the left-column Plan + P-low / median / P-high headline metrics. */
 function renderSnapMetrics(metrics) {
   if (!metrics) return;
+  const planHdr = document.getElementById('reportSnapColPlan');
   const lowHdr = document.getElementById('reportSnapColLow');
   const highHdr = document.getElementById('reportSnapColHigh');
+  if (planHdr) planHdr.textContent = metrics.planLabel || 'Plan';
   if (lowHdr) lowHdr.textContent = metrics.lowLabel || '';
   if (highHdr) highHdr.textContent = metrics.highLabel || '';
 
   for (const row of metrics.rows || []) {
     const ids = SNAP_METRIC_ELS[row.id];
     if (!ids) continue;
+    const planEl = document.getElementById(ids.plan);
     const lowEl = document.getElementById(ids.low);
     const medEl = document.getElementById(ids.med);
     const highEl = document.getElementById(ids.high);
+    if (planEl) planEl.textContent = formatSnapValue(row.plan, row.kind);
     if (lowEl) lowEl.textContent = formatSnapValue(row.low, row.kind);
     if (medEl) medEl.textContent = formatSnapValue(row.median, row.kind);
     if (highEl) highEl.textContent = formatSnapValue(row.high, row.kind);

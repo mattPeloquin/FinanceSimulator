@@ -15,13 +15,13 @@
             <div class="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-theme-faint">
                 <label class="inline-flex items-center gap-1" title="Lower end of the withdrawal / balance band">
                     <span>Show from</span>
-                    <input type="range" id="reportPxLow" min="0" max="45" step="5" value="10" class="range-theme w-14">
-                    <span id="reportPxLowLabel" class="w-9">P10</span>
+                    <input type="range" id="reportPxLow" min="0" max="45" step="5" value="5" class="range-theme w-14">
+                    <span id="reportPxLowLabel" class="w-9">P5</span>
                 </label>
                 <label class="inline-flex items-center gap-1" title="Upper end of the withdrawal / balance band">
                     <span>to</span>
-                    <input type="range" id="reportPxHigh" min="55" max="100" step="5" value="90" class="range-theme w-14">
-                    <span id="reportPxHighLabel" class="w-9">P90</span>
+                    <input type="range" id="reportPxHigh" min="55" max="100" step="5" value="65" class="range-theme w-14">
+                    <span id="reportPxHighLabel" class="w-9">P65</span>
                 </label>
                 <label class="inline-flex items-center gap-1" title="Report appearance on screen — independent of the app's theme">
                     <span>Appearance</span>
@@ -56,32 +56,37 @@
                                 <p id="reportHeaderLine1" class="text-sm font-semibold text-theme-heading print:text-slate-700 leading-snug"></p>
                             </div>
                         </div>
-                        <!-- Compact headline bands tucked under the title: label | P-low | Med | P-high.
-                             Label column is a fixed width so every row aligns; the three number
-                             columns are equal width and evenly spaced. -->
+                        <!-- Compact headline bands: label | Plan | P-low | Med | P-high.
+                             Plan is the deterministic schedule; the other three are simulation
+                             outcomes. Label column is fixed width; number columns match. -->
                         <div id="reportSnapMetrics" class="mt-1">
-                            <div class="grid grid-cols-[4.5rem_2.75rem_2.75rem_2.75rem] gap-x-1 gap-y-0 items-center justify-start">
+                            <div class="grid grid-cols-[4.5rem_2.75rem_2.75rem_2.75rem_2.75rem] gap-x-1 gap-y-0 items-center justify-start">
                                 <span></span>
-                                <span id="reportSnapColLow" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P10</span>
+                                <span id="reportSnapColPlan" class="text-center text-[8px] uppercase tracking-wider text-theme-accent-text/80 print:text-slate-600" title="Planned schedule. Avg Return is the required IRR to fund the plan.">Plan</span>
+                                <span id="reportSnapColLow" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P5</span>
                                 <span class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">Med</span>
-                                <span id="reportSnapColHigh" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P90</span>
+                                <span id="reportSnapColHigh" class="text-center text-[8px] uppercase tracking-wider text-theme-faint print:text-slate-500">P65</span>
 
                                 <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Mean / Year</span>
+                                <span id="reportSnapMeanPlan" class="text-center text-[10px] font-semibold tabular-nums text-theme-accent-text print:text-slate-700 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapMeanLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapMeanMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapMeanHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
 
                                 <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Total Withdrawn</span>
+                                <span id="reportSnapTotalPlan" class="text-center text-[10px] font-semibold tabular-nums text-theme-accent-text print:text-slate-700 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapTotalLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapTotalMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapTotalHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
 
                                 <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">End Balance</span>
+                                <span id="reportSnapBalPlan" class="text-center text-[10px] font-semibold tabular-nums text-theme-accent-text print:text-slate-700 leading-none whitespace-nowrap" title="Target ending balance">—</span>
                                 <span id="reportSnapBalLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapBalMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapBalHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
 
                                 <span class="text-[9px] text-theme-muted print:text-slate-600 text-right pr-1 whitespace-nowrap leading-none">Avg Return</span>
+                                <span id="reportSnapRetPlan" class="text-center text-[10px] font-semibold tabular-nums text-theme-accent-text print:text-slate-700 leading-none whitespace-nowrap" title="Required IRR to fund the planned schedule">—</span>
                                 <span id="reportSnapRetLow" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapRetMed" class="text-center text-[10px] font-bold tabular-nums text-theme-heading print:text-slate-900 leading-none whitespace-nowrap">—</span>
                                 <span id="reportSnapRetHigh" class="text-center text-[10px] font-semibold tabular-nums text-theme-body print:text-slate-800 leading-none whitespace-nowrap">—</span>
@@ -170,7 +175,7 @@
                     <div class="bg-theme-muted print:bg-slate-100">
                         <div class="grid grid-cols-2 gap-3 px-3 py-1">
                             <div class="flex flex-col">
-                                <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Median spend ($k)</span>
+                                <span class="text-[9px] uppercase tracking-wider text-theme-faint print:text-slate-500">Mean spend ($k)</span>
                                 <div class="h-[0.4in] relative">
                                     <canvas id="reportFourPctSpend"></canvas>
                                 </div>

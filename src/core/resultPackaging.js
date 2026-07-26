@@ -12,6 +12,8 @@ import {
   median,
   isEarlyWeightingActive,
   meanYearlyWithdrawals,
+  spendOnlyLifetimeTotals,
+  spendOnlyMedianYearly,
   perRunWithdrawalMetric,
   buildHistogram,
   summarizeReturns,
@@ -560,6 +562,19 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const totalNet = result.totalNetSpend ?? result.totalWithdrawn;
   const medianYearlyNet = result.medianYearlyNetSpend ?? result.medianYearlyWithdrawal;
 
+  // Lifetime / yearly spend with deposits floored at $0 — used by vs-4% so
+  // inflows do not look like negative spending against the classic rule.
+  const spendOnlyTotals = spendOnlyLifetimeTotals(
+    result.allYearsWithdrawals,
+    result.horizonYears,
+    maxYears,
+  );
+  const spendOnlyMedianYearlyByRun = spendOnlyMedianYearly(
+    result.allYearsWithdrawals,
+    result.horizonYears,
+    maxYears,
+  );
+
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
   // 1 = below plan (within horizon but short of the benchmark), 2 = ran out.
   const scatterOutcome = new Uint8Array(n);
@@ -629,6 +644,9 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
     meanYearlyWithdrawn: median(meanYearlyWithdrawals(result.totalWithdrawn, result.horizonYears)),
+    medianSpendWithdrawn: median(spendOnlyTotals),
+    medianYearlySpendWithdrawn: median(spendOnlyMedianYearlyByRun),
+    meanYearlySpendWithdrawn: median(meanYearlyWithdrawals(spendOnlyTotals, result.horizonYears)),
     medianNetSpend: median(totalNet),
     medianYearlyNetSpend: median(medianYearlyNet),
     meanYearlyNetSpend: median(meanYearlyWithdrawals(totalNet, result.horizonYears)),

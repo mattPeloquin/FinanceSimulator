@@ -14,7 +14,7 @@ const LEGACY_KEYS = {
 
 export const DEFAULT_UI_PREFS = Object.freeze({
   theme: null,
-  reportBand: Object.freeze({ low: 10, high: 90 }),
+  reportBand: Object.freeze({ low: 5, high: 65 }),
   reportThemeMode: null,
   accordions: Object.freeze({}),
   balanceLogScale: false,

@@ -25,7 +25,7 @@ describe('uiPrefs', () => {
   it('normalizeUiPrefs returns defaults for garbage', () => {
     expect(normalizeUiPrefs(null)).toEqual({
       theme: null,
-      reportBand: { low: 10, high: 90 },
+      reportBand: { low: 5, high: 65 },
       reportThemeMode: null,
       accordions: {},
       balanceLogScale: false,

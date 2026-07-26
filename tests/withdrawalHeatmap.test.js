@@ -241,11 +241,16 @@ describe('windowAnchorSeries', () => {
 
 describe('windowDeltaDomain', () => {
   it('mirrors the delta tails so a centered window stays balanced', () => {
-    // One column, many years, deltas from -50..+49 around a zero anchor.
+    // One column, many years: spend 50..149 vs a flat $100 anchor → deltas −50..+49.
+    // (Raw negatives are deposits and floor at $0, so synthetic cuts must be
+    // expressed as spend below the anchor, not as negative withdrawals.)
     const numYears = 100;
     const values = new Float64Array(numYears);
-    for (let j = 0; j < numYears; j++) values[j] = j - 50;
-    const anchor = new Float64Array(numYears); // all zeros
+    const anchor = new Float64Array(numYears);
+    for (let j = 0; j < numYears; j++) {
+      values[j] = 100 + (j - 50);
+      anchor[j] = 100;
+    }
     const domain = windowDeltaDomain(values, anchor, numYears, 0, 1);
     // lo = |P2| = |-48|; hi = P98 = +48 — mirrored, not tied to the axis.
     expect(domain.lo).toBe(48);
@@ -253,10 +258,10 @@ describe('windowDeltaDomain', () => {
   });
 
   it('uses only the visible column slice', () => {
-    // Three columns × one year: left-heavy cuts, right-heavy boosts.
-    const values = Float64Array.from([-100, 0, 100]);
-    const fullMean = Float64Array.from([0]);
-    const leftMean = Float64Array.from([-50]);
+    // Three columns × one year: left-heavy cuts, right-heavy boosts vs anchors.
+    const values = Float64Array.from([0, 100, 200]);
+    const fullMean = Float64Array.from([100]);
+    const leftMean = Float64Array.from([50]);
     const full = windowDeltaDomain(values, fullMean, 1, 0, 3);
     const left = windowDeltaDomain(values, leftMean, 1, 0, 2);
     // Left window deltas vs its own mean are −50 and +50 → mirrored clamps.
@@ -273,6 +278,18 @@ describe('windowDeltaDomain', () => {
     const domain = windowDeltaDomain(values, anchor, 1, 0, 3);
     expect(domain.lo).toBe(1);
     expect(domain.hi).toBe(1);
+  });
+
+  it('floors deposits before measuring classic / plan deltas', () => {
+    // One deposit cell (−100k) against a flat $40k anchor must not dominate
+    // the low arm as a −$140k cut.
+    const values = Float64Array.from([-100_000, 40_000, 42_000, 38_000]);
+    const anchor = Float64Array.from([40_000, 40_000, 40_000, 40_000]);
+    const domain = windowDeltaDomain(values, anchor, 1, 0, 4);
+    // Spend-clamped deltas: 0−40, 0, +2, −2 → tails stay near a few thousand.
+    expect(domain.lo).toBeLessThanOrEqual(40_000);
+    expect(domain.lo).toBeGreaterThanOrEqual(1);
+    expect(domain.hi).toBeLessThan(50_000);
   });
 });
 
@@ -376,5 +393,23 @@ describe('formatHeatmapTooltip', () => {
     expect(tip.rows.find((r) => r.includes('vs year median')).startsWith('−')).toBe(true);
     expect(tip.rows.find((r) => r.includes('vs plan')).startsWith('−')).toBe(true);
     expect(tip.rows.find((r) => r.includes('vs 4%'))).toBe('+0 vs 4% (40)');
+  });
+
+  it('does not treat a deposit year as a huge cut vs classic 4%', () => {
+    // −$100k deposit vs $40k classic would be −$140k without the spend clamp.
+    const tip = formatHeatmapTooltip({
+      year: 10,
+      pctLabel: 'P40',
+      simIndex: 3,
+      value: -100_000,
+      plan: -100_000,
+      classic: 40_000,
+      median: 40_000,
+      runCount: 1,
+    });
+    expect(tip.rows[0]).toBe('Deposit 100');
+    expect(tip.rows.find((r) => r.includes('vs plan'))).toBe('+0 vs plan (0)');
+    expect(tip.rows.find((r) => r.includes('vs 4%'))).toBe('−40 vs 4% (40)');
+    expect(tip.rows.find((r) => r.includes('vs year median'))).toBe('−40 vs year median (40)');
   });
 });

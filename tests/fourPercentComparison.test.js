@@ -197,16 +197,20 @@ describe('buildFourPercentComparison', () => {
     const userResult = {
       medianBalance: 400_000,
       medianWithdrawn: 1_800_000,
+      medianSpendWithdrawn: 1_800_000,
       medianYearlyWithdrawn: 60_000,
       meanYearlyWithdrawn: 60_000,
+      meanYearlySpendWithdrawn: 60_000,
       successRate: 0.92,
       withdrawalMetric: 'total',
     };
     const classicResult = {
       medianBalance: 1_200_000,
       medianWithdrawn: 1_200_000,
+      medianSpendWithdrawn: 1_200_000,
       medianYearlyWithdrawn: 40_000,
       meanYearlyWithdrawn: 40_000,
+      meanYearlySpendWithdrawn: 40_000,
       successRate: 0.97,
       withdrawalMetric: 'total',
     };
@@ -224,6 +228,46 @@ describe('buildFourPercentComparison', () => {
     expect(comparison.classicRate).toBe(CLASSIC_FOUR_PERCENT_RATE);
     // Year 1 plan = base ($50k) + first-year extra ($5k) on a $1M start → 5.5%.
     expect(comparison.userYear1Rate).toBeCloseTo(0.055, 5);
+  });
+
+  it('ignores deposit inflows when comparing spend vs the 4% rule', () => {
+    // Raw totalWithdrawn is reduced by a −$100k deposit year; spend-only keeps
+    // the lifestyle withdrawals so the delta is not a false under-spend.
+    const params = flatFourPercentParams(1_000_000, 30);
+    const userResult = {
+      medianBalance: 500_000,
+      medianWithdrawn: 1_100_000, // includes −$100k deposit
+      medianSpendWithdrawn: 1_200_000, // spend only
+      meanYearlyWithdrawn: 1_100_000 / 30,
+      meanYearlySpendWithdrawn: 1_200_000 / 30,
+      successRate: 0.9,
+      withdrawalMetric: 'total',
+    };
+    const classicResult = {
+      medianBalance: 600_000,
+      medianWithdrawn: 1_200_000,
+      medianSpendWithdrawn: 1_200_000,
+      meanYearlyWithdrawn: 40_000,
+      meanYearlySpendWithdrawn: 40_000,
+      successRate: 0.95,
+      withdrawalMetric: 'total',
+    };
+    const comparison = buildFourPercentComparison(userResult, classicResult, params);
+    expect(comparison.totalWithdrawnDelta).toBeCloseTo(0, 3);
+    expect(comparison.withdrawnDelta).toBeCloseTo(0, 3);
+    expect(comparison.meanYearlyDelta).toBeCloseTo(0, 3);
+  });
+
+  it('floors a year-1 deposit plan rate at 0% for the verdict', () => {
+    const params = flatFourPercentParams(1_000_000, 10);
+    params.portfolio.strategy = 'specific';
+    params.portfolio.specificWithdrawals = [-100_000, ...new Array(9).fill(40_000)];
+    const comparison = buildFourPercentComparison(
+      { medianBalance: 1, medianSpendWithdrawn: 1, medianWithdrawn: 1, successRate: 1, withdrawalMetric: 'total' },
+      { medianBalance: 1, medianSpendWithdrawn: 1, medianWithdrawn: 1, successRate: 1, withdrawalMetric: 'total' },
+      params,
+    );
+    expect(comparison.userYear1Rate).toBe(0);
   });
 
   it('marks equivalent when the user params already match classic 4%', () => {

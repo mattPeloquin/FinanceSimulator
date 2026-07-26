@@ -122,7 +122,7 @@ describe('preset files', () => {
   });
 
   it('steps Plan Risk Tolerance up from Conservative to Aggressive', () => {
-    expect(PRESETS.map((p) => p.scenario.planRiskTolerancePct)).toEqual([3, 5, 10, 15, 20]);
+    expect(PRESETS.map((p) => p.scenario.planRiskTolerancePct)).toEqual([10, 10, 15, 20, 25]);
   });
 
   it('steps glide spend timing later for conservative and sooner for aggressive', () => {

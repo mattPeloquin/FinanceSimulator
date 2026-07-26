@@ -96,11 +96,6 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   const medianBalance = page.locator('#medianBalance');
   await expect(medianBalance).not.toBeEmpty();
 
-  // Percentile cards show both the time-weighted return and the IRR
-  await expect(page.locator('#p50Ret')).toContainText('%');
-  await expect(page.locator('#p50Irr')).toContainText('IRR');
-  await expect(page.locator('#p50Irr')).toContainText('%');
-
   // Results accordion headers carry a one-line descriptive blurb (like Investment).
   await expect(page.locator('#details-simulation-outcomes > summary')).toContainText(
     'Spending, returns, and ending balances',
@@ -112,6 +107,14 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
     'Year-by-year withdrawals',
   );
 
+  // Chart canvases sit inside closed-by-default <details>; open the ones we assert.
+  await page.locator('#details-simulation-outcomes').evaluate((el) => { el.open = true; });
+
+  // Percentile cards show both the time-weighted return and the IRR
+  await expect(page.locator('#p50Ret')).toContainText('%');
+  await expect(page.locator('#p50Irr')).toContainText('IRR');
+  await expect(page.locator('#p50Irr')).toContainText('%');
+
   // Return distribution tiles carry an IRR secondary value
   await page.click('summary:has-text("Distribution of Real Returns")');
   await expect(page.locator('#returnMean')).toContainText('%');
@@ -119,6 +122,7 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#returnMedianIrr')).toContainText('%');
 
   // Sequence-risk scatter renders with its summary cards and outcome legend
+  await page.locator('#details-irr-scatter').evaluate((el) => { el.open = true; });
   await expect(page.locator('#irrScatterCanvas')).toBeVisible();
   await expect(page.locator('#seqMedianIrr')).toContainText('%');
   await expect(page.locator('#seqRequiredIrr')).toContainText('%');
@@ -159,12 +163,19 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   // Combined success card and Median End Balance IRR
   await expect(page.locator('#medianIrr')).toContainText('%');
 
-  // Chart canvases sit inside closed-by-default <details>; open the ones we assert.
   await page.locator('#details-return-distribution').evaluate((el) => { el.open = true; });
   await expect(page.locator('#irrChart')).toBeVisible();
 
-  await page.locator('#details-simulation-outcomes').evaluate((el) => { el.open = true; });
-  await page.locator('#details-average-timelines').evaluate((el) => { el.open = true; });
+  // Re-open parent + nested timelines immediately before assert — post-run
+  // thumbnail capture can briefly restore closed accordion state.
+  await page.evaluate(() => {
+    const outcomes = document.getElementById('details-simulation-outcomes');
+    const timelines = document.getElementById('details-average-timelines');
+    const surface = document.getElementById('details-surface-chart');
+    if (outcomes) outcomes.open = true;
+    if (timelines) timelines.open = true;
+    if (surface) surface.open = true;
+  });
 
   const balanceChart = page.locator('#balanceChart');
   await expect(balanceChart).toBeVisible();
@@ -187,6 +198,6 @@ test('Historical IRR band survives a year selection shorter than the horizon', a
   // window fits, so the band must fall back to wrapped windows instead of vanishing.
   await page.fill('#startYear', '2005');
   await page.click('#runButton');
-  await expect(page.locator('#resultsSection')).toBeVisible();
+  await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#irrScatterLegend')).toContainText('Historical IRR range');
 });

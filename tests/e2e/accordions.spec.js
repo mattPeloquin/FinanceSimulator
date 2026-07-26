@@ -4,7 +4,7 @@ async function waitForInit(page) {
   await page.waitForFunction(() => window.__TEST_HOOKS__ && window.__TEST_HOOKS__.initComplete);
 }
 
-test('Results chart sections default open when accordion chrome is empty', async ({ page }) => {
+test('Input and results sections default closed when accordion chrome is empty', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
   await page.evaluate(() => {
@@ -14,15 +14,16 @@ test('Results chart sections default open when accordion chrome is empty', async
   await page.reload();
   await waitForInit(page);
 
-  expect(await page.locator('#details-simulation-outcomes').evaluate((el) => el.open)).toBe(true);
-  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(true);
-  expect(await page.locator('#details-withdrawal-heatmap').evaluate((el) => el.open)).toBe(true);
-  expect(await page.locator('#details-irr-scatter').evaluate((el) => el.open)).toBe(true);
+  expect(await page.locator('#details-simulation-outcomes').evaluate((el) => el.open)).toBe(false);
+  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(false);
+  expect(await page.locator('#details-withdrawal-heatmap').evaluate((el) => el.open)).toBe(false);
+  expect(await page.locator('#details-irr-scatter').evaluate((el) => el.open)).toBe(false);
+  expect(await page.locator('#details-spending-over-time').evaluate((el) => el.open)).toBe(false);
   expect(await page.locator('#section-investment').evaluate((el) => el.open)).toBe(false);
   expect(await page.locator('#section-withdrawal').evaluate((el) => el.open)).toBe(false);
 });
 
-test('Results chart accordion collapse persists across refresh', async ({ page }) => {
+test('Results chart accordion expand persists across refresh', async ({ page }) => {
   await page.goto('/');
   await waitForInit(page);
 
@@ -31,18 +32,18 @@ test('Results chart accordion collapse persists across refresh', async ({ page }
   await page.evaluate(() => {
     document.getElementById('resultsSection')?.classList.remove('hidden');
     const details = document.getElementById('details-surface-chart');
-    if (details) details.open = false;
+    if (details) details.open = true;
   });
-  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(false);
+  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(true);
   await page.waitForFunction(() => {
     const raw = localStorage.getItem('sor:ui');
-    return raw && JSON.parse(raw).accordions?.['details-surface-chart'] === false;
+    return raw && JSON.parse(raw).accordions?.['details-surface-chart'] === true;
   });
 
   await page.reload();
   await waitForInit(page);
-  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(false);
-  expect(await page.locator('#details-withdrawal-heatmap').evaluate((el) => el.open)).toBe(true);
+  expect(await page.locator('#details-surface-chart').evaluate((el) => el.open)).toBe(true);
+  expect(await page.locator('#details-withdrawal-heatmap').evaluate((el) => el.open)).toBe(false);
 });
 
 test('Expanded settings sections survive refresh and stay independent of scenario autosave', async ({ page }) => {

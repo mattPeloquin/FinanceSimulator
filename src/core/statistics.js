@@ -93,6 +93,50 @@ export function meanYearlyWithdrawals(totalWithdrawn, horizonYears) {
 }
 
 /**
+ * Lifetime spending only for each run: sum of max(0, yearly withdrawal).
+ * Deposits are stored as negative withdrawals in the sim — floor them so
+ * vs-4% / spend headlines are not understated by inflows.
+ */
+export function spendOnlyLifetimeTotals(allYearsWithdrawals, horizonYears, maxYears) {
+  const n = horizonYears?.length ?? 0;
+  const totals = new Float64Array(n);
+  if (!allYearsWithdrawals || !n || !(maxYears > 0)) return totals;
+  for (let i = 0; i < n; i++) {
+    const horizon = Math.max(0, Math.min(horizonYears[i] || 0, maxYears));
+    let sum = 0;
+    const base = i * maxYears;
+    for (let t = 0; t < horizon; t++) {
+      const raw = allYearsWithdrawals[base + t];
+      if (Number.isFinite(raw)) sum += Math.max(0, raw);
+    }
+    totals[i] = sum;
+  }
+  return totals;
+}
+
+/**
+ * Per-run median of spend-only yearly amounts (deposits floored at $0).
+ * Mirrors simulation's medianYearlyWithdrawal but ignores inflows.
+ */
+export function spendOnlyMedianYearly(allYearsWithdrawals, horizonYears, maxYears) {
+  const n = horizonYears?.length ?? 0;
+  const out = new Float64Array(n);
+  if (!allYearsWithdrawals || !n || !(maxYears > 0)) return out;
+  for (let i = 0; i < n; i++) {
+    const horizon = Math.max(0, Math.min(horizonYears[i] || 0, maxYears));
+    if (horizon <= 0) continue;
+    const years = [];
+    const base = i * maxYears;
+    for (let t = 0; t < horizon; t++) {
+      const raw = allYearsWithdrawals[base + t];
+      if (Number.isFinite(raw)) years.push(Math.max(0, raw));
+    }
+    out[i] = years.length ? median(years) : 0;
+  }
+  return out;
+}
+
+/**
  * Raw early-weight curve (year 1 = 1, last year = lateFloor) before blending
  * with flat years or mean-rescaling. Exposed for tests and the Advanced preview
  * caption ("late years keep X% of year 1").

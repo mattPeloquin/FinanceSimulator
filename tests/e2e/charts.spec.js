@@ -17,6 +17,8 @@ async function runDeterministicSim(page, { numSimulations = '100' } = {}) {
   await page.fill('#numYears', '30');
   await page.fill('#numSimulations', numSimulations);
   await page.fill('#randomSeed', '12345');
+  // Collapse advanced so it does not cover results chart controls.
+  await page.locator('#section-advanced').evaluate((el) => { el.open = false; });
   await page.click('#runButton');
   await expect(page.locator('#resultsSection')).toBeVisible();
 }
@@ -96,7 +98,13 @@ test('Charts receive the expected data arrays after a run', async ({ page }) => 
   expect(balanceMeta.tooltipBg).toBe('rgba(0, 0, 0, 0.8)');
 
   // Log scale redraws the balance Y axis (not a no-op).
-  await page.locator('#details-average-timelines').evaluate((el) => { el.open = true; });
+  // Average Timelines is nested under Simulation Outcomes.
+  await page.evaluate(() => {
+    const outcomes = document.getElementById('details-simulation-outcomes');
+    const timelines = document.getElementById('details-average-timelines');
+    if (outcomes) outcomes.open = true;
+    if (timelines) timelines.open = true;
+  });
   await page.check('#balanceLogScale');
   await expect.poll(async () => page.evaluate(() => (
     window.__TEST_HOOKS__?.balanceChart?.scales?.y?.type
@@ -147,6 +155,9 @@ test('Withdrawal heatmap renders after a run', async ({ page }) => {
   await runDeterministicSim(page);
 
   await page.waitForFunction(() => window.__TEST_HOOKS__?.withdrawalHeatmap);
+  // Wait for post-run thumbs so their restore-closed flash does not undo open.
+  await expect(page.locator('#withdrawalHeatmapThumb')).toHaveAttribute('src', /^data:image\//);
+  await page.locator('#details-withdrawal-heatmap').evaluate((el) => { el.open = true; });
   await expect(page.locator('#withdrawalHeatmapCanvas')).toBeVisible();
 
   const shape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
@@ -155,8 +166,12 @@ test('Withdrawal heatmap renders after a run', async ({ page }) => {
   expect(shape.numCols).toBeGreaterThan(0);
 
   // vs 4% is a delta-of-amount mode against the flat classic schedule.
-  await expect(page.locator('#withdrawalHeatmapModeClassic')).toBeVisible();
-  await page.click('#withdrawalHeatmapModeClassic');
+  // Click in-page: post-run thumb restore can collapse the accordion mid-action
+  // and leave a neighboring summary covering the button.
+  await page.evaluate(() => {
+    document.getElementById('details-withdrawal-heatmap').open = true;
+    document.getElementById('withdrawalHeatmapModeClassic').click();
+  });
   const classicShape = await page.evaluate(() => window.__TEST_HOOKS__.withdrawalHeatmap());
   expect(classicShape.encoding).toBe('classic');
 });

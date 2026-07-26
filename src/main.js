@@ -897,7 +897,7 @@ function applyScenario(scenario) {
   toggleWithdrawalStrategy(merged.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(merged.enableDynamicAdjustments ?? true);
   toggleFeesTaxes(merged.enableFeesTaxes ?? false);
-  toggleGoalSeekMode(merged.goalSeekMode ?? false);
+  toggleGoalSeekMode(merged.goalSeekMode ?? false, { expandSections: false });
   refreshDynamicAdjustmentPreviews();
   updateAllocationTotal();
   syncAllocationPreview();
@@ -945,7 +945,7 @@ const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ..
     toggleWithdrawalStrategy(initial.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
     toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
     toggleFeesTaxes(initial.enableFeesTaxes ?? false);
-    toggleGoalSeekMode(initial.goalSeekMode ?? false);
+    toggleGoalSeekMode(initial.goalSeekMode ?? false, { expandSections: false });
 
     setupInputBehaviors({
       onChange: scheduleAutosave,

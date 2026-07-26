@@ -390,7 +390,9 @@ function syncGoalSeekSectionExpansion() {
 // Show/hide the Goal Seek panel and its per-field "include in search"
 // checkboxes, and relabel the Run button so it's clear a search (not a plain
 // simulation) will run. Turning the mode off releases any grayed-out fields.
-export function toggleGoalSeekMode(enabled) {
+// Pass expandSections:false on bootstrap/scenario load so first-time (and
+// restored) accordion chrome stays collapsed; user toggles still expand.
+export function toggleGoalSeekMode(enabled, { expandSections = true } = {}) {
   const wrapper = document.getElementById('goal-seek-wrapper');
   if (wrapper) wrapper.classList.toggle('hidden', !enabled);
 
@@ -411,7 +413,7 @@ export function toggleGoalSeekMode(enabled) {
   const runButton = document.getElementById('runButton');
   if (runButton) runButton.textContent = enabled ? 'Find Best Plan' : 'Run Simulation';
 
-  syncGoalSeekSectionExpansion();
+  if (expandSections) syncGoalSeekSectionExpansion();
 }
 
 export function toggleDynamicAdjustments(enabled) {

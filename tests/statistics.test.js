@@ -25,6 +25,8 @@ import {
   buildHistogram,
   irrFromPath,
   meanYearlyWithdrawals,
+  spendOnlyLifetimeTotals,
+  spendOnlyMedianYearly,
   withdrawalMetricLabels,
   yearWeights,
   earlyWeightRawCurve,
@@ -124,6 +126,22 @@ describe('meanYearlyWithdrawals', () => {
   it('accepts a fixed scalar horizon and guards zero', () => {
     expect(Array.from(meanYearlyWithdrawals(Float64Array.from([100, 50]), 25))).toEqual([4, 2]);
     expect(Array.from(meanYearlyWithdrawals(Float64Array.from([100]), 0))).toEqual([0]);
+  });
+});
+
+describe('spendOnlyLifetimeTotals / spendOnlyMedianYearly', () => {
+  it('floors deposit years at $0 so inflows do not reduce lifetime spend', () => {
+    // 2 runs × 3 years. Run 0: 40k, −100k deposit, 40k → spend 80k.
+    // Run 1: 40k, 40k, 40k → spend 120k.
+    const allYears = Float64Array.from([
+      40_000, -100_000, 40_000,
+      40_000, 40_000, 40_000,
+    ]);
+    const horizons = Int32Array.from([3, 3]);
+    const totals = spendOnlyLifetimeTotals(allYears, horizons, 3);
+    expect(Array.from(totals)).toEqual([80_000, 120_000]);
+    const medians = spendOnlyMedianYearly(allYears, horizons, 3);
+    expect(Array.from(medians)).toEqual([40_000, 40_000]);
   });
 });
 

@@ -240,14 +240,22 @@ export function smoothColumnSeries(values, vss) {
 }
 
 // Tooltip content as plain data so it is unit-testable without a DOM.
+// Deltas compare spending only (deposits floored at $0) so a deposit year is
+// not painted as a huge cut vs plan / classic 4% / median.
 export function formatHeatmapTooltip({ year, pctLabel, simIndex, value, plan, classic, median, runCount }) {
   const signed = (delta) => `${delta >= 0 ? '+' : '−'}${formatK(Math.abs(delta))}`;
-  const classicAmt = classic ?? 0;
+  const spend = clampHeatmapDeposit(value);
+  const planSpend = clampHeatmapDeposit(plan);
+  const classicSpend = clampHeatmapDeposit(classic ?? 0);
+  const medianSpend = clampHeatmapDeposit(median);
+  const withdrawalLabel = Number.isFinite(value) && value < 0
+    ? `Deposit ${formatK(Math.abs(value))}`
+    : `Withdrawal ${formatK(spend)}`;
   const rows = [
-    `Withdrawal ${formatK(value)}`,
-    `${signed(value - plan)} vs plan (${formatK(plan)})`,
-    `${signed(value - classicAmt)} vs 4% (${formatK(classicAmt)})`,
-    `${signed(value - median)} vs year median (${formatK(median)})`,
+    withdrawalLabel,
+    `${signed(spend - planSpend)} vs plan (${formatK(planSpend)})`,
+    `${signed(spend - classicSpend)} vs 4% (${formatK(classicSpend)})`,
+    `${signed(spend - medianSpend)} vs year median (${formatK(medianSpend)})`,
   ];
   if (runCount > 1) rows.push(`avg of ${runCount} runs`);
   const title = runCount > 1
@@ -310,9 +318,12 @@ export function windowAnchorSeries(values, colRunCount, numYears, start, end) {
     for (let c = start; c < end; c++) {
       const v = values[c * numYears + j];
       if (!Number.isNaN(v)) {
-        sum += v * colRunCount[c];
+        // Median / mean anchors are spend-only so deposit years do not pull
+        // "that year’s median withdrawal" below zero.
+        const spend = clampHeatmapDeposit(v);
+        sum += spend * colRunCount[c];
         weight += colRunCount[c];
-        cells.push(v);
+        cells.push(spend);
       }
     }
     if (weight === 0) {
@@ -335,13 +346,16 @@ export function windowAnchorSeries(values, colRunCount, numYears, start, end) {
 // slider used to clip indigo at ~P68 whenever the axis sat at P65, so the
 // spectrum only looked centered at the full P0–P100 window.) Each side guards
 // against a degenerate spread so the renderer never divides by zero.
+// Deposits floor at $0 on both sides so an inflow is not a huge "cut" vs 4%.
 // Exported pure for unit tests.
 export function windowDeltaDomain(values, anchor, numYears, start, end) {
   const deltas = [];
   for (let c = start; c < end; c++) {
     for (let j = 0; j < numYears; j++) {
       const v = values[c * numYears + j];
-      if (!Number.isNaN(v) && !Number.isNaN(anchor[j])) deltas.push(v - anchor[j]);
+      if (!Number.isNaN(v) && !Number.isNaN(anchor[j])) {
+        deltas.push(clampHeatmapDeposit(v) - clampHeatmapDeposit(anchor[j]));
+      }
     }
   }
   deltas.sort((a, b) => a - b);
@@ -533,10 +547,10 @@ function rawCellValue(col, year) {
 
 // The value a cell currently displays. All painting, hit testing, and
 // tooltips read through here so every surface agrees on what is on screen.
-// Amount mode floors deposits at $0; delta modes keep the signed raw value.
+// Spending-only: deposits (negative withdrawals) floor at $0 in every encoding
+// so vs-plan / vs-4% / vs-median deltas are not misread as deep cuts.
 function cellValue(col, year) {
-  const v = rawCellValue(col, year);
-  return state.encoding === 'abs' ? clampHeatmapDeposit(v) : v;
+  return clampHeatmapDeposit(rawCellValue(col, year));
 }
 
 // Paint the cells into an offscreen canvas: one pixel column per data column,
@@ -570,15 +584,18 @@ function buildOffscreen() {
 
   for (let c = 0; c < hm.numCols; c++) {
     for (let j = 0; j < hm.numYears; j++) {
-      // Depletion red keys off the raw absolute (exact $0). Amount mode's
-      // deposit clamp must not turn inflows into false depletion years.
+      // Depletion red keys off the raw absolute (exact $0). Deposit clamp must
+      // not turn inflows into false depletion years.
       const raw = rawCellValue(c, j);
-      const v = info.mode === 'abs' ? clampHeatmapDeposit(raw) : raw;
+      const spend = clampHeatmapDeposit(raw);
       absSeries[j] = raw;
       if (info.mode === 'abs') {
-        series[j] = v;
+        series[j] = spend;
       } else {
-        series[j] = Number.isNaN(v) ? NaN : v - info.anchor[j];
+        const anchorSpend = clampHeatmapDeposit(info.anchor[j]);
+        series[j] = Number.isNaN(spend) || Number.isNaN(anchorSpend)
+          ? NaN
+          : spend - anchorSpend;
       }
     }
     const sub = smoothColumnSeries(series, VSS);
