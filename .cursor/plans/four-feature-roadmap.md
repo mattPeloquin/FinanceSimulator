@@ -29,7 +29,7 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 
 - [x] Phase 0a — Shell & Nav (More menu, primary vs more, accessibility, badge rollup)
 - [x] Phase 0b — State Versioning (`stateVersion`, migrate hook, share-link size guard)
-- [ ] Phase 0c — Worker Dispatcher & Scaffold (thin dispatcher, asset decoupling, checklist)
+- [x] Phase 0c — Worker Dispatcher & Scaffold (thin dispatcher, asset decoupling, checklist)
 - [ ] Phase 1 — Accumulation (pilot)
 - [ ] Phase 2a — Social Security deterministic core
 - [ ] Phase 2b — Social Security Monte Carlo + policy shocks
@@ -280,3 +280,10 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - Share-link size guard: full URL ≤ **8000** chars; over → “Share link is too large. Use Export instead.” Export unrestricted.
   - Accumulation still has no session adapter (Phase 1).
   - Tests: `migrations.test.js`, updated `shareLink` / `sessions` / `scenario` migrate imports; architecture rule updated.
+- 2026-08-01 — **Phase 0c shipped (Worker Dispatcher & Scaffold).**
+  - Thin dispatcher: [`src/workers/simulation.worker.js`](../../src/workers/simulation.worker.js) routes via [`dispatch.js`](../../src/workers/dispatch.js) `HANDLERS` map to `src/workers/handlers/{connect,chunk,planRun,planGoalSeek,sensitivity}.js`. Plan/Lab message types and done payloads unchanged; feature `run.js` / `jobs.js` untouched.
+  - **Unknown `type`** posts `{ type: 'error', message: 'Unknown worker message type: …' }` and does not open a pool (was silent fall-through).
+  - Shared assets confirmed Plan-DOM-free (`historicalData.js`, `core/history.js`, `core/allocation.js`); Plan UI wrapper stays at `sor-plan/history.js`. No code forks needed.
+  - Architecture rule: worker dispatcher, **no feature forks asset data**, `ALLOCATION_ENGINE_KEYS` / `LOGNORMAL_ORDER` contract, and new-feature scaffold checklist.
+  - Out of scope (unchanged): `spawnSubWorkerPorts` still duplicated in Plan/Lab; Accumulation projector still Phase 1.
+  - Tests: `workerDispatcher.test.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.57 MB).

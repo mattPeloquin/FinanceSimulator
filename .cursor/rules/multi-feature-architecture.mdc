@@ -21,8 +21,8 @@ Background jobs keep running across tab switches.
 
 | Lives in | Examples |
 |---|---|
-| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`) | Scenario model + defaults/presets, RNG, sensitivity summarizer (`sensitivity.js`), workers, chart theme/setup, dialogs, header, session chrome, feature registry, session/job abstractions |
-| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature charts, run orchestration, Lab variable registry |
+| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`, `src/data/`) | Scenario model + defaults/presets, RNG, sensitivity summarizer (`sensitivity.js`), workers + dispatcher handlers, chart theme/setup, dialogs, header, session chrome, feature registry, session/job abstractions, historical returns (`data/historicalData.js`), history sampling (`core/history.js`), allocation glide math (`core/allocation.js`) |
+| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature charts, run orchestration, Lab variable registry, Plan history UI wrapper (`sor-plan/history.js`) |
 
 Truly shared code stays shared. Risk-preset *data* (`src/state/presets/`) stays
 shared with the scenario model; only the Easy Mode UI lives under the feature.
@@ -32,6 +32,27 @@ consume scenarios only through `scenario.js` / session-store interfaces.
 SOR Lab keeps sweep *results* in memory (config + Plan dependency snapshots are
 what save/share). Visualizations read stored curves through pure selectors — do
 not bake tornado-only shapes into the persisted result model.
+
+### Shared assets (no feature forks)
+
+Return tables and allocation math are **shared-only**. Features must not copy or
+fork `src/data/historicalData.js`, `src/core/history.js`, or
+`src/core/allocation.js`. Cross-feature investable-class contract:
+
+- **`ALLOCATION_ENGINE_KEYS`** (`src/core/allocation.js`) — camelCase six classes
+  (`usLgGrowth` … `cash`), no inflation.
+- **`LOGNORMAL_ORDER`** (`src/core/history.js`) — snake_case history keys including
+  `inflation`.
+- Plan’s year-range / profile UI stays in `src/features/sor-plan/history.js`.
+
+### Worker dispatcher
+
+One worker bundle ([`src/workers/simulation.worker.js`](../../src/workers/simulation.worker.js))
+routes by message `type` via [`dispatch.js`](../../src/workers/dispatch.js) to
+handlers under `src/workers/handlers/`. Domain math stays in `src/core/`;
+handlers must not import `src/features/*`. Later features add a handler module +
+a `HANDLERS` map entry that calls their `src/core/<domain>.js`. Unknown types
+post `{ type: 'error', … }` and do not open a pool.
 
 ## Storage namespaces
 
@@ -97,3 +118,21 @@ from the registry. Active tab persists in `fs:app:prefs`.
   deliver to the owning feature; tabs show busy/progress badges.
 - **Do not render Chart.js into a hidden feature root** (`display:none` sizes to
   zero). Defer render until `onActivate`, or call `chart.resize()` on activation.
+
+## New-feature scaffold checklist
+
+Reuse for each new feature (`accumulation`, `ss-timing`, `roth-convert`,
+`house-equity`, …):
+
+- `src/features/<id>/` with `index.js`, `session.js`, `run.js`, `partials/`, `ui/`
+- `FEATURE_*` constant in [`src/state/storageKeys.js`](../../src/state/storageKeys.js)
+- Register in [`src/main.js`](../../src/main.js); `#feature-<id>` root in
+  `index.html`; partial dir added to `partialDirectory` in
+  [`vite.config.js`](../../vite.config.js)
+- Session adapter (`getState`, `applyState`, `stateVersion`, `migrate`,
+  `getDependencies` when applicable)
+- Compute in `src/core/<domain>.js`, invoked via the worker dispatcher and
+  [`jobs.js`](../../src/state/jobs.js)
+- Charts rendered or resized in `onActivate` (hidden roots size to zero)
+- Vitest for math; one thin Playwright smoke assertion
+- Inline help copy + three named presets
