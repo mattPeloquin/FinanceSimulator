@@ -30,7 +30,7 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 - [x] Phase 0a — Shell & Nav (More menu, primary vs more, accessibility, badge rollup)
 - [x] Phase 0b — State Versioning (`stateVersion`, migrate hook, share-link size guard)
 - [x] Phase 0c — Worker Dispatcher & Scaffold (thin dispatcher, asset decoupling, checklist)
-- [ ] Phase 1 — Accumulation (pilot)
+- [x] Phase 1 — Accumulation (pilot)
 - [ ] Phase 2a — Social Security deterministic core
 - [ ] Phase 2b — Social Security Monte Carlo + policy shocks
 - [ ] Phase 3 — Roth Convert
@@ -81,10 +81,10 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 flowchart LR
   subgraph primary [Primary tabs]
     Plan[sor-plan]
-    Lab[sor-lab]
+    Accum[accumulation]
   end
   subgraph more [More menu]
-    Accum[accumulation]
+    Lab[sor-lab]
     SS[ss-timing]
     Roth[roth-convert]
     House[house-equity]
@@ -287,3 +287,14 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - Architecture rule: worker dispatcher, **no feature forks asset data**, `ALLOCATION_ENGINE_KEYS` / `LOGNORMAL_ORDER` contract, and new-feature scaffold checklist.
   - Out of scope (unchanged): `spawnSubWorkerPorts` still duplicated in Plan/Lab; Accumulation projector still Phase 1.
   - Tests: `workerDispatcher.test.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.57 MB).
+- 2026-08-01 — **Phase 1 shipped (Accumulation pilot).**
+  - New pure projector [`src/core/accumulation.js`](../../src/core/accumulation.js) (real $); does **not** extend `simulation.js`.
+  - Feature scaffold under [`src/features/accumulation/`](../../src/features/accumulation/): session + migrator (`ACCUMULATION_STATE_VERSION = 1`), presets, own history wrapper, run/jobs, charts resized on `onActivate`.
+  - **Returns UI (1A):** year range + `distMethod` + profiles via shared `core/history.js` (no Plan history import).
+  - **Contribution tiers per sleeve** with **amount ($000s/yr) + growth %**; last tier fills the horizon.
+  - **MC fuzzes market returns only.** Primary view: P10/P50/P90 uncertainty cone over `numYears`.
+  - **Savings impact sweep:** Low / Med / High = **0.5× / 1.0× / 1.5×** contribution amounts (growth % unchanged, CRN shared).
+  - Optional weight explore: coarse 20% grid (ceiling **48** mixes), risk/return cloud + weight tornado on median ending balance; toggleable for faster runs.
+  - Worker `type: 'accumulation'` handler runs on the **master worker** (Plan `ParallelPool` chunk shape is withdrawal-oriented; multi-core Accumulation chunking deferred).
+  - Three presets: Steady Saver, Aggressive Builder, Catch-Up. Full session chrome; no Plan soft-link / no risk-preset write-back.
+  - Tests: `accumulation.test.js`, `tests/e2e/accumulation.spec.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.62 MB).

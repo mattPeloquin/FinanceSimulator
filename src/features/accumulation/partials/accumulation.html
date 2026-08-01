@@ -1,0 +1,202 @@
+{{!-- Accumulation feature root contents — Plan-like flow: inputs → Run → results --}}
+<div class="space-y-8">
+  <div class="space-y-2">
+    <h2 class="text-2xl font-bold text-theme-body">Accumulation</h2>
+    <p class="text-sm text-theme-body max-w-3xl">
+      Explore how deposits and allocations grow over a fixed horizon. Each run
+      draws market paths for an uncertainty cone, then compares Low / Med / High
+      savings (0.5× / 1× / 1.5× contribution amounts) and optionally maps a coarse
+      allocation grid. Results are exploratory — not an optimized portfolio.
+    </p>
+    <p class="text-xs text-theme-faint">
+      Weight grid uses a 20% step (up to 48 mixes) with fewer paths per point so the
+      cloud stays coarse. Median ending balance drives the weight tornado.
+    </p>
+  </div>
+
+  <!-- Easy Mode–style preset slider (mirrors Plan’s risk-preset control) -->
+  <div id="accumulation-preset-control" class="p-3 rounded-sm bg-theme-muted space-y-1 max-w-xl">
+    <div class="flex items-center justify-between mb-2">
+      <label for="accumulation-preset-level" class="text-sm font-medium text-theme-body">Easy Mode</label>
+      <label class="flex items-center gap-1.5 text-xs text-theme-muted cursor-pointer">
+        <input type="checkbox" id="accumulation-preset-active" class="h-3.5 w-3.5 rounded input-theme" checked>
+        Use easy mode
+      </label>
+    </div>
+    <input type="range" id="accumulation-preset-level" min="0" max="2" step="1"
+      list="accumulation-preset-ticks" class="range-theme w-full">
+    <datalist id="accumulation-preset-ticks">
+      <option value="0"></option>
+      <option value="1"></option>
+      <option value="2"></option>
+    </datalist>
+    <div class="grid grid-cols-3 text-xs text-theme-faint leading-tight">
+      <span>Steady Saver</span>
+      <span class="text-center">Aggressive</span>
+      <span class="text-right">Catch-Up</span>
+    </div>
+    <p id="accumulation-preset-name" class="text-xs text-theme-muted pt-2"></p>
+  </div>
+
+  <section class="space-y-4" aria-labelledby="accumulation-config-heading">
+    <h3 id="accumulation-config-heading" class="text-lg font-semibold text-theme-heading">Configuration</h3>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Horizon (years)</span>
+            <input type="number" id="accumulation-num-years" min="1" max="80"
+              class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">After-tax drag</span>
+            <input type="number" id="accumulation-drag" min="0" max="1" step="0.01"
+              class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
+            <span class="text-xs text-theme-faint">Fraction of after-tax gains each year (illustrative).</span>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Cone paths</span>
+            <select id="accumulation-paths" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="500">500</option>
+              <option value="1000" selected>1,000</option>
+              <option value="2000">2,000</option>
+              <option value="5000">5,000</option>
+            </select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Sweep paths</span>
+            <select id="accumulation-sweep-paths" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+          <input type="checkbox" id="accumulation-explore-weights" class="rounded border-theme-border" checked />
+          Explore allocations (region + weight tornado)
+        </label>
+
+        <div class="space-y-2">
+          <h4 class="text-sm font-semibold text-theme-heading">History &amp; returns</h4>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block space-y-1">
+              <span class="text-sm font-medium text-theme-body">Start year</span>
+              <input type="number" id="accumulation-start-year"
+                class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
+            </label>
+            <label class="block space-y-1">
+              <span class="text-sm font-medium text-theme-body">End year</span>
+              <input type="number" id="accumulation-end-year"
+                class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
+            </label>
+          </div>
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Distribution</span>
+            <select id="accumulation-dist-method" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="lognormal">Log-normal</option>
+              <option value="historical">Historical bootstrap</option>
+              <option value="scaledHistorical">Scaled historical</option>
+              <option value="historicalSequence">Historical sequence</option>
+            </select>
+          </label>
+          <button type="button" id="accumulation-refresh-profiles" class="text-xs text-theme-accent hover:underline">
+            Refresh profiles from year range
+          </button>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="text-sm font-semibold text-theme-heading">Starting allocation (%)</h4>
+          <div id="accumulation-allocation" class="grid grid-cols-2 gap-2"></div>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div id="accumulation-sleeves" class="space-y-4"></div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-semibold text-theme-heading">One-time events ($000s)</h4>
+            <button type="button" id="accumulation-add-event" class="text-xs text-theme-accent hover:underline">Add event</button>
+          </div>
+          <p class="text-xs text-theme-faint">Signed real dollars; negative = purchase / outflow. Applied to the after-tax sleeve.</p>
+          <div id="accumulation-events" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Action button — same look/placement pattern as SOR Plan -->
+  <div class="text-center">
+    <button type="button" id="accumulation-run"
+      class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg disabled:opacity-50"
+    >Run Simulation</button>
+  </div>
+
+  <!-- Loading — Plan-style spinner + progress + cancel -->
+  <div id="accumulation-loading" class="hidden flex-col items-center justify-center space-y-4 py-10">
+    <div class="spinner"></div>
+    <p id="accumulation-loading-text" class="text-theme-muted">Running simulations…</p>
+    <div class="w-64 bg-theme-border rounded-full h-2 overflow-hidden">
+      <div id="accumulation-loading-bar" class="bg-theme-accent h-2 transition-all duration-150" style="width: 0%"></div>
+    </div>
+    <button type="button" id="accumulation-cancel"
+      class="px-4 py-2 bg-theme-surface border border-theme-input text-theme-body rounded-lg hover:bg-theme-muted text-sm font-medium transition-colors">
+      Cancel
+    </button>
+  </div>
+
+  <section id="accumulation-results-section" class="hidden space-y-6" aria-labelledby="accumulation-results-heading">
+    <h3 id="accumulation-results-heading" class="text-lg font-semibold text-theme-heading">Results</h3>
+    <p id="accumulation-stale" class="hidden text-xs text-amber-700 dark:text-amber-300">
+      Inputs changed since this run — results may be stale.
+    </p>
+    <p id="accumulation-status" class="sr-only" aria-live="polite"></p>
+
+    <div id="accumulation-results-panel" class="space-y-6">
+      <div class="space-y-2">
+        <h4 class="text-sm font-semibold text-theme-heading">Growth cone (Med savings)</h4>
+        <div class="relative h-72 w-full">
+          <canvas id="accumulation-cone-chart" aria-label="Growth uncertainty cone"></canvas>
+        </div>
+        <p id="accumulation-ending-summary" class="text-xs text-theme-muted"></p>
+      </div>
+
+      <div class="space-y-2">
+        <h4 class="text-sm font-semibold text-theme-heading">Savings impact (Low / Med / High)</h4>
+        <div class="relative h-56 w-full">
+          <canvas id="accumulation-savings-chart" aria-label="Savings impact comparison"></canvas>
+        </div>
+        <p class="text-xs text-theme-faint">Compares median ending wealth when contribution amounts are scaled 0.5× / 1× / 1.5× (growth % unchanged).</p>
+      </div>
+
+      <div class="space-y-2">
+        <h4 class="text-sm font-semibold text-theme-heading">Risk / return region</h4>
+        <div class="relative h-64 w-full">
+          <canvas id="accumulation-region-chart" aria-label="Risk return region"></canvas>
+        </div>
+        <p class="text-xs text-theme-faint">Each point is one coarse static mix — a cloud, not a crisp frontier.</p>
+      </div>
+
+      <div class="space-y-2">
+        <h4 class="text-sm font-semibold text-theme-heading">Weight tornado</h4>
+        <div class="relative h-72 w-full">
+          <canvas id="accumulation-tornado-chart" aria-label="Weight tornado"></canvas>
+        </div>
+        <p class="text-xs text-theme-faint">Impact on median ending balance when each class weight is nudged.</p>
+      </div>
+
+      <div class="space-y-2">
+        <h4 class="text-sm font-semibold text-theme-heading">Glidepath preview</h4>
+        <div class="relative h-56 w-full">
+          <canvas id="accumulation-glide-chart" aria-label="Allocation glidepath preview"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

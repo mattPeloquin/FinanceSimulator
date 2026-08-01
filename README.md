@@ -7,7 +7,8 @@ Welcome to the Personal Finance Simulator! This interactive tool helps you visua
 The entire simulator is a **single, self-contained HTML file**. One app hosts several features (tabs under the title); Easy Mode and built-in help will get you started.
 
 - **SOR Plan** — Build a retirement spending plan and run Monte Carlo simulations (the main planner).
-- **SOR Lab** — Sensitivity analysis on a saved Plan session: see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
+- **Accumulation** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title next to SOR Plan).
+- **SOR Lab** — Sensitivity analysis on a saved Plan session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
 - **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
 - **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
 - **Upgrading from an older build:** Named sessions and old share links from earlier versions are not migrated. Use **Export** before upgrading, then **Import** the JSON file after — that is the supported way to carry scenarios forward.

@@ -6,11 +6,15 @@
 // at module load or via registerFeatureMigrator; persistence stays branch-free.
 
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from './scenario.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from './storageKeys.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from './storageKeys.js';
 
 /** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
 export const LAB_STATE_VERSION = 1;
 export const LAB_STATE_VERSION_MIN = 1;
+
+/** Accumulation session / envelope state version. */
+export const ACCUMULATION_STATE_VERSION = 1;
+export const ACCUMULATION_STATE_VERSION_MIN = 1;
 
 /**
  * @typedef {object} FeatureMigrator
@@ -132,6 +136,36 @@ export function migrateLabState(state, fromVersion) {
   return migrated;
 }
 
+/**
+ * Upgrade Accumulation session state within supported versions.
+ * Field shaping still runs in the feature's normalizeAccumulationState.
+ */
+export function migrateAccumulationState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Accumulation state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('Accumulation state version is missing or invalid.');
+  }
+  if (fromVersion < ACCUMULATION_STATE_VERSION_MIN) {
+    throw new Error(
+      `This Accumulation session uses state version ${fromVersion}, which is older than this app supports (${ACCUMULATION_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > ACCUMULATION_STATE_VERSION) {
+    throw new Error(
+      `This Accumulation session uses state version ${fromVersion}, which is newer than this app supports (${ACCUMULATION_STATE_VERSION}).`,
+    );
+  }
+
+  const migrated = { ...state };
+
+  // Forward migrations go here when ACCUMULATION_STATE_VERSION increases:
+  // if (fromVersion < 2) { ... }
+
+  return migrated;
+}
+
 // Built-in features register at module load so sessions/persistence work in
 // unit tests without booting the full UI.
 registerFeatureMigrator({
@@ -143,4 +177,9 @@ registerFeatureMigrator({
   id: FEATURE_SOR_LAB,
   stateVersion: LAB_STATE_VERSION,
   migrate: migrateLabState,
+});
+registerFeatureMigrator({
+  id: FEATURE_ACCUMULATION,
+  stateVersion: ACCUMULATION_STATE_VERSION,
+  migrate: migrateAccumulationState,
 });

@@ -2,18 +2,21 @@ import { describe, it, expect } from 'vitest';
 import {
   migrateScenario,
   migrateLabState,
+  migrateAccumulationState,
   migrateFeatureState,
   getFeatureStateVersion,
   LAB_STATE_VERSION,
   LAB_STATE_VERSION_MIN,
+  ACCUMULATION_STATE_VERSION,
 } from '../src/state/migrations.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../src/state/storageKeys.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from '../src/state/storageKeys.js';
 
 describe('migrateFeatureState registry', () => {
-  it('exposes Plan and Lab current versions', () => {
+  it('exposes Plan, Lab, and Accumulation current versions', () => {
     expect(getFeatureStateVersion(FEATURE_SOR_PLAN)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
+    expect(getFeatureStateVersion(FEATURE_ACCUMULATION)).toBe(ACCUMULATION_STATE_VERSION);
   });
 
   it('delegates Plan migration to migrateScenario', () => {
@@ -28,6 +31,13 @@ describe('migrateFeatureState registry', () => {
     const out = migrateFeatureState(FEATURE_SOR_LAB, state, LAB_STATE_VERSION);
     expect(out).toEqual(state);
     expect(out).not.toBe(state);
+  });
+
+  it('delegates Accumulation migration to migrateAccumulationState', () => {
+    const state = { numYears: 15 };
+    const out = migrateFeatureState(FEATURE_ACCUMULATION, state, ACCUMULATION_STATE_VERSION);
+    expect(out).toEqual(state);
+    expect(migrateAccumulationState(state, ACCUMULATION_STATE_VERSION)).toEqual(state);
   });
 
   it('rejects unknown features and missing versions', () => {

@@ -35,3 +35,4 @@ export const SOR_PLAN_UI_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'ui');
 export const SOR_PLAN_AUTOSAVE_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'autosave');
 export const SOR_PLAN_UNSAVED_STASH_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'unsaved-stash');
 export const SOR_LAB_UI_KEY = featureStorageKey(FEATURE_SOR_LAB, 'ui');
+export const ACCUMULATION_UI_KEY = featureStorageKey(FEATURE_ACCUMULATION, 'ui');

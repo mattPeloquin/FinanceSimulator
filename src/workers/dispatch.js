@@ -7,6 +7,7 @@ import { handleChunk } from './handlers/chunk.js';
 import { handlePlanRun } from './handlers/planRun.js';
 import { handlePlanGoalSeek } from './handlers/planGoalSeek.js';
 import { handleSensitivity } from './handlers/sensitivity.js';
+import { handleAccumulation } from './handlers/accumulation.js';
 
 /** Message types that do not need a ParallelPool. */
 const NO_POOL_TYPES = new Set(['connect', 'chunk']);
@@ -17,6 +18,7 @@ export const HANDLERS = {
   run: handlePlanRun,
   goalSeek: handlePlanGoalSeek,
   sensitivity: handleSensitivity,
+  accumulation: handleAccumulation,
 };
 
 /**
