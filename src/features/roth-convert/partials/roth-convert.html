@@ -1,0 +1,250 @@
+<section class="space-y-4" aria-labelledby="roth-convert-heading">
+  <div>
+    <h2 id="roth-convert-heading" class="text-xl font-semibold text-theme-heading">Roth Convert</h2>
+    <p class="mt-1 text-sm text-theme-muted max-w-3xl">
+      Explore <span class="font-medium text-theme-body">how much</span> Roth conversion (if any) helps
+      when future tax rates are uncertain. Every run includes a $0 baseline. The rate ladder is
+      illustrative and editable — not current tax law. The rate-premium field is a stand-in for
+      IRMAA, Social Security taxation, and survivor filing effects (not modeled directly); leaving
+      it at zero biases results optimistic. Dollars are today’s purchasing power.
+    </p>
+    <p id="roth-convert-status" class="mt-1 text-xs text-theme-faint" aria-live="polite"></p>
+  </div>
+
+  <div id="roth-convert-preset-control" class="rounded-lg border border-theme-border bg-theme-muted/40 px-4 py-3 space-y-2">
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-theme-body">
+      <input type="checkbox" id="roth-convert-preset-active" class="rounded border-theme-border" checked />
+      Easy Mode
+    </label>
+    <input type="range" id="roth-convert-preset-level" min="0" max="2" step="1" value="0" class="w-full accent-theme-accent" />
+    <p id="roth-convert-preset-name" class="text-xs text-theme-muted"></p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="space-y-4">
+      <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+        <input type="checkbox" id="roth-convert-couple" class="rounded border-theme-border" checked />
+        Model a couple
+      </label>
+
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Person A age</span>
+          <input type="number" id="roth-convert-age-a" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+        </label>
+        <label class="block space-y-0.5" id="roth-convert-age-b-wrap">
+          <span class="text-xs text-theme-muted">Person B age</span>
+          <input type="number" id="roth-convert-age-b" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+        </label>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Accounts (today’s $, in $000s)</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Traditional</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="roth-convert-trad" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Roth</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="roth-convert-roth" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Taxable</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="roth-convert-taxable" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Taxable basis</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="roth-convert-basis" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Taxable gain drag rate</span>
+            <input type="number" id="roth-convert-gain-rate" step="0.01" min="0" max="1"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Other taxable income / yr</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="roth-convert-other-income" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Conversion policy</h3>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Fill to tier (ladder-fill)</span>
+          <select id="roth-convert-fill-tier" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+            <option value="0.12">12%</option>
+            <option value="0.22" selected>22%</option>
+            <option value="0.24">24%</option>
+            <option value="0.32">32%</option>
+          </select>
+        </label>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Custom annual cap (0 = use fill tier)</span>
+          <div class="input-adorned has-suffix">
+            <input type="text" id="roth-convert-annual-cap" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+            <span class="input-adorn-suffix">000s</span>
+          </div>
+        </label>
+        <fieldset class="space-y-1">
+          <legend class="text-xs text-theme-muted">Pay conversion tax</legend>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="roth-convert-tax-payment" value="fromTaxable" checked />
+            From taxable / outside cash (full amount to Roth)
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="roth-convert-tax-payment" value="withhold" />
+            Withhold from conversion (Roth gets net)
+          </label>
+        </fieldset>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Tax ladder (illustrative)</h3>
+        <p class="text-xs text-theme-faint">Ceilings are taxable-income tops of each band, in $000s (nearest thousand). Edit freely.</p>
+        <div id="roth-convert-ladder" class="space-y-1 text-sm"></div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Rate uncertainty</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Rate premium</span>
+            <input type="number" id="roth-convert-rate-premium" step="0.01" min="0" max="0.3"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Tax noise (std)</span>
+            <input type="number" id="roth-convert-tax-noise" step="0.01" min="0" max="0.2"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">RMD / QCD</h3>
+        <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+          <input type="checkbox" id="roth-convert-rmd" class="rounded border-theme-border" checked />
+          Include RMDs (from age 73)
+        </label>
+        <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+          <input type="checkbox" id="roth-convert-qcd" class="rounded border-theme-border" />
+          Apply QCD against taxable RMD
+        </label>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Annual QCD</span>
+          <div class="input-adorned has-suffix">
+            <input type="text" id="roth-convert-qcd-annual" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+            <span class="input-adorn-suffix">000s</span>
+          </div>
+        </label>
+        <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+          <input type="checkbox" id="roth-convert-spouse-sole" class="rounded border-theme-border" />
+          Spouse sole beneficiary (joint RMD factors)
+        </label>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Returns</h3>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-theme-body">SOR Plan session (optional)</span>
+          <select id="roth-convert-scenario" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+            <option value="">None — use constant real return</option>
+          </select>
+        </label>
+        <label class="block space-y-0.5" id="roth-convert-const-return-wrap">
+          <span class="text-xs text-theme-muted">Constant real return (decimal)</span>
+          <input type="number" id="roth-convert-const-return" step="0.005" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Horizon (years)</span>
+            <input type="number" id="roth-convert-years" min="1" max="60" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">MC paths</span>
+            <select id="roth-convert-paths" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+              <option value="200">200</option>
+              <option value="500" selected>500</option>
+              <option value="1000">1,000</option>
+              <option value="2000">2,000</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center">
+    <button type="button" id="roth-convert-run"
+      class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent px-10 py-4 transition-all duration-300 text-lg">
+      Run Analysis
+    </button>
+  </div>
+
+  <div id="roth-convert-loading" class="hidden flex-col gap-2 rounded-lg border border-theme-border bg-theme-muted/30 px-4 py-3">
+    <div class="flex items-center justify-between gap-2 text-sm text-theme-body">
+      <span id="roth-convert-loading-text">Running…</span>
+      <button type="button" id="roth-convert-cancel"
+        class="rounded border border-theme-border px-2 py-1 text-xs hover:bg-theme-muted/40">Cancel</button>
+    </div>
+    <div class="h-2 rounded bg-theme-muted overflow-hidden">
+      <div id="roth-convert-loading-bar" class="h-full bg-theme-accent transition-all" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="roth-convert-results-section" class="hidden space-y-6">
+    <p id="roth-convert-stale" class="hidden text-sm text-theme-p20">Inputs changed — re-run to refresh charts.</p>
+    <p id="roth-convert-summary" class="text-sm text-theme-body"></p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-2">Ending wealth vs conversion amount</h3>
+        <canvas id="roth-convert-response-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-2">Tax vs wealth (selected strategy)</h3>
+        <canvas id="roth-convert-scatter-chart" height="220"></canvas>
+      </div>
+    </div>
+
+    <div>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Net-worth heatmap (rank × year)</h3>
+        <label class="text-xs text-theme-muted inline-flex items-center gap-1">
+          Strategy
+          <select id="roth-convert-focus-strategy" class="rounded border border-theme-border bg-theme-input px-2 py-1"></select>
+        </label>
+      </div>
+      <canvas id="roth-convert-heatmap" height="200"></canvas>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-semibold text-theme-heading mb-2">Sleeve fans (P10 / P50 / P90) vs $0 baseline</h3>
+      <canvas id="roth-convert-fan-chart" height="220"></canvas>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-semibold text-theme-heading mb-2">Median path (selected strategy)</h3>
+      <div id="roth-convert-year-table" class="overflow-x-auto text-xs"></div>
+    </div>
+  </div>
+</section>

@@ -8,7 +8,35 @@
         <div class="flex-1 min-w-0 flex flex-wrap items-start justify-between gap-4">
             <div class="flex-1 min-w-[200px]">
                 <h1 class="text-xl font-semibold text-theme-heading text-center">Personal Finance Simulator</h1>
-                <p class="text-sm text-theme-muted text-center mt-1">Monte Carlo analysis of returns, inflation, and dynamic flows.</p>
+                <div class="text-sm text-theme-muted text-center mt-1">
+                    Monte Carlo analysis of returns, inflation, dynamic flows, and maximizing lifetime utility.<span class="relative ml-1.5 inline-flex align-middle leading-none">
+                        <button
+                            id="appAboutButton"
+                            type="button"
+                            aria-expanded="false"
+                            aria-controls="appAboutPopover"
+                            aria-label="About this application"
+                            title="About this application"
+                            class="inline-flex items-center justify-center leading-none text-theme-muted hover:text-theme-heading focus:outline-none focus:ring-2 focus:ring-theme-accent focus:ring-offset-1 focus:ring-offset-theme-ring-offset rounded-sm transition-colors"
+                        >
+                            <svg class="w-[1em] h-[1em]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </button>
+                        <div
+                            id="appAboutPopover"
+                            role="dialog"
+                            aria-label="About this application"
+                            hidden
+                            class="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-theme-input bg-theme-surface p-4 shadow-lg text-left space-y-3"
+                        >
+                            <p class="text-sm text-theme-body">This application provides tools to explore common saving, investment, and retirement strategies. Instead of wrapping many complex future uncertainties into one picture, you can explore key questions separately, and then bring them together in a plan.</p>
+                            <p class="text-sm text-theme-body">Although these tools are general enough to support many strategies, the focus is maximizing utility while alive. How much to save while not oversaving, how much and when to withdraw in retirement, how much risk and flexibility do you want?</p>
+                            <p class="text-sm text-theme-body">Tool options bias towards &ldquo;dying with zero&rdquo; such that giving occurs during your lifetime.</p>
+                            <p class="text-sm text-theme-body">Key factors like taxes, investment returns, and lifespan assume variability, so instead of overly precise modeling the goal is visualizing likely future scenarios.</p>
+                        </div>
+                    </span>
+                </div>
             </div>
             <!-- Session controls -->
             <div id="session-controls" class="flex flex-wrap items-start gap-2 text-sm">

@@ -9,12 +9,15 @@ import {
   FEATURE_SOR_LAB,
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
+  FEATURE_ROTH_CONVERT,
 } from './state/storageKeys.js';
 import { registerSorPlan } from './features/sor-plan/index.js';
 import { registerAccumulation } from './features/accumulation/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
 import { registerSsTiming } from './features/ss-timing/index.js';
+import { registerRothConvert } from './features/roth-convert/index.js';
 import { restoreUnsavedScenario } from './features/sor-plan/session.js';
+import { initAppAbout } from './ui/appAbout.js';
 import {
   seedSessionUi,
   bindSessionChrome,
@@ -29,6 +32,7 @@ registerSorPlan();
 registerAccumulation();
 registerSorLab();
 registerSsTiming();
+registerRothConvert();
 
 async function init() {
   try {
@@ -48,6 +52,7 @@ async function init() {
       [FEATURE_ACCUMULATION]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SOR_LAB]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SS_TIMING]: { name: '', description: '', lastSelect: '' },
+      [FEATURE_ROTH_CONVERT]: { name: '', description: '', lastSelect: '' },
     });
     setSessionMeta({
       name: autosaved.name || '',
@@ -60,6 +65,7 @@ async function init() {
     if (getActiveFeatureId() !== FEATURE_SOR_PLAN) {
       await restoreSessionUi(getActiveFeatureId());
     }
+    initAppAbout();
     bindSessionChrome();
 
     if (import.meta.env.DEV) {

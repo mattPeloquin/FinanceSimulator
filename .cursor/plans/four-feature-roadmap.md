@@ -33,7 +33,7 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 - [x] Phase 1 — Accumulation (pilot)
 - [x] Phase 2a — Social Security deterministic core
 - [x] Phase 2b — Social Security Monte Carlo + policy shocks
-- [ ] Phase 3 — Roth Convert
+- [x] Phase 3 — Roth Convert
 - [ ] Phase 4a — House Equity comparison
 - [ ] Phase 4b — HECM calibration (gated)
 - [ ] Phase 5 — Integration prep
@@ -306,3 +306,12 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - MC: bridge OC via `simulateBridgePath` / `runBridgeMonteCarlo` in `accumulation.js`; [`src/core/policyShocks.js`](../../src/core/policyShocks.js) tax-rate noise + discrete/phased benefit cuts (CRN via `deriveSeed`); born here for Roth reuse later.
   - Views: strategy bar chart, strip + flips, claim grid, OC MC panel (shocked lifetime + bridge success/ending P10/P50/P90).
   - Tests: `returnsAllocationSlice.test.js`, `socialSecurity.test.js`, `tests/e2e/ssTiming.spec.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.67 MB).
+- 2026-08-01 — **Phase 3 shipped (Roth Convert).**
+  - Feature `roth-convert` under More: session (`ROTH_CONVERT_STATE_VERSION = 1`), three presets (Fill 22% Band / Aggressive Convert / Minimal Baseline Focus), worker `type: 'rothConvert'` (master-worker).
+  - Domain [`src/core/rothConversion.js`](../../src/core/rothConversion.js) (real $) + illustrative ladder [`src/data/taxLadderIllustrative.js`](../../src/data/taxLadderIllustrative.js) + RMD tables [`src/data/rmdFactors.js`](../../src/data/rmdFactors.js).
+  - **Product framing:** every run includes a **$0 conversion baseline**; question is how much conversion (if any) helps under tax-rate uncertainty — not “assume convert.”
+  - **Tax payment toggle** `fromTaxable` | `withhold` (default fromTaxable). **Always-on MC**; median/P10/P90 summaries from ranked paths. Rate shocks via `drawTaxRateShock` around marginal + rate-premium.
+  - **Returns:** Lab-style Plan soft-link (`scenarioRef` + `getDependencies` + import rename); unlinked → constant real return (no embedded returns panel).
+  - **Rich result packaging** for multi-dim viz: conversion-aggression sweep MetricBundles, rank×year heatmaps (net worth / Trad / Roth / taxes), percentile path bundles, scatter per-run, response curve with beat-baseline rates. Reuses `sampleRealPortfolioReturn` exported from `accumulation.js`.
+  - v1 charts: response bars, tax-vs-wealth scatter, rank-band net-worth lines, sleeve fans vs $0, median-path year table.
+  - Tests: `rothConversion.test.js`, `tests/e2e/rothConvert.spec.js`; smoke More item; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.72 MB).

@@ -36,6 +36,8 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/features/accumulation/partials')),
         resolve(__dirname, 'src/features/ss-timing/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/ss-timing/partials')),
+        resolve(__dirname, 'src/features/roth-convert/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/roth-convert/partials')),
       ],
     }),
     viteSingleFile(),

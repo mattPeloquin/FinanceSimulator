@@ -150,8 +150,10 @@ function matVec(L, v) {
 /**
  * Stateful year-by-year real portfolio return sampler.
  * Mutates `state` (bootstrap cursor / AR(1) z) across years on one path.
+ * Exported for Roth Convert and other real-dollar path engines that share
+ * the same market sampling contract.
  */
-function sampleRealPortfolioReturn(params, rng, yearAlloc, yearIndex, state) {
+export function sampleRealPortfolioReturn(params, rng, yearAlloc, yearIndex, state) {
   const {
     distMethod,
     logNormal,

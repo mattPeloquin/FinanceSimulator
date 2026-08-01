@@ -11,6 +11,7 @@ import {
   FEATURE_SOR_LAB,
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
+  FEATURE_ROTH_CONVERT,
 } from './storageKeys.js';
 
 /** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
@@ -24,6 +25,10 @@ export const ACCUMULATION_STATE_VERSION_MIN = 1;
 /** Social Security timing session / envelope state version. */
 export const SS_TIMING_STATE_VERSION = 1;
 export const SS_TIMING_STATE_VERSION_MIN = 1;
+
+/** Roth Convert session / envelope state version. */
+export const ROTH_CONVERT_STATE_VERSION = 1;
+export const ROTH_CONVERT_STATE_VERSION_MIN = 1;
 
 /**
  * @typedef {object} FeatureMigrator
@@ -220,4 +225,33 @@ registerFeatureMigrator({
   id: FEATURE_SS_TIMING,
   stateVersion: SS_TIMING_STATE_VERSION,
   migrate: migrateSsTimingState,
+});
+
+/**
+ * Upgrade Roth Convert session state within supported versions.
+ */
+export function migrateRothConvertState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Roth Convert state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('Roth Convert state version is missing or invalid.');
+  }
+  if (fromVersion < ROTH_CONVERT_STATE_VERSION_MIN) {
+    throw new Error(
+      `This Roth Convert session uses state version ${fromVersion}, which is older than this app supports (${ROTH_CONVERT_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > ROTH_CONVERT_STATE_VERSION) {
+    throw new Error(
+      `This Roth Convert session uses state version ${fromVersion}, which is newer than this app supports (${ROTH_CONVERT_STATE_VERSION}).`,
+    );
+  }
+  return { ...state };
+}
+
+registerFeatureMigrator({
+  id: FEATURE_ROTH_CONVERT,
+  stateVersion: ROTH_CONVERT_STATE_VERSION,
+  migrate: migrateRothConvertState,
 });
