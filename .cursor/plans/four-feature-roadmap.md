@@ -28,7 +28,7 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 ### Phase checklist (todos)
 
 - [x] Phase 0a — Shell & Nav (More menu, primary vs more, accessibility, badge rollup)
-- [ ] Phase 0b — State Versioning (`stateVersion`, migrate hook, share-link size guard)
+- [x] Phase 0b — State Versioning (`stateVersion`, migrate hook, share-link size guard)
 - [ ] Phase 0c — Worker Dispatcher & Scaffold (thin dispatcher, asset decoupling, checklist)
 - [ ] Phase 1 — Accumulation (pilot)
 - [ ] Phase 2a — Social Security deterministic core
@@ -273,3 +273,10 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - **Nav decision (overrides earlier “Plan + Lab primary”):** primary = Plan + Accumulation; Lab moved under More. Accumulation registered as a thin primary stub (`src/features/accumulation/`) so the second primary slot is reserved; full Accumulation UI is still Phase 1.
   - Always show More even if empty (`1A`); More label switches to active feature title (`2B`); omitted placement defaults to primary (`3A`).
   - Updated: `features.js`, styles, architecture rule, `features.test.js`, smoke / sorLab / workers e2e.
+- 2026-08-01 — **Phase 0b shipped (State Versioning).**
+  - Canonical field is **`stateVersion`** on envelopes, IndexedDB session records, and dependency snapshots. No dual-read/write of `schemaVersion` on `fs-scenario` (clean break; legacy `sor-scenario` *file* import still uses its `schemaVersion` field).
+  - All migrators + dispatch live in [`src/state/migrations.js`](../../src/state/migrations.js) (`migrateScenario` moved out of `scenario.js`; added `migrateLabState`, `registerFeatureMigrator`, `migrateFeatureState`). Plan/Lab register at module load; session adapters re-register `stateVersion` + `migrate`.
+  - Lab deps stamp Plan’s `stateVersion` (`SCHEMA_VERSION`). Persistence/sessions call the registry only.
+  - Share-link size guard: full URL ≤ **8000** chars; over → “Share link is too large. Use Export instead.” Export unrestricted.
+  - Accumulation still has no session adapter (Phase 1).
+  - Tests: `migrations.test.js`, updated `shareLink` / `sessions` / `scenario` migrate imports; architecture rule updated.

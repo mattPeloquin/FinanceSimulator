@@ -41,11 +41,30 @@ not bake tornado-only shapes into the persisted result model.
     chart view prefs). **When in doubt, use the feature namespace.**
 - IndexedDB: single `fs-sessions` database, `sessions` store, records keyed by
   `[feature, name]` (Phase 2+).
-- Export envelope: `type: "fs-scenario"` plus a `feature` field; legacy
-  `sor-scenario` *file* import remains the only backward-compat path.
+- Export envelope: `type: "fs-scenario"` plus `feature` and per-feature
+  `stateVersion`; dependency snapshots carry their own `feature` +
+  `stateVersion` + `state`. Legacy `sor-scenario` *file* import remains the
+  only backward-compat path (its file field is still `schemaVersion`).
 - **Clean break**: ignore legacy `sor:*` localStorage keys and the old
   `sor-sessions` IndexedDB database. Legacy share-link URL params are ignored
-  (open fresh, no decode, no error).
+  (open fresh, no decode, no error). Do not dual-read envelope
+  `schemaVersion` on `fs-scenario` payloads.
+
+### State versioning & migrations
+
+- Every session record, export/share envelope, and dependency snapshot writes
+  **`stateVersion`** for that feature (Plan uses `SCHEMA_VERSION`; Lab uses
+  `LAB_STATE_VERSION`).
+- All migrate implementations and the dispatch registry live in
+  [`src/state/migrations.js`](../../src/state/migrations.js)
+  (`migrateScenario`, `migrateLabState`, `registerFeatureMigrator`,
+  `migrateFeatureState`). Persistence / sessions call the registry only —
+  no per-feature `if` branches.
+- Session adapters may declare `stateVersion` + `migrate`;
+  `registerSessionAdapter` re-registers them into the same registry.
+- Share links: full URL must be ≤ **8000** characters; over the limit, show
+  “Share link is too large. Use Export instead.” and do not copy. Export is
+  unrestricted.
 
 ## Feature registry
 

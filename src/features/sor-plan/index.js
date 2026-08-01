@@ -6,7 +6,9 @@ import {
   defaultScenario,
   readScenarioFromDom,
   SCENARIO_DEFAULTS,
+  SCHEMA_VERSION,
 } from '../../state/scenario.js';
+import { migrateScenario } from '../../state/migrations.js';
 import { minAvailableYear, maxAvailableYear, STYLE_INDEX_DATA_FROM_YEAR } from '../../data/historicalData.js';
 import {
   setupInputBehaviors,
@@ -65,6 +67,8 @@ async function initPlanDom() {
   registerSessionAdapter(FEATURE_SOR_PLAN, {
     getState: () => readScenarioFromDom(),
     applyState: (state) => applyScenario(state),
+    stateVersion: SCHEMA_VERSION,
+    migrate: migrateScenario,
     applyImported: (loaded, opts) => applyImportedScenario(loaded, opts),
     onNewSession: () => resetUnsavedToDefaults(),
     onSelectUnsaved: () => restoreUnsavedScenario(),

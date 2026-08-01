@@ -3,6 +3,8 @@
 
 import * as sessions from '../../state/sessions.js';
 import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../../state/storageKeys.js';
+import { LAB_STATE_VERSION } from '../../state/migrations.js';
+import { SCHEMA_VERSION } from '../../state/scenario.js';
 import {
   setSessionMeta,
   refreshSessionList,
@@ -16,6 +18,8 @@ import {
   DEFAULT_PATHS_PER_POINT,
 } from './sweep.js';
 
+export { LAB_STATE_VERSION };
+
 /** Optional UI hooks registered by the Lab feature bootstrap (avoids import cycles). */
 let labUiHooks = {
   onStateApplied: null,
@@ -25,8 +29,6 @@ let labUiHooks = {
 export function registerLabUiHooks(hooks) {
   labUiHooks = { ...labUiHooks, ...hooks };
 }
-
-export const LAB_STATE_VERSION = 1;
 
 /** @type {object} */
 let labConfig = defaultLabConfig();
@@ -209,6 +211,7 @@ export async function getLabDependencies() {
       feature: ref.feature || FEATURE_SOR_PLAN,
       name: ref.name,
       state: loaded.payload,
+      stateVersion: SCHEMA_VERSION,
       description: loaded.description || '',
     }];
   } catch {

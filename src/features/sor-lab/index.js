@@ -5,6 +5,7 @@ import {
   restoreSessionUi,
   snapshotSessionUi,
 } from '../../ui/sessionChrome.js';
+import { migrateLabState } from '../../state/migrations.js';
 import {
   readLabState,
   applyLabState,
@@ -13,6 +14,7 @@ import {
   getLabDependencies,
   registerLabUiHooks,
   defaultLabConfig,
+  LAB_STATE_VERSION,
 } from './session.js';
 import { handleLabRunClick, cancelLabRun, flushPendingSorLabResults } from './run.js';
 import { bindLabConfig, renderLabConfig } from './ui/config.js';
@@ -35,6 +37,8 @@ async function initLabDom() {
   registerSessionAdapter(FEATURE_SOR_LAB, {
     getState: () => readLabState(),
     applyState: (state) => applyLabState(state),
+    stateVersion: LAB_STATE_VERSION,
+    migrate: migrateLabState,
     applyImported: (loaded, opts) => applyImportedLab(loaded, opts),
     onNewSession: () => resetLabToDefaults(),
     getDependencies: () => getLabDependencies(),

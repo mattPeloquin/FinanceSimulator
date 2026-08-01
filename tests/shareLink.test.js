@@ -7,9 +7,12 @@ import {
   parseScenarioPayload,
   peekShareParamFromUrl,
   stripShareParamFromUrl,
+  SHARE_URL_MAX_LENGTH,
+  ShareUrlTooLargeError,
 } from '../src/state/persistence.js';
 import { defaultScenario, SCHEMA_VERSION } from '../src/state/scenario.js';
-import { FEATURE_SOR_PLAN } from '../src/state/storageKeys.js';
+import { LAB_STATE_VERSION } from '../src/state/migrations.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../src/state/storageKeys.js';
 
 describe('share link encode/decode', () => {
   it('round-trips a scenario through gzip + base64url', async () => {
@@ -48,13 +51,14 @@ describe('share link encode/decode', () => {
     expect(json).toEqual({
       type: 'fs-scenario',
       feature: FEATURE_SOR_PLAN,
-      schemaVersion: SCHEMA_VERSION,
+      stateVersion: SCHEMA_VERSION,
       state: { startBalance: 1000 },
       dependencies: [],
     });
     expect(Object.hasOwn(json, 'name')).toBe(false);
     expect(Object.hasOwn(json, 'description')).toBe(false);
     expect(Object.hasOwn(json, 'exportedAt')).toBe(false);
+    expect(Object.hasOwn(json, 'schemaVersion')).toBe(false);
   });
 
   it('rejects garbage; silently marks legacy uncompressed links', async () => {
@@ -114,6 +118,15 @@ describe('share link encode/decode', () => {
     expect(peekShareParamFromUrl(`https://example.com${stripped}`)).toBeNull();
   });
 
+  it('rejects share URLs longer than SHARE_URL_MAX_LENGTH', async () => {
+    expect(SHARE_URL_MAX_LENGTH).toBe(8000);
+    const bloatedBase = `https://example.com/${'x'.repeat(SHARE_URL_MAX_LENGTH)}`;
+    await expect(buildShareUrl({ startBalance: 1 }, {}, bloatedBase))
+      .rejects.toBeInstanceOf(ShareUrlTooLargeError);
+    await expect(buildShareUrl({ startBalance: 1 }, {}, bloatedBase))
+      .rejects.toThrow(/too large.*export/i);
+  });
+
   it('round-trips optional ui view settings on share/import envelopes', async () => {
     const ui = {
       theme: 'dark',
@@ -138,23 +151,35 @@ describe('share link encode/decode', () => {
     expect(fromParse.feature).toBe(FEATURE_SOR_PLAN);
   });
 
-  it('parses fs-scenario with dependency slots', () => {
+  it('parses fs-scenario with per-feature stateVersion and dependency versions', () => {
     const parsed = parseScenarioPayload({
       type: 'fs-scenario',
-      feature: FEATURE_SOR_PLAN,
-      schemaVersion: SCHEMA_VERSION,
-      state: { startBalance: 42 },
+      feature: FEATURE_SOR_LAB,
+      stateVersion: LAB_STATE_VERSION,
+      state: { version: LAB_STATE_VERSION, sweepPoints: 7 },
       dependencies: [
         {
-          feature: 'sor-plan',
+          feature: FEATURE_SOR_PLAN,
           name: 'Dep',
+          stateVersion: SCHEMA_VERSION,
           state: { startBalance: 7 },
         },
       ],
     });
-    expect(parsed.state.startBalance).toBe(42);
+    expect(parsed.feature).toBe(FEATURE_SOR_LAB);
+    expect(parsed.state.sweepPoints).toBe(7);
     expect(parsed.dependencies).toHaveLength(1);
     expect(parsed.dependencies[0].name).toBe('Dep');
     expect(parsed.dependencies[0].state.startBalance).toBe(7);
+    expect(parsed.dependencies[0].stateVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it('rejects fs-scenario missing stateVersion', () => {
+    expect(() => parseScenarioPayload({
+      type: 'fs-scenario',
+      feature: FEATURE_SOR_PLAN,
+      state: { startBalance: 42 },
+      dependencies: [],
+    })).toThrow(/missing or invalid/i);
   });
 });

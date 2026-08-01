@@ -199,37 +199,6 @@ export function formatCurrency(val) {
   return Math.round(n).toLocaleString('en-US');
 }
 
-/**
- * Upgrade saved scenarios within the versions this build supports.
- * Historical migrations below SCHEMA_VERSION_MIN were removed for production;
- * add forward steps here when bumping SCHEMA_VERSION (e.g. `if (schemaVersion < 14)`).
- */
-export function migrateScenario(scenario, schemaVersion) {
-  if (scenario == null || typeof scenario !== 'object' || Array.isArray(scenario)) {
-    throw new Error('Scenario data is missing or invalid.');
-  }
-  if (typeof schemaVersion !== 'number' || !Number.isFinite(schemaVersion)) {
-    throw new Error('Scenario schema version is missing or invalid.');
-  }
-  if (schemaVersion < SCHEMA_VERSION_MIN) {
-    throw new Error(
-      `This scenario uses schema version ${schemaVersion}, which is older than this app supports (${SCHEMA_VERSION_MIN}).`,
-    );
-  }
-  if (schemaVersion > SCHEMA_VERSION) {
-    throw new Error(
-      `This scenario uses schema version ${schemaVersion}, which is newer than this app supports (${SCHEMA_VERSION}).`,
-    );
-  }
-
-  const migrated = { ...scenario };
-
-  // Forward migrations go here when SCHEMA_VERSION increases:
-  // if (schemaVersion < 14) { ... }
-
-  return migrated;
-}
-
 /** Normalize withdrawal floor tiers; empty array means no minimum withdrawal. */
 export function normalizeWithdrawalFloors(tiers) {
   if (!Array.isArray(tiers) || tiers.length === 0) {

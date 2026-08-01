@@ -1,7 +1,12 @@
 // Autosave (localStorage) + feature-aware export / import / share links.
 // Named sessions live in `sessions.js` (`fs-sessions` IndexedDB).
 
-import { SCHEMA_VERSION, migrateScenario } from './scenario.js';
+import { SCHEMA_VERSION } from './scenario.js';
+import {
+  migrateFeatureState,
+  migrateScenario,
+  getFeatureStateVersion,
+} from './migrations.js';
 import {
   loadAccordionState,
   saveAccordionState,
@@ -22,13 +27,24 @@ const EXPORT_TYPE = 'fs-scenario';
 const LEGACY_EXPORT_TYPE = 'sor-scenario';
 const SHARE_PARAM = 's';
 
+/** Full share URL length ceiling; over this, use Export instead. */
+export const SHARE_URL_MAX_LENGTH = 8000;
+
+export class ShareUrlTooLargeError extends Error {
+  constructor(length = 0) {
+    super('Share link is too large. Use Export instead.');
+    this.name = 'ShareUrlTooLargeError';
+    this.length = length;
+  }
+}
+
 // ---- Autosave (localStorage) ------------------------------------------------
 
 export function saveAutosave(scenario, name = '', description = '') {
   try {
     localStorage.setItem(
       AUTOSAVE_KEY,
-      JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario, name, description }),
+      JSON.stringify({ stateVersion: SCHEMA_VERSION, scenario, name, description }),
     );
   } catch {
     /* storage may be unavailable (private mode / quota) — non-fatal */
@@ -42,7 +58,7 @@ export function loadAutosave() {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.scenario) return null;
     return {
-      scenario: migrateScenario(parsed.scenario, parsed.schemaVersion),
+      scenario: migrateScenario(parsed.scenario, parsed.stateVersion),
       name: parsed.name || '',
       description: parsed.description || '',
     };
@@ -66,7 +82,7 @@ export function saveUnsavedStash(scenario) {
   try {
     localStorage.setItem(
       UNSAVED_STASH_KEY,
-      JSON.stringify({ schemaVersion: SCHEMA_VERSION, scenario }),
+      JSON.stringify({ stateVersion: SCHEMA_VERSION, scenario }),
     );
   } catch {
     /* non-fatal */
@@ -79,7 +95,7 @@ export function loadUnsavedStash() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.scenario) return null;
-    return migrateScenario(parsed.scenario, parsed.schemaVersion);
+    return migrateScenario(parsed.scenario, parsed.stateVersion);
   } catch {
     return null;
   }
@@ -104,7 +120,7 @@ export function clearUnsavedStash() {
  *   scenario: object,
  *   name: string,
  *   description: string,
- *   dependencies: Array<{ feature: string, name: string, state: object, description?: string }>,
+ *   dependencies: Array<{ feature: string, name: string, state: object, stateVersion?: number, description?: string }>,
  *   ui?: object,
  * }}
  */
@@ -117,6 +133,7 @@ export function parseScenarioPayload(parsed) {
     if (!parsed.scenario) {
       throw new Error('Not a valid simulator scenario file.');
     }
+    // Legacy file field is still `schemaVersion`; only file-compat path.
     const scenario = migrateScenario(parsed.scenario, parsed.schemaVersion);
     const out = {
       feature: FEATURE_SOR_PLAN,
@@ -141,10 +158,7 @@ export function parseScenarioPayload(parsed) {
     throw new Error('Not a valid simulator scenario file.');
   }
 
-  const state =
-    feature === FEATURE_SOR_PLAN
-      ? migrateScenario(rawState, parsed.schemaVersion)
-      : rawState;
+  const state = migrateFeatureState(feature, rawState, parsed.stateVersion);
 
   const dependencies = Array.isArray(parsed.dependencies)
     ? parsed.dependencies
@@ -152,10 +166,8 @@ export function parseScenarioPayload(parsed) {
         .map((d) => ({
           feature: d.feature,
           name: String(d.name),
-          state:
-            d.feature === FEATURE_SOR_PLAN
-              ? migrateScenario(d.state, d.schemaVersion ?? parsed.schemaVersion)
-              : d.state,
+          state: migrateFeatureState(d.feature, d.state, d.stateVersion),
+          stateVersion: getFeatureStateVersion(d.feature),
           description: d.description || '',
         }))
     : [];
@@ -164,7 +176,7 @@ export function parseScenarioPayload(parsed) {
     feature,
     state,
     // Alias for SOR Plan callers / older tests.
-    scenario: feature === FEATURE_SOR_PLAN ? state : state,
+    scenario: state,
     name: parsed.name || '',
     description: parsed.description || '',
     dependencies,
@@ -220,6 +232,7 @@ async function gunzipBytes(bytes) {
  * @param {object} state
  * @param {{
  *   feature?: string,
+ *   stateVersion?: number,
  *   name?: string,
  *   description?: string,
  *   ui?: object,
@@ -229,10 +242,11 @@ async function gunzipBytes(bytes) {
  */
 export function buildExportEnvelope(state, meta = {}) {
   const feature = meta.feature || FEATURE_SOR_PLAN;
+  const stateVersion = meta.stateVersion ?? getFeatureStateVersion(feature);
   const payload = {
     type: EXPORT_TYPE,
     feature,
-    schemaVersion: SCHEMA_VERSION,
+    stateVersion,
     state,
     dependencies: Array.isArray(meta.dependencies) ? meta.dependencies : [],
   };
@@ -325,7 +339,11 @@ export async function buildShareUrl(
 ) {
   const url = new URL(baseUrl);
   url.searchParams.set(SHARE_PARAM, await encodeScenarioToShareParam(state, meta));
-  return url.toString();
+  const href = url.toString();
+  if (href.length > SHARE_URL_MAX_LENGTH) {
+    throw new ShareUrlTooLargeError(href.length);
+  }
+  return href;
 }
 
 /** Read and remove `s` from the current location (does not change history). */

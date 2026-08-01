@@ -7,7 +7,9 @@ import {
   decodeShareParam,
   peekShareParamFromUrl,
   stripShareParamFromUrl,
+  ShareUrlTooLargeError,
 } from '../state/persistence.js';
+import { registerFeatureMigrator } from '../state/migrations.js';
 import { readUiPrefsSnapshot } from '../state/uiPrefs.js';
 import { applyUiPrefs } from './applyUiPrefs.js';
 import { openDialog, showAlert } from './dialogs.js';
@@ -29,6 +31,8 @@ const sessionAdapters = new Map();
  * @typedef {object} SessionAdapter
  * @property {() => object} getState
  * @property {(state: object) => void} applyState
+ * @property {number} [stateVersion]
+ * @property {(state: object, fromVersion: number) => object} [migrate]
  * @property {(loaded: object, opts?: object) => Promise<void>} [applyImported]
  * @property {() => void | Promise<void>} [onNewSession]
  * @property {() => void | Promise<void>} [onSelectUnsaved]
@@ -40,6 +44,16 @@ const sessionAdapters = new Map();
 
 export function registerSessionAdapter(featureId, adapter) {
   sessionAdapters.set(featureId, adapter);
+  if (
+    typeof adapter?.stateVersion === 'number'
+    && typeof adapter?.migrate === 'function'
+  ) {
+    registerFeatureMigrator({
+      id: featureId,
+      stateVersion: adapter.stateVersion,
+      migrate: adapter.migrate,
+    });
+  }
 }
 
 export function getActiveFeatureId() {
@@ -476,13 +490,22 @@ async function handleLinkCopy() {
   const feature = getActiveFeatureId();
   const adapter = sessionAdapters.get(feature);
   const dependencies = await resolveDependencies(adapter);
-  const url = await buildShareUrl(readActiveFeatureState(), {
-    feature,
-    name: currentSessionName || '',
-    description: currentSessionDescription || '',
-    dependencies,
-    ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
-  });
+  let url;
+  try {
+    url = await buildShareUrl(readActiveFeatureState(), {
+      feature,
+      name: currentSessionName || '',
+      description: currentSessionDescription || '',
+      dependencies,
+      ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
+    });
+  } catch (err) {
+    if (err instanceof ShareUrlTooLargeError) {
+      showAlert(err.message, 'Share link too large');
+      return;
+    }
+    throw err;
+  }
   try {
     await navigator.clipboard.writeText(url);
     if (btn) {

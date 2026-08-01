@@ -11,6 +11,7 @@ import {
 } from '../src/state/sessions.js';
 import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../src/state/storageKeys.js';
 import { SCHEMA_VERSION } from '../src/state/scenario.js';
+import { LAB_STATE_VERSION } from '../src/state/migrations.js';
 
 describe('sessions store (fs-sessions)', () => {
   beforeEach(async () => {
@@ -33,6 +34,37 @@ describe('sessions store (fs-sessions)', () => {
     const lab = await load(FEATURE_SOR_LAB, 'Alpha');
     expect(plan.payload.startBalance).toBe(1000);
     expect(lab.payload.version).toBe(1);
+  });
+
+  it('stamps feature-specific stateVersion on save', async () => {
+    expect(SCHEMA_VERSION).not.toBe(LAB_STATE_VERSION);
+    await save(FEATURE_SOR_PLAN, 'PlanVer', { startBalance: 1 });
+    await save(FEATURE_SOR_LAB, 'LabVer', { version: LAB_STATE_VERSION });
+
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('fs-sessions', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    try {
+      const store = db.transaction('sessions', 'readonly').objectStore('sessions');
+      const planRec = await new Promise((resolve, reject) => {
+        const req = store.get([FEATURE_SOR_PLAN, 'PlanVer']);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      const labRec = await new Promise((resolve, reject) => {
+        const req = store.get([FEATURE_SOR_LAB, 'LabVer']);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      expect(planRec.stateVersion).toBe(SCHEMA_VERSION);
+      expect(labRec.stateVersion).toBe(LAB_STATE_VERSION);
+      expect(planRec.schemaVersion).toBeUndefined();
+      expect(labRec.schemaVersion).toBeUndefined();
+    } finally {
+      db.close();
+    }
   });
 
   it('round-trips save/load/delete and lists newest first', async () => {
@@ -61,10 +93,8 @@ describe('sessions store (fs-sessions)', () => {
     expect((await load(FEATURE_SOR_PLAN, name2)).payload.startBalance).toBe(20);
   });
 
-  it('migrates SOR Plan payloads with schemaVersion', async () => {
+  it('migrates SOR Plan payloads with stateVersion', async () => {
     await save(FEATURE_SOR_PLAN, 'Legacy', { startBalance: 500 }, '', {});
-    // Overwrite raw record shape via a second save is already current schema;
-    // load always runs migrateScenario — ensure SCHEMA_VERSION is present.
     const loaded = await load(FEATURE_SOR_PLAN, 'Legacy');
     expect(loaded.payload.startBalance).toBe(500);
     expect(SCHEMA_VERSION).toBeGreaterThan(0);

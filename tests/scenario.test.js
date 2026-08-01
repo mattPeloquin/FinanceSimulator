@@ -14,12 +14,12 @@ import {
   parseSpecificWithdrawals,
   fitSpecificWithdrawalsToHorizon,
   normalizeGiftingTiers,
-  migrateScenario,
   MONEY_SCALE,
   SCHEMA_VERSION,
   SCHEMA_VERSION_MIN,
   SCENARIO_DEFAULTS,
 } from '../src/state/scenario.js';
+import { migrateScenario } from '../src/state/migrations.js';
 import { getSampleYears, computeProfiles, computeStandardizedYears } from '../src/core/history.js';
 
 describe('currency helpers', () => {

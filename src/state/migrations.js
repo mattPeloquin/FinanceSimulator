@@ -1,0 +1,146 @@
+// Per-feature state migration — the only home for migrate* implementations
+// and the version registry used by sessions / export / share links.
+//
+// Envelope, IndexedDB, and dependency snapshots carry `stateVersion` (not
+// Plan's old `schemaVersion`). Future features add migrate* here and register
+// at module load or via registerFeatureMigrator; persistence stays branch-free.
+
+import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from './scenario.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from './storageKeys.js';
+
+/** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
+export const LAB_STATE_VERSION = 1;
+export const LAB_STATE_VERSION_MIN = 1;
+
+/**
+ * @typedef {object} FeatureMigrator
+ * @property {string} id
+ * @property {number} stateVersion
+ * @property {(state: object, fromVersion: number) => object} migrate
+ */
+
+/** @type {Map<string, FeatureMigrator>} */
+const migrators = new Map();
+
+/**
+ * Register (or replace) a feature's current stateVersion and migrate hook.
+ * @param {FeatureMigrator} entry
+ */
+export function registerFeatureMigrator(entry) {
+  if (!entry || typeof entry !== 'object') {
+    throw new Error('registerFeatureMigrator requires a migrator descriptor');
+  }
+  const { id, stateVersion, migrate } = entry;
+  if (!id || typeof id !== 'string') {
+    throw new Error('registerFeatureMigrator: invalid id');
+  }
+  if (typeof stateVersion !== 'number' || !Number.isFinite(stateVersion)) {
+    throw new Error(`registerFeatureMigrator: feature "${id}" needs a numeric stateVersion`);
+  }
+  if (typeof migrate !== 'function') {
+    throw new Error(`registerFeatureMigrator: feature "${id}" needs a migrate function`);
+  }
+  migrators.set(id, { id, stateVersion, migrate });
+}
+
+/** @param {string} featureId */
+export function getFeatureStateVersion(featureId) {
+  const entry = migrators.get(featureId);
+  if (!entry) {
+    throw new Error(`No state migrator registered for feature "${featureId}".`);
+  }
+  return entry.stateVersion;
+}
+
+/**
+ * Migrate feature state from `fromVersion` to the registered current version.
+ * @param {string} featureId
+ * @param {object} state
+ * @param {number} fromVersion
+ */
+export function migrateFeatureState(featureId, state, fromVersion) {
+  const entry = migrators.get(featureId);
+  if (!entry) {
+    throw new Error(`No state migrator registered for feature "${featureId}".`);
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error(
+      `Feature "${featureId}" state version is missing or invalid.`,
+    );
+  }
+  return entry.migrate(state, fromVersion);
+}
+
+/**
+ * Upgrade SOR Plan scenarios within the versions this build supports.
+ * Historical migrations below SCHEMA_VERSION_MIN were removed for production;
+ * add forward steps here when bumping SCHEMA_VERSION (e.g. `if (schemaVersion < 14)`).
+ */
+export function migrateScenario(scenario, schemaVersion) {
+  if (scenario == null || typeof scenario !== 'object' || Array.isArray(scenario)) {
+    throw new Error('Scenario data is missing or invalid.');
+  }
+  if (typeof schemaVersion !== 'number' || !Number.isFinite(schemaVersion)) {
+    throw new Error('Scenario schema version is missing or invalid.');
+  }
+  if (schemaVersion < SCHEMA_VERSION_MIN) {
+    throw new Error(
+      `This scenario uses schema version ${schemaVersion}, which is older than this app supports (${SCHEMA_VERSION_MIN}).`,
+    );
+  }
+  if (schemaVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `This scenario uses schema version ${schemaVersion}, which is newer than this app supports (${SCHEMA_VERSION}).`,
+    );
+  }
+
+  const migrated = { ...scenario };
+
+  // Forward migrations go here when SCHEMA_VERSION increases:
+  // if (schemaVersion < 14) { ... }
+
+  return migrated;
+}
+
+/**
+ * Upgrade SOR Lab session state within supported versions.
+ * Field shaping / defaults still run in the Lab feature's normalizeLabState.
+ */
+export function migrateLabState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Lab state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('Lab state version is missing or invalid.');
+  }
+  if (fromVersion < LAB_STATE_VERSION_MIN) {
+    throw new Error(
+      `This Lab session uses state version ${fromVersion}, which is older than this app supports (${LAB_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > LAB_STATE_VERSION) {
+    throw new Error(
+      `This Lab session uses state version ${fromVersion}, which is newer than this app supports (${LAB_STATE_VERSION}).`,
+    );
+  }
+
+  const migrated = { ...state };
+
+  // Forward migrations go here when LAB_STATE_VERSION increases:
+  // if (fromVersion < 2) { ... }
+
+  return migrated;
+}
+
+// Built-in features register at module load so sessions/persistence work in
+// unit tests without booting the full UI.
+registerFeatureMigrator({
+  id: FEATURE_SOR_PLAN,
+  stateVersion: SCHEMA_VERSION,
+  migrate: migrateScenario,
+});
+registerFeatureMigrator({
+  id: FEATURE_SOR_LAB,
+  stateVersion: LAB_STATE_VERSION,
+  migrate: migrateLabState,
+});

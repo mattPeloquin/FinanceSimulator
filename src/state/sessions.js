@@ -1,9 +1,8 @@
 // Feature-keyed named sessions in IndexedDB (`fs-sessions`).
 // Records are keyed by [feature, name]. Clean break from legacy `sor-sessions`.
 
-import { SCHEMA_VERSION, migrateScenario } from './scenario.js';
+import { getFeatureStateVersion, migrateFeatureState } from './migrations.js';
 import { optionalUiFromEnvelope } from './uiPrefs.js';
-import { FEATURE_SOR_PLAN } from './storageKeys.js';
 
 const DB_NAME = 'fs-sessions';
 const STORE = 'sessions';
@@ -70,13 +69,6 @@ function requestToPromise(request) {
   });
 }
 
-function migratePayload(feature, payload, schemaVersion) {
-  if (feature === FEATURE_SOR_PLAN) {
-    return migrateScenario(payload || {}, schemaVersion);
-  }
-  return payload == null ? {} : payload;
-}
-
 /**
  * @param {string} feature
  * @returns {Promise<Array<{ name: string, description: string, updatedAt: number }>>}
@@ -109,7 +101,7 @@ export async function load(feature, name) {
     const record = await requestToPromise(tx(db, 'readonly').get([feature, name]));
     if (!record) return null;
     const out = {
-      payload: migratePayload(feature, record.payload, record.schemaVersion),
+      payload: migrateFeatureState(feature, record.payload ?? {}, record.stateVersion),
       description: record.description || '',
       updatedAt: record.savedAt || 0,
     };
@@ -136,7 +128,7 @@ export async function save(feature, name, payload, description = '', { ui } = {}
       name,
       payload,
       description: description || '',
-      schemaVersion: SCHEMA_VERSION,
+      stateVersion: getFeatureStateVersion(feature),
       savedAt: Date.now(),
     };
     const attached = optionalUiFromEnvelope(ui);
