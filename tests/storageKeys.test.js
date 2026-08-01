@@ -8,6 +8,7 @@ import {
   SOR_PLAN_UNSAVED_STASH_KEY,
   SOR_LAB_UI_KEY,
   FEATURE_SOR_PLAN,
+  FEATURE_ACCUMULATION,
   FEATURE_SOR_LAB,
 } from '../src/state/storageKeys.js';
 
@@ -15,11 +16,13 @@ describe('storageKeys', () => {
   it('builds fs:app:* and fs:<feature>:* keys', () => {
     expect(appStorageKey('prefs')).toBe('fs:app:prefs');
     expect(featureStorageKey('sor-plan', 'autosave')).toBe('fs:sor-plan:autosave');
+    expect(featureStorageKey('accumulation', 'ui')).toBe('fs:accumulation:ui');
     expect(featureStorageKey('sor-lab', 'ui')).toBe('fs:sor-lab:ui');
   });
 
-  it('exports the canonical Phase 1 keys', () => {
+  it('exports the canonical feature keys', () => {
     expect(FEATURE_SOR_PLAN).toBe('sor-plan');
+    expect(FEATURE_ACCUMULATION).toBe('accumulation');
     expect(FEATURE_SOR_LAB).toBe('sor-lab');
     expect(APP_PREFS_KEY).toBe('fs:app:prefs');
     expect(SOR_PLAN_UI_KEY).toBe('fs:sor-plan:ui');

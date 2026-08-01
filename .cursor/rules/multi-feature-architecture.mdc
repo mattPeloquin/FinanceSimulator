@@ -53,6 +53,20 @@ Register features via `src/state/features.js` (`registerFeature`,
 `setActiveFeature`, `setFeatureBadge`, …). Tab bar under the title is rendered
 from the registry. Active tab persists in `fs:app:prefs`.
 
+### Placement (`primary` | `more`)
+
+- `registerFeature({ …, placement })` — omit or `'primary'` for top-level tabs;
+  `'more'` puts the feature under the More control (button + listbox).
+- **Primary today:** `sor-plan`, `accumulation`. **More today:** `sor-lab` (plus
+  future features). More is always rendered, even if empty.
+- When a More feature is active, the More control’s label becomes that feature’s
+  title and the control is `aria-selected`. Escape closes the menu and returns
+  focus to the More button.
+- Busy/progress badges roll up onto the More control when any More feature has a
+  running job; each menu item also shows its own badge.
+- Narrow viewports keep equal-width cells for the primary tabs **plus More** —
+  not one cell per every registered feature.
+
 ## Sessions & jobs (Phase 2+)
 
 - Header session controls bind to the **active feature's** session store.

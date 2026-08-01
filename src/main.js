@@ -4,8 +4,9 @@ import './ui/theme.js';
 import * as sessions from './state/sessions.js';
 import { mountFeatureTabs, initFeatures } from './state/features.js';
 import { loadAutosave, loadUnsavedStash } from './state/persistence.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from './state/storageKeys.js';
+import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from './state/storageKeys.js';
 import { registerSorPlan } from './features/sor-plan/index.js';
+import { registerAccumulation } from './features/accumulation/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
 import { restoreUnsavedScenario } from './features/sor-plan/session.js';
 import {
@@ -17,7 +18,9 @@ import {
   restoreSessionUi,
 } from './ui/sessionChrome.js';
 
+// Registration order: primary Plan + Accumulation, then Lab under More.
 registerSorPlan();
+registerAccumulation();
 registerSorLab();
 
 async function init() {
@@ -35,6 +38,7 @@ async function init() {
         description: autosaved.description || '',
         lastSelect: autosaved.name || '',
       },
+      [FEATURE_ACCUMULATION]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SOR_LAB]: { name: '', description: '', lastSelect: '' },
     });
     setSessionMeta({

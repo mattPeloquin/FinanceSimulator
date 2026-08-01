@@ -47,8 +47,9 @@ test('SOR Plan run survives switching to Lab and charts have size on return', as
   await page.fill('#numSimulations', '800');
 
   await page.click('#runButton');
-  // Leave mid-run so the job keeps going while Lab is active.
-  await page.click('#tab-sor-lab');
+  // Leave mid-run so the job keeps going while Lab (under More) is active.
+  await page.click('#feature-more-button');
+  await page.click('#more-item-sor-lab');
   await expect(page.locator('#feature-sor-lab')).toBeVisible();
   await expect(page.locator('#feature-sor-plan')).toBeHidden();
   await expect(page.locator('#tab-sor-plan .feature-tab-badge')).toBeVisible({ timeout: 5_000 });

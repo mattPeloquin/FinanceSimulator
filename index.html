@@ -78,8 +78,18 @@
             {{> advanced }}
             </div>
 
-            <!-- Feature root: SOR Lab -->
-            <div id="feature-sor-lab" role="tabpanel" aria-labelledby="tab-sor-lab" class="hidden space-y-6" aria-hidden="true">
+            <!-- Feature root: Accumulation (Phase 0a stub; full UI in Phase 1) -->
+            <div id="feature-accumulation" role="tabpanel" aria-labelledby="tab-accumulation" class="hidden space-y-4" aria-hidden="true">
+                <div class="rounded-lg border border-theme-border bg-theme-muted px-4 py-6 text-center space-y-2">
+                    <h2 class="text-lg font-semibold text-theme-heading">Accumulation</h2>
+                    <p class="text-sm text-theme-muted max-w-xl mx-auto">
+                        Contribution and glidepath explorer — coming next. This tab reserves the primary slot; SOR Lab lives under More.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Feature root: SOR Lab (under More) -->
+            <div id="feature-sor-lab" role="tabpanel" aria-labelledby="more-item-sor-lab" class="hidden space-y-6" aria-hidden="true">
                 {{> lab }}
             </div>
         </div>

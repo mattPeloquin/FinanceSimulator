@@ -150,6 +150,7 @@ export function registerSorPlan() {
     id: FEATURE_SOR_PLAN,
     title: 'SOR Plan',
     rootId: 'feature-sor-plan',
+    placement: 'primary',
     init: initPlanDom,
     onActivate() {
       flushPendingSorPlanResults();

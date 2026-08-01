@@ -27,6 +27,7 @@ export function featureStorageKey(featureId, key) {
 
 /** Canonical feature ids used by storage helpers below. */
 export const FEATURE_SOR_PLAN = 'sor-plan';
+export const FEATURE_ACCUMULATION = 'accumulation';
 export const FEATURE_SOR_LAB = 'sor-lab';
 
 export const APP_PREFS_KEY = appStorageKey('prefs');

@@ -61,6 +61,7 @@ export function registerSorLab() {
     id: FEATURE_SOR_LAB,
     title: 'SOR Lab',
     rootId: 'feature-sor-lab',
+    placement: 'more',
     init: initLabDom,
     onActivate() {
       flushPendingSorLabResults();

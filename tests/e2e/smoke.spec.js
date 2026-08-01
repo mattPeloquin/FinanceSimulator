@@ -19,12 +19,20 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
 
   // Expect the initial state
   await expect(page.locator('h1')).toHaveText('Finance Simulator');
-  await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(2);
+  // Primary Plan + Accumulation + More control (Lab lives under More).
+  await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(3);
   await expect(page.locator('#tab-sor-plan')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#tab-sor-plan')).toContainText('SOR Plan');
-  await expect(page.locator('#tab-sor-lab')).toContainText('SOR Lab');
+  await expect(page.locator('#tab-accumulation')).toContainText('Accumulation');
+  await expect(page.locator('#feature-more-button')).toContainText('More');
   await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await expect(page.locator('#feature-accumulation')).toBeHidden();
   await expect(page.locator('#feature-sor-lab')).toBeHidden();
+  await page.click('#feature-more-button');
+  await expect(page.locator('#more-item-sor-lab')).toBeVisible();
+  await expect(page.locator('#more-item-sor-lab')).toContainText('SOR Lab');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#feature-more-menu')).toBeHidden();
   await expect(page.locator('#githubLink')).toBeVisible();
   await expect(page.locator('#githubLink')).toHaveAttribute(
     'href',

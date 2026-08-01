@@ -190,14 +190,14 @@
     }
   }
 
-  /* Feature selector: full-width equal cells, per-feature tint.
-     Active cell is saturated; inactive is a soft wash of the same hue. */
+  /* Feature selector: equal cells for primary tabs + More (not one cell per
+     every feature). Active cell is saturated; inactive is a soft wash. */
   .feature-tab-bar {
     display: grid;
     width: 100%;
     grid-auto-flow: column;
     grid-auto-columns: 1fr;
-    overflow: hidden;
+    overflow: visible;
     border-radius: 0.75rem;
     border: 1px solid rgb(var(--theme-border-default));
     background-color: rgb(var(--theme-border-default));
@@ -220,12 +220,51 @@
     color: inherit;
   }
 
-  .feature-tab[aria-selected='false'] .feature-tab-badge {
+  .feature-tab[aria-selected='false'] .feature-tab-badge,
+  .feature-more-option:not([aria-selected='true']) .feature-tab-badge {
     background-color: rgb(0 0 0 / 0.08);
   }
 
-  .dark .feature-tab[aria-selected='false'] .feature-tab-badge {
+  .dark .feature-tab[aria-selected='false'] .feature-tab-badge,
+  .dark .feature-more-option:not([aria-selected='true']) .feature-tab-badge {
     background-color: rgb(255 255 255 / 0.12);
+  }
+
+  /* More overflow control — cell matches primary tabs; menu overlays below. */
+  .feature-more {
+    @apply relative min-w-0;
+  }
+
+  .feature-more-button {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* overflow:visible so the More menu can escape; round the end cells by hand. */
+  .feature-tab-bar > .feature-tab:first-child {
+    border-radius: 0.7rem 0 0 0.7rem;
+  }
+  .feature-tab-bar > .feature-more:last-child .feature-more-button {
+    border-radius: 0 0.7rem 0.7rem 0;
+  }
+
+  .feature-more-menu {
+    @apply absolute left-0 right-0 z-30 mt-1 py-1 list-none;
+    @apply rounded-lg border border-theme-input bg-theme-surface shadow-lg;
+  }
+
+  .feature-more-option {
+    @apply flex items-center justify-between gap-2 px-3 py-2 text-sm font-semibold cursor-pointer;
+    @apply text-theme-muted hover:bg-theme-muted focus:bg-theme-muted focus:outline-none;
+  }
+
+  .feature-more-option[aria-selected='true'],
+  .feature-more-option-active {
+    @apply bg-theme-muted text-theme-heading;
+  }
+
+  .feature-more-empty {
+    @apply px-3 py-2 text-sm text-theme-faint;
   }
 
   /* SOR Plan — teal */
@@ -252,7 +291,31 @@
     color: rgb(15 23 42);
   }
 
-  /* SOR Lab — amber */
+  /* Accumulation — sky (primary slot formerly held by Lab) */
+  .feature-tab[data-feature-id='accumulation'] {
+    background-color: rgb(2 132 199 / 0.14);
+    color: rgb(3 105 161);
+  }
+  .feature-tab[data-feature-id='accumulation']:hover {
+    background-color: rgb(2 132 199 / 0.24);
+  }
+  .feature-tab[data-feature-id='accumulation'][aria-selected='true'] {
+    background-color: rgb(2 132 199);
+    color: rgb(255 255 255);
+  }
+  .dark .feature-tab[data-feature-id='accumulation'] {
+    background-color: rgb(56 189 248 / 0.12);
+    color: rgb(125 211 252);
+  }
+  .dark .feature-tab[data-feature-id='accumulation']:hover {
+    background-color: rgb(56 189 248 / 0.2);
+  }
+  .dark .feature-tab[data-feature-id='accumulation'][aria-selected='true'] {
+    background-color: rgb(14 165 233);
+    color: rgb(15 23 42);
+  }
+
+  /* SOR Lab — amber (also tints More when Lab is the active more-feature) */
   .feature-tab[data-feature-id='sor-lab'] {
     background-color: rgb(217 119 6 / 0.14);
     color: rgb(180 83 9);
@@ -276,15 +339,18 @@
     color: rgb(15 23 42);
   }
 
-  /* Fallback for future features — slate */
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab']) {
+  /* More (idle) + fallback for other features — slate */
+  .feature-more-button:not([data-feature-id]),
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']) {
     background-color: rgb(var(--theme-bg-muted));
     color: rgb(var(--theme-text-muted));
   }
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab']):hover {
+  .feature-more-button:not([data-feature-id]):hover,
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']):hover {
     background-color: rgb(var(--theme-bg-subtle));
   }
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
+  .feature-more-button:not([data-feature-id])[aria-selected='true'],
+  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
     background-color: rgb(var(--theme-bg-control));
     color: rgb(var(--theme-on-accent));
   }

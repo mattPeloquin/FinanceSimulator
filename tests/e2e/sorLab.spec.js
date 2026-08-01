@@ -13,14 +13,21 @@ async function savePlanSession(page, name) {
   await expect(page.locator('#sessionSelect')).toHaveValue(name);
 }
 
+/** Lab lives under More — open the menu and select SOR Lab. */
+async function openSorLab(page) {
+  await page.click('#feature-more-button');
+  await page.click('#more-item-sor-lab');
+  await expect(page.locator('#feature-sor-lab')).toBeVisible();
+  await expect(page.locator('#feature-more-button')).toContainText('SOR Lab');
+}
+
 test('SOR Lab sensitivity run paints tornado and survives tab switch', async ({ page }) => {
   test.slow();
   await page.goto('/');
 
   await savePlanSession(page, 'Lab Smoke Plan');
 
-  await page.click('#tab-sor-lab');
-  await expect(page.locator('#feature-sor-lab')).toBeVisible();
+  await openSorLab(page);
   await expect(page.locator('#sor-lab-run')).toBeVisible();
 
   await page.selectOption('#sor-lab-scenario', 'Lab Smoke Plan');
@@ -40,13 +47,14 @@ test('SOR Lab sensitivity run paints tornado and survives tab switch', async ({ 
 
   await page.click('#sor-lab-run');
 
-  // Switch away mid-run; Lab job should keep going with a tab badge.
+  // Switch away mid-run; Lab job should roll up a badge onto More.
   await page.click('#tab-sor-plan');
   await expect(page.locator('#feature-sor-plan')).toBeVisible();
-  await expect(page.locator('#tab-sor-lab .feature-tab-badge')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#feature-more-button [data-more-badge]')).toBeVisible({
+    timeout: 10_000,
+  });
 
-  await page.click('#tab-sor-lab');
-  await expect(page.locator('#feature-sor-lab')).toBeVisible();
+  await openSorLab(page);
   await expect(page.locator('#sor-lab-results-panel')).toBeVisible({ timeout: 120_000 });
   await expect(page.locator('#sor-lab-loading')).toBeHidden();
 
