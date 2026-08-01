@@ -37,6 +37,19 @@ function buildChartTheme(mode) {
     giftLine: mode === 'dark' ? '#5d9a6a' : hex('percentile.p40'),
     // Marker dots for major cash events on the base schedule preview.
     eventMarker: mode === 'dark' ? '#d4a853' : '#b8860b',
+    // Tornado two-tone bars: low end of swept range vs high end.
+    tornadoLowEnd: rgba('chrome.adorn', 0.55),
+    tornadoHighEnd: rgba('chrome.accent', 0.55),
+    tornadoMuted: rgba('chrome.text-faint', mode === 'dark' ? 0.25 : 0.35),
+    tornadoSelectionFill: rgba('chrome.accent', mode === 'dark' ? 0.12 : 0.08),
+    // Multi-curve response-curve palette (up to 5 overlays).
+    labCurvePalette: [
+      hex('chrome.accent'),
+      hex('percentile.p65'),
+      hex('percentile.p50'),
+      hex('percentile.p30'),
+      hex('percentile.p10'),
+    ],
   };
 }
 

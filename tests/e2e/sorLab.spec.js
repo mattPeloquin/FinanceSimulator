@@ -55,6 +55,14 @@ test('SOR Lab sensitivity run paints tornado and survives tab switch', async ({ 
   expect(tornadoBox.width).toBeGreaterThan(10);
   expect(tornadoBox.height).toBeGreaterThan(10);
 
+  // Clicking a tornado row toggles a selection chip for the response curve.
+  await page.locator('#sor-lab-tornado').click({ position: { x: 120, y: 40 } });
+  await expect(page.locator('#sor-lab-curve-chips button[data-curve-id]').first()).toBeVisible();
+  const curveBox = await page.locator('#sor-lab-curve').boundingBox();
+  expect(curveBox).toBeTruthy();
+  expect(curveBox.width).toBeGreaterThan(10);
+  expect(curveBox.height).toBeGreaterThan(10);
+
   // Metric change is post-run — no loading flash.
   await page.selectOption('#sor-lab-metric', 'endingBalance');
   await expect(page.locator('#sor-lab-loading')).toBeHidden();

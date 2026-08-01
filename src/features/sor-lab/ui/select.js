@@ -5,6 +5,7 @@ import {
   getMetricDef,
   readMetricValue,
   readMetricSe,
+  readMetricMean,
   PERCENTILE_GRID,
 } from '../../../core/sensitivity.js';
 
@@ -210,8 +211,8 @@ function nearestIndex(values, target) {
 }
 
 /**
- * Per-variable response curve for the drill-down fan chart.
- * Returns x values + percentile series for the active metric.
+ * Per-variable response curve for the multi-variable overlay chart.
+ * Returns x values + percentile / rate / mean / se series for the active metric.
  */
 export function curveSeries(result, variableId, view = {}) {
   if (!result || !variableId) return null;
@@ -224,31 +225,39 @@ export function curveSeries(result, variableId, view = {}) {
   const band = clampBand(view.band?.low, view.band?.high);
   const x = [...variable.values];
 
-  if (metric?.kind === 'rate') {
-    return {
-      variable,
-      metric,
-      band,
-      x,
-      series: {
-        value: variable.points.map((p) => readMetricValue(p, metricId)),
-        se: variable.points.map((p) => readMetricSe(p, metricId)),
-      },
-      baselineValue: variable.baselineValue,
-    };
-  }
-
-  const percentiles = {};
-  for (const p of [band.low, 50, band.high]) {
-    percentiles[p] = variable.points.map((pt) => readMetricValue(pt, metricId, p));
-  }
-  return {
+  const common = {
     variable,
     metric,
     band,
     x,
-    series: { percentiles },
+    envelope: variable.envelope,
     baselineValue: variable.baselineValue,
+    crnSafe: variable.crnSafe !== false,
+    isSentinel: !!variable.isSentinel,
+  };
+
+  if (metric?.kind === 'rate') {
+    return {
+      ...common,
+      series: {
+        value: variable.points.map((p) => readMetricValue(p, metricId)),
+        se: variable.points.map((p) => readMetricSe(p, metricId)),
+      },
+    };
+  }
+
+  // Fan ranks plus the active band endpoints (all already on the stored grid).
+  const ranks = new Set([5, 10, 25, 50, 75, 90, 95, band.low, band.high]);
+  const percentiles = {};
+  for (const p of ranks) {
+    percentiles[p] = variable.points.map((pt) => readMetricValue(pt, metricId, p));
+  }
+  return {
+    ...common,
+    series: {
+      percentiles,
+      mean: variable.points.map((pt) => readMetricMean(pt, metricId)),
+    },
   };
 }
 

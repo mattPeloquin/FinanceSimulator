@@ -52,7 +52,9 @@ export function defaultLabConfig() {
       categoryFilter: 'all',
       topN: 15,
       showBelowNoise: false,
-      selectedVariableId: null,
+      selectedVariableIds: [],
+      focusedVariableId: null,
+      curveThreshold: null,
     },
   };
 }
@@ -105,6 +107,29 @@ export function normalizeLabState(raw) {
   }
   const viewIn = raw.view && typeof raw.view === 'object' ? raw.view : {};
   const bandIn = viewIn.band && typeof viewIn.band === 'object' ? viewIn.band : {};
+  let selectedVariableIds = [];
+  if (Array.isArray(viewIn.selectedVariableIds)) {
+    selectedVariableIds = viewIn.selectedVariableIds
+      .filter((id) => typeof id === 'string' && id.length > 0)
+      .slice(0, 5);
+  } else if (typeof viewIn.selectedVariableId === 'string' && viewIn.selectedVariableId) {
+    selectedVariableIds = [viewIn.selectedVariableId];
+  }
+  // Dedupe.
+  selectedVariableIds = [...new Set(selectedVariableIds)];
+  let focusedVariableId = typeof viewIn.focusedVariableId === 'string'
+    ? viewIn.focusedVariableId
+    : null;
+  if (focusedVariableId && !selectedVariableIds.includes(focusedVariableId)) {
+    focusedVariableId = selectedVariableIds[selectedVariableIds.length - 1] || null;
+  } else if (!focusedVariableId && selectedVariableIds.length) {
+    focusedVariableId = selectedVariableIds[selectedVariableIds.length - 1];
+  }
+  let curveThreshold = null;
+  if (viewIn.curveThreshold !== null && viewIn.curveThreshold !== ''
+    && Number.isFinite(Number(viewIn.curveThreshold))) {
+    curveThreshold = Number(viewIn.curveThreshold);
+  }
   return {
     version: LAB_STATE_VERSION,
     scenarioRef: scenarioRef && scenarioRef.name
@@ -130,7 +155,9 @@ export function normalizeLabState(raw) {
         : 'all',
       topN: Number.isFinite(Number(viewIn.topN)) ? Number(viewIn.topN) : base.view.topN,
       showBelowNoise: !!viewIn.showBelowNoise,
-      selectedVariableId: viewIn.selectedVariableId || null,
+      selectedVariableIds,
+      focusedVariableId,
+      curveThreshold,
     },
   };
 }

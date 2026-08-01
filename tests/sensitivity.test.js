@@ -5,6 +5,7 @@ import {
   binomialStandardError,
   percentileVector,
   readMetricValue,
+  readMetricMean,
   PERCENTILE_GRID,
   METRIC_DEFS,
 } from '../src/core/sensitivity.js';
@@ -368,5 +369,25 @@ describe('Lab selectors', () => {
     const curve = curveSeries(result, 'startBalance', { metric: 'successRate' });
     expect(curve.x).toEqual([1400, 2000, 2600]);
     expect(curve.series.value).toHaveLength(3);
+    expect(curve.series.se).toHaveLength(3);
+    expect(curve.envelope).toBeTruthy();
+  });
+
+  it('curveSeries returns fan percentiles and mean for per-path metrics', () => {
+    const result = miniResult();
+    const curve = curveSeries(result, 'startBalance', {
+      metric: 'endingBalance',
+      band: { low: 10, high: 90 },
+    });
+    expect(curve.series.percentiles[50]).toHaveLength(3);
+    expect(curve.series.percentiles[5]).toHaveLength(3);
+    expect(curve.series.percentiles[95]).toHaveLength(3);
+    expect(curve.series.mean).toHaveLength(3);
+  });
+
+  it('readMetricMean returns the per-path mean and null for rates', () => {
+    const result = miniResult();
+    expect(readMetricMean(result.baseline, 'endingBalance')).toBeTypeOf('number');
+    expect(readMetricMean(result.baseline, 'successRate')).toBeNull();
   });
 });

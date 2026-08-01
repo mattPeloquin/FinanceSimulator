@@ -369,5 +369,14 @@ export function readMetricSe(bundle, metricId) {
   return bundle.rates?.[metricId]?.se ?? null;
 }
 
+/** Mean of a per-path metric series (null for rate metrics). */
+export function readMetricMean(bundle, metricId) {
+  const def = getMetricDef(metricId);
+  if (!def || def.kind !== 'perPath' || !bundle) return null;
+  const series = bundle.perPath?.[metricId];
+  if (!series) return null;
+  return Number.isFinite(series.mean) ? series.mean : null;
+}
+
 // Re-export for callers that already import early-weight helpers from statistics.
 export { isEarlyWeightingActive };
