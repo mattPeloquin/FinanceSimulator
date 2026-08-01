@@ -21,10 +21,10 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('h1')).toHaveText('Personal Finance Simulator');
   await page.click('#appAboutButton');
   await expect(page.locator('#appAboutPopover')).toBeVisible();
-  await expect(page.locator('#appAboutPopover')).toContainText('maximize utility while alive');
+  await expect(page.locator('#appAboutPopover')).toContainText('maximizing utility while alive');
   await page.keyboard.press('Escape');
   await expect(page.locator('#appAboutPopover')).toBeHidden();
-  // Primary Plan + Accumulation + More control (Lab + SS + Roth live under More).
+  // Primary Plan + Accumulation + More control (Lab + SS + Roth + House Equity under More).
   await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(3);
   await expect(page.locator('#tab-sor-plan')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#tab-sor-plan')).toContainText('SOR Plan');
@@ -35,6 +35,7 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#feature-sor-lab')).toBeHidden();
   await expect(page.locator('#feature-ss-timing')).toBeHidden();
   await expect(page.locator('#feature-roth-convert')).toBeHidden();
+  await expect(page.locator('#feature-house-equity')).toBeHidden();
   await page.click('#feature-more-button');
   await expect(page.locator('#more-item-sor-lab')).toBeVisible();
   await expect(page.locator('#more-item-sor-lab')).toContainText('SOR Lab');
@@ -42,9 +43,14 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#more-item-ss-timing')).toContainText('Social Security');
   await expect(page.locator('#more-item-roth-convert')).toBeVisible();
   await expect(page.locator('#more-item-roth-convert')).toContainText('Roth Convert');
+  await expect(page.locator('#more-item-house-equity')).toBeVisible();
+  await expect(page.locator('#more-item-house-equity')).toContainText('House Equity');
   await page.keyboard.press('Escape');
   await expect(page.locator('#feature-more-menu')).toBeHidden();
   await expect(page.locator('#githubLink')).toBeVisible();
+  await expect(page.locator('#githubLink')).toHaveText(
+    'Vibe-code your own version on Github',
+  );
   await expect(page.locator('#githubLink')).toHaveAttribute(
     'href',
     'https://github.com/mattpeloquin/FinanceSimulator',

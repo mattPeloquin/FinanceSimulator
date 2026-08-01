@@ -10,6 +10,7 @@ import { handleSensitivity } from './handlers/sensitivity.js';
 import { handleAccumulation } from './handlers/accumulation.js';
 import { handleSsTiming } from './handlers/ssTiming.js';
 import { handleRothConvert } from './handlers/rothConvert.js';
+import { handleHouseEquity } from './handlers/houseEquity.js';
 
 /** Message types that do not need a ParallelPool. */
 const NO_POOL_TYPES = new Set(['connect', 'chunk']);
@@ -23,6 +24,7 @@ export const HANDLERS = {
   accumulation: handleAccumulation,
   ssTiming: handleSsTiming,
   rothConvert: handleRothConvert,
+  houseEquity: handleHouseEquity,
 };
 
 /**

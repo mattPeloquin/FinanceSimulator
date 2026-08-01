@@ -5,6 +5,7 @@ import {
   migrateAccumulationState,
   migrateSsTimingState,
   migrateRothConvertState,
+  migrateHouseEquityState,
   migrateFeatureState,
   getFeatureStateVersion,
   LAB_STATE_VERSION,
@@ -12,6 +13,7 @@ import {
   ACCUMULATION_STATE_VERSION,
   SS_TIMING_STATE_VERSION,
   ROTH_CONVERT_STATE_VERSION,
+  HOUSE_EQUITY_STATE_VERSION,
 } from '../src/state/migrations.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
 import {
@@ -20,15 +22,17 @@ import {
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
+  FEATURE_HOUSE_EQUITY,
 } from '../src/state/storageKeys.js';
 
 describe('migrateFeatureState registry', () => {
-  it('exposes Plan, Lab, Accumulation, SS Timing, and Roth Convert current versions', () => {
+  it('exposes Plan, Lab, Accumulation, SS Timing, Roth Convert, and House Equity current versions', () => {
     expect(getFeatureStateVersion(FEATURE_SOR_PLAN)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ACCUMULATION)).toBe(ACCUMULATION_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_SS_TIMING)).toBe(SS_TIMING_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ROTH_CONVERT)).toBe(ROTH_CONVERT_STATE_VERSION);
+    expect(getFeatureStateVersion(FEATURE_HOUSE_EQUITY)).toBe(HOUSE_EQUITY_STATE_VERSION);
   });
 
   it('delegates Plan migration to migrateScenario', () => {
@@ -64,6 +68,13 @@ describe('migrateFeatureState registry', () => {
     const out = migrateFeatureState(FEATURE_ROTH_CONVERT, state, ROTH_CONVERT_STATE_VERSION);
     expect(out).toEqual(state);
     expect(migrateRothConvertState(state, ROTH_CONVERT_STATE_VERSION)).toEqual(state);
+  });
+
+  it('delegates House Equity migration to migrateHouseEquityState', () => {
+    const state = { homeValue: 800 };
+    const out = migrateFeatureState(FEATURE_HOUSE_EQUITY, state, HOUSE_EQUITY_STATE_VERSION);
+    expect(out).toEqual(state);
+    expect(migrateHouseEquityState(state, HOUSE_EQUITY_STATE_VERSION)).toEqual(state);
   });
 
   it('rejects unknown features and missing versions', () => {

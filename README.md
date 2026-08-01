@@ -11,6 +11,7 @@ The entire simulator is a **single, self-contained HTML file**. One app hosts se
 - **SOR Lab** — Sensitivity analysis on a saved Plan session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
 - **Social Security** — Compare claim ages for one person or a couple (under **More**), with an end-age sensitivity strip and Monte Carlo opportunity cost of delaying a claim. Educational simplifications — not an SSA calculator.
 - **Roth Convert** — Explore how much Roth conversion (if any) helps under uncertain future tax rates (under **More**), with an editable rate ladder, RMD/QCD options, and a $0 baseline in every run. Educational — not a tax-prep tool.
+- **House Equity** — Compare ways to access home equity earlier (under **More**): simplified reverse mortgage, private RM-style, HELOC, cash-out & invest, or sell and rent. Educational — not a HECM or tax calculator.
 - **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
 - **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
 - **Upgrading from an older build:** Named sessions and old share links from earlier versions are not migrated. Use **Export** before upgrading, then **Import** the JSON file after — that is the supported way to carry scenarios forward.
@@ -46,15 +47,32 @@ Cursor has a built-in AI assistant. You essentially act as the "Product Manager,
 
 You don't need to be a software engineer to modify this app! You just need a few basic tools installed on your computer.
 
-### Step 1: Install the basics
+### Step 1: Fork the project on GitHub
+
+Forking makes **your own copy** of the project under your GitHub account. You can change it freely without affecting the original.
+
+1. Create a free account at [github.com](https://github.com/) if you don’t have one.
+2. Open the project page: [github.com/mattpeloquin/FinanceSimulator](https://github.com/mattpeloquin/FinanceSimulator).
+3. Click the **Fork** button near the top-right of the page.
+4. Keep the defaults and click **Create fork**. GitHub creates a copy at `github.com/<your-username>/FinanceSimulator`.
+5. On **your** fork’s page, click the green **Code** button, then **Open with GitHub Desktop** (easiest), or copy the URL and clone it with another Git tool.
+6. Choose a folder on your computer when prompted. That folder is the project you’ll open in Cursor next.
+
+*Prefer the command line?* After forking, run:
+```bash
+git clone https://github.com/<your-username>/FinanceSimulator.git
+cd FinanceSimulator
+```
+
+### Step 2: Install the basics
 
 1. **Node.js**: Download and install the LTS version from [nodejs.org](https://nodejs.org/). This runs the background tools needed to build the project.
 2. **Cursor**: Download and install [Cursor](https://cursor.sh/), an AI-powered code editor that will essentially write the code for you.
 
-### Step 2: Get the project running
+### Step 3: Get the project running
 
 1. Open the **Cursor** app.
-2. Go to `File > Open Folder` and select the folder containing this project.
+2. Go to `File > Open Folder` and select the folder you cloned from your fork.
 3. Open the Terminal inside Cursor by clicking `Terminal > New Terminal` in the top menu (or pressing `Ctrl + ``).
 4. In the terminal window, type:
   ```bash

@@ -10,12 +10,14 @@ import {
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
+  FEATURE_HOUSE_EQUITY,
 } from './state/storageKeys.js';
 import { registerSorPlan } from './features/sor-plan/index.js';
 import { registerAccumulation } from './features/accumulation/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
 import { registerSsTiming } from './features/ss-timing/index.js';
 import { registerRothConvert } from './features/roth-convert/index.js';
+import { registerHouseEquity } from './features/house-equity/index.js';
 import { restoreUnsavedScenario } from './features/sor-plan/session.js';
 import { initAppAbout } from './ui/appAbout.js';
 import {
@@ -33,6 +35,7 @@ registerAccumulation();
 registerSorLab();
 registerSsTiming();
 registerRothConvert();
+registerHouseEquity();
 
 async function init() {
   try {
@@ -53,6 +56,7 @@ async function init() {
       [FEATURE_SOR_LAB]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SS_TIMING]: { name: '', description: '', lastSelect: '' },
       [FEATURE_ROTH_CONVERT]: { name: '', description: '', lastSelect: '' },
+      [FEATURE_HOUSE_EQUITY]: { name: '', description: '', lastSelect: '' },
     });
     setSessionMeta({
       name: autosaved.name || '',

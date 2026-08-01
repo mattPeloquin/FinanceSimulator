@@ -38,6 +38,8 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/features/ss-timing/partials')),
         resolve(__dirname, 'src/features/roth-convert/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/roth-convert/partials')),
+        resolve(__dirname, 'src/features/house-equity/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/house-equity/partials')),
       ],
     }),
     viteSingleFile(),

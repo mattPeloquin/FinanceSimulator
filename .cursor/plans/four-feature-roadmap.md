@@ -34,7 +34,7 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 - [x] Phase 2a — Social Security deterministic core
 - [x] Phase 2b — Social Security Monte Carlo + policy shocks
 - [x] Phase 3 — Roth Convert
-- [ ] Phase 4a — House Equity comparison
+- [x] Phase 4a — House Equity comparison
 - [ ] Phase 4b — HECM calibration (gated)
 - [ ] Phase 5 — Integration prep
 
@@ -315,3 +315,12 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - **Rich result packaging** for multi-dim viz: conversion-aggression sweep MetricBundles, rank×year heatmaps (net worth / Trad / Roth / taxes), percentile path bundles, scatter per-run, response curve with beat-baseline rates. Reuses `sampleRealPortfolioReturn` exported from `accumulation.js`.
   - v1 charts: response bars, tax-vs-wealth scatter, rank-band net-worth lines, sleeve fans vs $0, median-path year table.
   - Tests: `rothConversion.test.js`, `tests/e2e/rothConvert.spec.js`; smoke More item; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.72 MB).
+- 2026-08-01 — **Phase 4a shipped (House Equity comparison).**
+  - Feature `house-equity` under More: session (`HOUSE_EQUITY_STATE_VERSION = 1`), three presets (Access Now / Cash-Out & Invest / Sell & Rent Bridge), worker `type: 'houseEquity'` (master-worker).
+  - Domain [`src/core/houseEquity.js`](../../src/core/houseEquity.js) — **nominal internal, real display**; shared **`accessYear` runway** (all strategies pay existing mortgage / appreciate home until access).
+  - **Five strategies always compared:** simplified RM (educational age proceeds schedule; LOC/tenure), private RM, HELOC, cash-out & invest, **sell & rent**.
+  - Sale friction: commission % + other closing % + CG tax (basis, editable exclusion default $250k, LT CG rate). Home appreciation = user expected **real** % + CRN shock (σ 2%).
+  - Returns: Roth-style Plan soft-link (`scenarioRef` + deps + import rename); constant real return when unlinked.
+  - First cashflow producer: [`src/state/cashflowSeries.js`](../../src/state/cashflowSeries.js) v1 — signed real-$ annual series **per strategy**; nothing consumes until Phase 5.
+  - Hero metrics: cumulative real cash + time-to-liquidity; residual equity reported, not ranked. Charts: comparison bars, median cash paths, portfolio (invest strategies), residual equity.
+  - Tests: `houseEquity.test.js`, `cashflowSeries.test.js`, `tests/e2e/houseEquity.spec.js`; smoke More item; Vitest green; Playwright green (one parallel-load flake on unrelated IRR drilldown, passes on retry); `npm run build` ok (`dist/index.html` ~2.78 MB).

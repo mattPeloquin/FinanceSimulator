@@ -1,0 +1,329 @@
+<section class="space-y-4" aria-labelledby="house-equity-heading">
+  <div>
+    <h2 id="house-equity-heading" class="text-xl font-semibold text-theme-heading">House Equity</h2>
+    <p class="mt-1 text-sm text-theme-muted max-w-3xl">
+      Compare ways to <span class="font-medium text-theme-body">access home equity earlier</span>
+      — simplified reverse mortgage, private RM-style, HELOC, cash-out refinance &amp; invest, or
+      sell and rent. All strategies share a mortgage runway until the access year. Loan math is
+      <span class="font-medium text-theme-body">nominal</span>; charts show today’s dollars.
+      Money inputs use <span class="font-medium text-theme-body">$000s</span> like the rest of the app;
+      rates use percent. The simplified RM is educational — not a calibrated HECM. Sale costs include
+      commission, other closing costs, and a simple capital-gains tax (not a tax-prep tool). Home
+      appreciation uses your expected real rate plus Monte Carlo noise (~2% σ).
+    </p>
+    <p id="house-equity-status" class="mt-1 text-xs text-theme-faint" aria-live="polite"></p>
+  </div>
+
+  <div id="house-equity-preset-control" class="rounded-lg border border-theme-border bg-theme-muted/40 px-4 py-3 space-y-2">
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-theme-body">
+      <input type="checkbox" id="house-equity-preset-active" class="rounded border-theme-border" checked />
+      Easy Mode
+    </label>
+    <input type="range" id="house-equity-preset-level" min="0" max="2" step="1" value="0" class="w-full accent-theme-accent" />
+    <p id="house-equity-preset-name" class="text-xs text-theme-muted"></p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="space-y-4">
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Household ($000s)</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Current age</span>
+            <input type="number" id="house-equity-age" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Horizon (years)</span>
+            <input type="number" id="house-equity-years" min="1" max="60" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Access year (runway ends)</span>
+            <input type="number" id="house-equity-access-year" min="0" max="60" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Annual spend target</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-spend" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Home value</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-home" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Cost basis</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-basis" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Existing mortgage</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Balance</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-mortgage-bal" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Rate</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-mortgage-rate" step="0.1" min="0" max="20"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Remaining term (years)</span>
+            <input type="number" id="house-equity-mortgage-term" min="0" max="40"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Appreciation &amp; inflation</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Expected real home appreciation</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-home-apprec" step="0.1" min="-10" max="20"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Expected inflation (unlinked)</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-inflation" step="0.1" min="0" max="15"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Sale costs &amp; capital gains</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Commission</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-commission" step="0.1" min="0" max="20"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Other closing</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-other-closing" step="0.1" min="0" max="20"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">CG exclusion</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-cg-exclusion" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">LT CG rate</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-cg-rate" step="0.5" min="0" max="100"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Annual rent (after sale)</span>
+            <div class="input-adorned has-suffix">
+              <input type="text" id="house-equity-rent" class="currency-input w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">000s</span>
+            </div>
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Real rent growth</span>
+            <div class="input-adorned has-suffix">
+              <input type="number" id="house-equity-rent-growth" step="0.1" min="-5" max="10"
+                class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+              <span class="input-adorn-suffix">%</span>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Returns (invest paths)</h3>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Link SOR Plan session (optional)</span>
+          <select id="house-equity-scenario" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+            <option value="">— Constant return —</option>
+          </select>
+        </label>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Constant real return</span>
+          <div class="input-adorned has-suffix">
+            <input type="number" id="house-equity-const-return" step="0.1" min="-20" max="30"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+            <span class="input-adorn-suffix">%</span>
+          </div>
+        </label>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Monte Carlo paths</span>
+          <select id="house-equity-paths" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+            <option value="200">200</option>
+            <option value="500" selected>500</option>
+            <option value="1000">1000</option>
+            <option value="2000">2000</option>
+          </select>
+        </label>
+      </div>
+
+      <details class="rounded-lg border border-theme-border px-3 py-3">
+        <summary class="text-sm font-semibold text-theme-heading cursor-pointer">Strategy parameters</summary>
+        <div class="mt-3 space-y-3 text-sm">
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Simplified RM mode</span>
+              <select id="house-equity-srm-mode" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+                <option value="loc">LOC</option>
+                <option value="tenure">Tenure</option>
+              </select>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Simplified RM fee</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-srm-fee" step="0.1" min="0" max="20"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Private RM proceeds</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-prm-proceeds" step="1" min="0" max="90"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Private RM fee</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-prm-fee" step="0.1" min="0" max="20"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">HELOC LTV</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-heloc-ltv" step="1" min="0" max="100"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">HELOC rate</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-heloc-rate" step="0.1" min="0" max="25"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Cash-out LTV</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-cashout-ltv" step="1" min="0" max="95"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5">
+              <span class="text-xs text-theme-muted">Cash-out rate</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-cashout-rate" step="0.1" min="0" max="20"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+          </div>
+        </div>
+      </details>
+
+    </div>
+  </div>
+
+  <div class="text-center">
+    <button type="button" id="house-equity-run"
+      class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg disabled:opacity-50"
+    >Run Analysis</button>
+  </div>
+
+  <div id="house-equity-loading" class="hidden flex-col items-center justify-center space-y-4 py-10">
+    <div class="spinner"></div>
+    <p id="house-equity-loading-text" class="text-theme-muted">Running…</p>
+    <div class="w-64 bg-theme-border rounded-full h-2 overflow-hidden">
+      <div id="house-equity-loading-bar" class="bg-theme-accent h-2 transition-all duration-150" style="width: 0%"></div>
+    </div>
+    <button type="button" id="house-equity-cancel"
+      class="px-4 py-2 bg-theme-surface border border-theme-input text-theme-body rounded-lg hover:bg-theme-muted text-sm font-medium transition-colors">
+      Cancel
+    </button>
+  </div>
+
+  <div id="house-equity-results-section" class="hidden space-y-4">
+    <p id="house-equity-stale" class="hidden text-xs text-amber-600 dark:text-amber-400">
+      Inputs changed since this run — results may be stale.
+    </p>
+    <p id="house-equity-summary" class="text-sm text-theme-body"></p>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm" id="house-equity-rank-table">
+        <thead>
+          <tr class="text-left text-xs uppercase text-theme-faint">
+            <th class="py-1 pr-3">Strategy</th>
+            <th class="py-1 pr-3">Cum. cash P50</th>
+            <th class="py-1 pr-3">Extracted P50</th>
+            <th class="py-1 pr-3">Time to liquidity</th>
+            <th class="py-1 pr-3">Spend met</th>
+            <th class="py-1">Residual P50</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-1">Cumulative real cash (P10 / P50 / P90)</h3>
+        <canvas id="house-equity-compare-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-1">Median cumulative cash paths</h3>
+        <canvas id="house-equity-cash-path-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-1">Portfolio (cash-out &amp; sell) — median path</h3>
+        <canvas id="house-equity-portfolio-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-theme-heading mb-1">Residual home equity — median path</h3>
+        <canvas id="house-equity-residual-chart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+</section>

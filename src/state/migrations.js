@@ -12,6 +12,7 @@ import {
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
+  FEATURE_HOUSE_EQUITY,
 } from './storageKeys.js';
 
 /** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
@@ -29,6 +30,10 @@ export const SS_TIMING_STATE_VERSION_MIN = 1;
 /** Roth Convert session / envelope state version. */
 export const ROTH_CONVERT_STATE_VERSION = 1;
 export const ROTH_CONVERT_STATE_VERSION_MIN = 1;
+
+/** House Equity session / envelope state version. */
+export const HOUSE_EQUITY_STATE_VERSION = 1;
+export const HOUSE_EQUITY_STATE_VERSION_MIN = 1;
 
 /**
  * @typedef {object} FeatureMigrator
@@ -254,4 +259,33 @@ registerFeatureMigrator({
   id: FEATURE_ROTH_CONVERT,
   stateVersion: ROTH_CONVERT_STATE_VERSION,
   migrate: migrateRothConvertState,
+});
+
+/**
+ * Upgrade House Equity session state within supported versions.
+ */
+export function migrateHouseEquityState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('House Equity state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('House Equity state version is missing or invalid.');
+  }
+  if (fromVersion < HOUSE_EQUITY_STATE_VERSION_MIN) {
+    throw new Error(
+      `This House Equity session uses state version ${fromVersion}, which is older than this app supports (${HOUSE_EQUITY_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > HOUSE_EQUITY_STATE_VERSION) {
+    throw new Error(
+      `This House Equity session uses state version ${fromVersion}, which is newer than this app supports (${HOUSE_EQUITY_STATE_VERSION}).`,
+    );
+  }
+  return { ...state };
+}
+
+registerFeatureMigrator({
+  id: FEATURE_HOUSE_EQUITY,
+  stateVersion: HOUSE_EQUITY_STATE_VERSION,
+  migrate: migrateHouseEquityState,
 });
