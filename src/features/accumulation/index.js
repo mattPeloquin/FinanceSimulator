@@ -16,6 +16,7 @@ import {
   resetAccumulationToDefaults,
   getAccumulationState,
   applyAccumulationPreset,
+  getAccumulationCashflowSeries,
 } from './session.js';
 import { applyAccumulationHistoryProfiles } from './history.js';
 import { bindAccumulationInputs, renderAccumulationForm } from './ui/inputs.js';
@@ -48,6 +49,7 @@ async function initAccumulationDom() {
     migrate: migrateAccumulationState,
     applyImported: (loaded, opts) => applyImportedAccumulation(loaded, opts),
     onNewSession: () => resetAccumulationToDefaults(),
+    getCashflowSeries: ({ sessionName } = {}) => getAccumulationCashflowSeries({ sessionName }),
   });
 
   bindAccumulationInputs();

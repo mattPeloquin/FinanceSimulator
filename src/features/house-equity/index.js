@@ -17,6 +17,7 @@ import {
   getHouseEquityState,
   applyHouseEquityPreset,
   getHouseEquityDependencies,
+  getHouseEquityCashflowSeries,
 } from './session.js';
 import { bindHouseEquityInputs, renderHouseEquityForm } from './ui/inputs.js';
 import {
@@ -49,6 +50,7 @@ async function initHouseEquityDom() {
     applyImported: (loaded, opts) => applyImportedHouseEquity(loaded, opts),
     onNewSession: () => resetHouseEquityToDefaults(),
     getDependencies: () => getHouseEquityDependencies(),
+    getCashflowSeries: ({ sessionName } = {}) => getHouseEquityCashflowSeries({ sessionName }),
   });
 
   bindHouseEquityInputs();

@@ -9,7 +9,7 @@ export function getHouseEquityPresets() {
     {
       id: 'access-now',
       name: 'Access Now',
-      description: 'Leverage immediately (access year 0); LOC-style simplified RM; modest spend target.',
+      description: 'Leverage immediately (access year 0); LOC-style calibrated HECM; modest spend target.',
       patch: {
         accessYear: 0,
         homeValue: 800,
@@ -20,6 +20,7 @@ export function getHouseEquityPresets() {
         annualSpendTarget: 30,
         numYears: 25,
         simplifiedRmMode: 'loc',
+        simplifiedRmRate: 6,
         annualRent: 36,
       },
     },

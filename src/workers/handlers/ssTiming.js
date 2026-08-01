@@ -6,6 +6,7 @@
 import {
   runDeterministicSsAnalysis,
   buildBenefitCashflow,
+  buildSsCashflowSeries,
   shockedLifetime,
 } from '../../core/socialSecurity.js';
 import {
@@ -129,11 +130,19 @@ export async function handleSsTiming(ctx, data) {
   }
 
   postProgress('Packaging results', 0.95);
+  const startAge = Number(bridge?.currentAge)
+    || Number(deterministicInput?.personA?.currentAge)
+    || 62;
+  const cashflowSeries = buildSsCashflowSeries(deterministic, {
+    startAge,
+    primaryEnd,
+  });
   post({
     type: 'done',
     result: {
       deterministic,
       mcByStrategy,
+      cashflowSeries,
       meta: {
         seed,
         numSimulations: paths,

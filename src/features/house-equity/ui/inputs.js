@@ -116,6 +116,7 @@ export function renderHouseEquityForm() {
   setNum('house-equity-const-return', s.constantRealReturn);
   el('house-equity-paths').value = String(s.numSimulations);
   el('house-equity-srm-mode').value = s.simplifiedRmMode;
+  setNum('house-equity-srm-rate', s.simplifiedRmRate);
   setNum('house-equity-srm-fee', s.simplifiedRmFeePct);
   setNum('house-equity-prm-proceeds', s.privateRmProceedsPct);
   setNum('house-equity-prm-fee', s.privateRmFeePct);
@@ -152,13 +153,14 @@ export function syncHouseEquityFormToState() {
     constantRealReturn: readNum('house-equity-const-return', 0.04),
     numSimulations: Number(el('house-equity-paths')?.value) || 500,
     simplifiedRmMode: el('house-equity-srm-mode')?.value === 'tenure' ? 'tenure' : 'loc',
-    simplifiedRmFeePct: readNum('house-equity-srm-fee', 0.02),
-    privateRmProceedsPct: readNum('house-equity-prm-proceeds', 0.5),
-    privateRmFeePct: readNum('house-equity-prm-fee', 0.03),
-    helocLtv: readNum('house-equity-heloc-ltv', 0.75),
-    helocRate: readNum('house-equity-heloc-rate', 0.08),
-    cashOutLtv: readNum('house-equity-cashout-ltv', 0.7),
-    cashOutRate: readNum('house-equity-cashout-rate', 0.065),
+    simplifiedRmRate: readNum('house-equity-srm-rate', 6),
+    simplifiedRmFeePct: readNum('house-equity-srm-fee', 2),
+    privateRmProceedsPct: readNum('house-equity-prm-proceeds', 50),
+    privateRmFeePct: readNum('house-equity-prm-fee', 3),
+    helocLtv: readNum('house-equity-heloc-ltv', 75),
+    helocRate: readNum('house-equity-heloc-rate', 8),
+    cashOutLtv: readNum('house-equity-cashout-ltv', 70),
+    cashOutRate: readNum('house-equity-cashout-rate', 6.5),
     scenarioRef: scenarioName
       ? { feature: FEATURE_SOR_PLAN, name: scenarioName }
       : null,

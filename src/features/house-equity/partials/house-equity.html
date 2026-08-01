@@ -3,13 +3,14 @@
     <h2 id="house-equity-heading" class="text-xl font-semibold text-theme-heading">House Equity</h2>
     <p class="mt-1 text-sm text-theme-muted max-w-3xl">
       Compare ways to <span class="font-medium text-theme-body">access home equity earlier</span>
-      — simplified reverse mortgage, private RM-style, HELOC, cash-out refinance &amp; invest, or
-      sell and rent. All strategies share a mortgage runway until the access year. Loan math is
+      — calibrated HECM (published PLF tables), private RM-style, HELOC, cash-out refinance &amp; invest,
+      or sell and rent. All strategies share a mortgage runway until the access year. Loan math is
       <span class="font-medium text-theme-body">nominal</span>; charts show today’s dollars.
       Money inputs use <span class="font-medium text-theme-body">$000s</span> like the rest of the app;
-      rates use percent. The simplified RM is educational — not a calibrated HECM. Sale costs include
-      commission, other closing costs, and a simple capital-gains tax (not a tax-prep tool). Home
-      appreciation uses your expected real rate plus Monte Carlo noise (~2% σ).
+      rates use percent. HECM proceeds use HUD PLF / MCA / 2% initial MIP for sizing; draws stay
+      educational — not a lender quote or compliance calculator. Sale costs include commission,
+      other closing costs, and a simple capital-gains tax (not a tax-prep tool). Home appreciation
+      uses your expected real rate plus Monte Carlo noise (~2% σ).
     </p>
     <p id="house-equity-status" class="mt-1 text-xs text-theme-faint" aria-live="polite"></p>
   </div>
@@ -198,14 +199,23 @@
         <div class="mt-3 space-y-3 text-sm">
           <div class="grid grid-cols-2 gap-2">
             <label class="block space-y-0.5">
-              <span class="text-xs text-theme-muted">Simplified RM mode</span>
+              <span class="text-xs text-theme-muted">HECM draw mode</span>
               <select id="house-equity-srm-mode" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
                 <option value="loc">LOC</option>
                 <option value="tenure">Tenure</option>
               </select>
             </label>
             <label class="block space-y-0.5">
-              <span class="text-xs text-theme-muted">Simplified RM fee</span>
+              <span class="text-xs text-theme-muted">Expected rate (PLF)</span>
+              <div class="input-adorned has-suffix">
+                <input type="number" id="house-equity-srm-rate" step="0.125" min="3" max="18.875"
+                  class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm"
+                  title="Expected rate for HUD PLF lookup, rounded to 0.125%" />
+                <span class="input-adorn-suffix">%</span>
+              </div>
+            </label>
+            <label class="block space-y-0.5 col-span-2">
+              <span class="text-xs text-theme-muted">HECM other fee (% of MCA; on top of fixed 2% MIP)</span>
               <div class="input-adorned has-suffix">
                 <input type="number" id="house-equity-srm-fee" step="0.1" min="0" max="20"
                   class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />

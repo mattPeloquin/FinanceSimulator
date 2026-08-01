@@ -19,6 +19,7 @@ import {
 } from './allocation.js';
 import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
 import { mean, median, percentileValue, stdDev } from './statistics.js';
+import { buildCashflowSeries } from '../state/cashflowSeries.js';
 
 /** Sleeve ids used throughout Accumulation state and results. */
 export const SLEEVE_IDS = Object.freeze(['ira', 'roth', 'afterTax']);
@@ -622,6 +623,41 @@ export function allocationFromConfig(allocation, allocationKeys) {
     return renormalizeAllocation(tierMixToDecimal(allocation, allocationKeys));
   }
   return renormalizeAllocation(allocation);
+}
+
+/**
+ * Household cash series from Accumulation config (events + contribution outflows).
+ * Contributions are negative (cash leaving the household into accounts);
+ * events keep their signed meaning (+ deposit / − purchase).
+ *
+ * @param {object} state - feature session state ($000s amounts)
+ * @param {{ sessionName?: string|null }} [opts]
+ */
+export function buildAccumulationCashflowSeries(state, opts = {}) {
+  const numYears = Math.max(1, Math.min(60, Number(state?.numYears) || 20));
+  const events = buildEventSeries(state?.events || [], numYears);
+  /** @type {Record<string, number[]>} */
+  const annualByStrategy = {};
+  for (const scale of SAVINGS_SCALES) {
+    const contrib = buildAllContributionSeries(state?.sleeves, numYears, scale.factor);
+    const totalContrib = new Array(numYears).fill(0);
+    for (const id of SLEEVE_IDS) {
+      const series = contrib[id] || [];
+      for (let y = 0; y < numYears; y++) totalContrib[y] += Number(series[y]) || 0;
+    }
+    const annual = new Array(numYears);
+    for (let y = 0; y < numYears; y++) {
+      annual[y] = -totalContrib[y] + (events[y] || 0);
+    }
+    annualByStrategy[scale.id] = annual;
+  }
+  return buildCashflowSeries({
+    sourceFeature: 'accumulation',
+    startAge: 0,
+    sessionName: opts.sessionName ?? null,
+    numYears,
+    annualByStrategy,
+  });
 }
 
 export { buildAllocationOverTimeSeries, ALLOCATION_ENGINE_KEYS, copyAllocation, renormalizeAllocation };

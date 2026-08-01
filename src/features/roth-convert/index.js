@@ -17,6 +17,7 @@ import {
   getRothConvertState,
   applyRothConvertPreset,
   getRothConvertDependencies,
+  getRothConvertCashflowSeries,
 } from './session.js';
 import { bindRothConvertInputs, renderRothConvertForm } from './ui/inputs.js';
 import {
@@ -49,6 +50,7 @@ async function initRothConvertDom() {
     applyImported: (loaded, opts) => applyImportedRothConvert(loaded, opts),
     onNewSession: () => resetRothConvertToDefaults(),
     getDependencies: () => getRothConvertDependencies(),
+    getCashflowSeries: ({ sessionName } = {}) => getRothConvertCashflowSeries({ sessionName }),
   });
 
   bindRothConvertInputs();

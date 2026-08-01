@@ -25,6 +25,7 @@ import {
   ALLOCATION_ENGINE_KEYS,
   buildAllocationOverTimeSeries,
 } from './allocation.js';
+import { buildCashflowSeries } from '../state/cashflowSeries.js';
 
 /** Default conversion-aggression grid ids (always includes zero). */
 export const DEFAULT_STRATEGY_IDS = Object.freeze([
@@ -667,6 +668,21 @@ export function runRothConversionAnalysis(input, hooks = {}) {
 
   const zeroP50 = responseCurve.find((r) => r.id === 'zero')?.p50 ?? 0;
 
+  // Tax paid is household cash outflow (negative). Median path per strategy.
+  /** @type {Record<string, number[]>} */
+  const taxAnnualByStrategy = {};
+  for (const id of Object.keys(byStrategy)) {
+    const taxByYear = byStrategy[id]?.percentiles?.p50?.taxByYear || [];
+    taxAnnualByStrategy[id] = taxByYear.map((v) => -(Number(v) || 0));
+  }
+  const cashflowSeries = buildCashflowSeries({
+    sourceFeature: 'roth-convert',
+    startAge: Number(input.ageA) || 0,
+    sessionName: null,
+    numYears,
+    annualByStrategy: taxAnnualByStrategy,
+  });
+
   return {
     strategies: strategies.map((s) => ({ id: s.id, label: s.label, kind: s.kind })),
     byStrategy,
@@ -683,6 +699,7 @@ export function runRothConversionAnalysis(input, hooks = {}) {
       zeroP50,
       convertsHelp: bestId !== 'zero',
     },
+    cashflowSeries,
     meta: {
       seed,
       numSimulations,

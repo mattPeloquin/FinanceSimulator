@@ -121,6 +121,7 @@ export function clearUnsavedStash() {
  *   name: string,
  *   description: string,
  *   dependencies: Array<{ feature: string, name: string, state: object, stateVersion?: number, description?: string }>,
+ *   cashflowSeries?: object,
  *   ui?: object,
  * }}
  */
@@ -181,6 +182,10 @@ export function parseScenarioPayload(parsed) {
     description: parsed.description || '',
     dependencies,
   };
+  // Optional producer attachment — ignored by import until a future consumer lands.
+  if (parsed.cashflowSeries && typeof parsed.cashflowSeries === 'object') {
+    out.cashflowSeries = parsed.cashflowSeries;
+  }
   const ui = optionalUiFromEnvelope(parsed.ui);
   if (ui) out.ui = ui;
   return out;
@@ -237,6 +242,7 @@ async function gunzipBytes(bytes) {
  *   description?: string,
  *   ui?: object,
  *   dependencies?: object[],
+ *   cashflowSeries?: object,
  *   includeExportedAt?: boolean,
  * }} [meta]
  */
@@ -255,6 +261,9 @@ export function buildExportEnvelope(state, meta = {}) {
   }
   if (meta.name) payload.name = meta.name;
   if (meta.description) payload.description = meta.description;
+  if (meta.cashflowSeries && typeof meta.cashflowSeries === 'object') {
+    payload.cashflowSeries = meta.cashflowSeries;
+  }
   const attached = optionalUiFromEnvelope(meta.ui);
   if (attached) payload.ui = attached;
   return payload;
@@ -364,7 +373,7 @@ export function exportScenario(
   state,
   name = 'scenario',
   description = '',
-  { ui, feature = FEATURE_SOR_PLAN, dependencies = [] } = {},
+  { ui, feature = FEATURE_SOR_PLAN, dependencies = [], cashflowSeries } = {},
 ) {
   const payload = buildExportEnvelope(state, {
     feature,
@@ -372,6 +381,7 @@ export function exportScenario(
     description: description || '',
     ui,
     dependencies,
+    ...(cashflowSeries ? { cashflowSeries } : {}),
     includeExportedAt: true,
   });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });

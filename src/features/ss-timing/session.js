@@ -15,7 +15,11 @@ import {
   normalizeReturnsAllocationSlice,
   canonicalizeDistMethod,
 } from '../../state/returnsAllocationSlice.js';
-import { fraFromBirthYear, DEFAULT_END_AGES } from '../../core/socialSecurity.js';
+import {
+  fraFromBirthYear,
+  DEFAULT_END_AGES,
+  buildSsCashflowSeries,
+} from '../../core/socialSecurity.js';
 
 export { SS_TIMING_STATE_VERSION };
 
@@ -106,6 +110,26 @@ export function isSsTimingResultStale() {
 
 export function setSsTimingResultStale(stale) {
   ssResultStale = !!stale;
+}
+
+/**
+ * Last-run (or rebuilt) SS benefit cashflow series for export.
+ * @param {{ sessionName?: string|null }} [opts]
+ */
+export function getSsTimingCashflowSeries(opts = {}) {
+  if (!ssResult || ssResultStale) return null;
+  if (ssResult.cashflowSeries) {
+    return {
+      ...ssResult.cashflowSeries,
+      sessionName: opts.sessionName ?? ssResult.cashflowSeries.sessionName ?? null,
+    };
+  }
+  if (!ssResult.deterministic) return null;
+  return buildSsCashflowSeries(ssResult.deterministic, {
+    startAge: ssState.personA?.currentAge || 62,
+    primaryEnd: ssResult.meta?.primaryEnd,
+    sessionName: opts.sessionName ?? null,
+  });
 }
 
 function normalizePerson(raw, fallback) {

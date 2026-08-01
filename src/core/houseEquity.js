@@ -19,6 +19,7 @@ import {
   deflateNominalSeries,
   normalizeCashflowSeries,
 } from '../state/cashflowSeries.js';
+import { HECM_MCA_LIMIT, sizeHecmProceeds } from '../data/hecmPlf.js';
 
 /** Fixed σ for real home-appreciation shocks (documented in feature help). */
 export const HOME_APPRECIATION_SHOCK_STD = 0.02;
@@ -33,29 +34,13 @@ export const STRATEGY_IDS = Object.freeze([
 ]);
 
 export const STRATEGY_LABELS = Object.freeze({
-  simplifiedRm: 'Simplified RM',
+  // Id kept as simplifiedRm for session stability; proceeds use HUD PLFs.
+  simplifiedRm: 'Calibrated HECM (PLF)',
   privateRm: 'Private RM',
   heloc: 'HELOC',
   cashOutInvest: 'Cash-out & invest',
   sellAndRent: 'Sell & rent',
 });
-
-/**
- * Educational age → proceeds fraction of (home − liens). Not published PLF tables.
- * @param {number} age
- * @returns {number} decimal 0..1
- */
-export function simplifiedRmProceedsPct(age) {
-  const a = Number(age) || 62;
-  if (a >= 85) return 0.65;
-  if (a >= 80) return 0.60;
-  if (a >= 75) return 0.55;
-  if (a >= 70) return 0.50;
-  if (a >= 65) return 0.45;
-  if (a >= 62) return 0.40;
-  // Below typical RM age — still allow a reduced educational factor.
-  return 0.30;
-}
 
 /**
  * Annual mortgage payment for a fully amortizing loan (nominal).
@@ -292,12 +277,6 @@ function simulateRmStrategy(params, pathCtx, kind) {
 
   // Access event: size the line from current home / liens.
   const ageAtAccess = (Number(params.currentAge) || 65) + accessYear;
-  const proceedsPct = kind === 'simplifiedRm'
-    ? simplifiedRmProceedsPct(ageAtAccess)
-    : Math.max(0, Math.min(0.9, Number(params.privateRmProceedsPct) || 0.5));
-  const feePct = kind === 'simplifiedRm'
-    ? Math.max(0, Number(params.simplifiedRmFeePct) || 0.02)
-    : Math.max(0, Number(params.privateRmFeePct) || 0.03);
   const lineGrowth = kind === 'simplifiedRm'
     ? Math.max(0, Number(params.simplifiedRmLineGrowth) || 0.03)
     : Math.max(0, Number(params.privateRmLineGrowth) || 0.04);
@@ -308,11 +287,29 @@ function simulateRmStrategy(params, pathCtx, kind) {
     ? (params.simplifiedRmMode === 'tenure' ? 'tenure' : 'loc')
     : (params.privateRmMode === 'tenure' ? 'tenure' : 'loc');
 
-  const netEquity = Math.max(0, state.homeValue - state.mortgageBalance);
-  const principalLimit = netEquity * proceedsPct;
-  const fees = principalLimit * feePct;
-  // Pay off existing mortgage from the limit; remainder is the starting credit line.
-  const afterLien = Math.max(0, principalLimit - fees - state.mortgageBalance);
+  let afterLien;
+  if (kind === 'simplifiedRm') {
+    // Calibrated HECM proceeds: MCA × published PLF − 2% initial MIP − other fee − lien.
+    // Tenure/LOC draws below stay educational (not a full HECM payment engine).
+    // Other fee = user % × MCA (closing/origination drag on top of fixed MIP).
+    const feePct = Math.max(0, Number(params.simplifiedRmFeePct) || 0);
+    const mca = Math.min(Math.max(0, state.homeValue), HECM_MCA_LIMIT);
+    afterLien = sizeHecmProceeds({
+      homeValue: state.homeValue,
+      age: ageAtAccess,
+      expectedRate: rmRate,
+      mortgageBalance: state.mortgageBalance,
+      otherFeeAmount: feePct * mca,
+    }).netAvailable;
+  } else {
+    const proceedsPct = Math.max(0, Math.min(0.9, Number(params.privateRmProceedsPct) || 0.5));
+    const feePct = Math.max(0, Number(params.privateRmFeePct) || 0.03);
+    const netEquity = Math.max(0, state.homeValue - state.mortgageBalance);
+    const principalLimit = netEquity * proceedsPct;
+    const fees = principalLimit * feePct;
+    // Pay off existing mortgage from the limit; remainder is the starting credit line.
+    afterLien = Math.max(0, principalLimit - fees - state.mortgageBalance);
+  }
   state.mortgageBalance = 0;
   state.mortgagePayment = 0;
   state.creditLine = afterLien;

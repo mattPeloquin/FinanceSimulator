@@ -11,6 +11,7 @@
 // No restricted application, file-and-suspend, or GPO/WEP.
 
 import { ILLUSTRATIVE_BEND_POINTS } from '../data/ssBendPoints.js';
+import { buildCashflowSeries, remapAgeCashflowToYears } from '../state/cashflowSeries.js';
 
 export const CLAIM_AGE_MIN = 62;
 export const CLAIM_AGE_MAX = 70;
@@ -450,4 +451,38 @@ export function runDeterministicSsAnalysis(input) {
     grid,
     breakEven,
   };
+}
+
+/**
+ * Build a cashflow series from a deterministic SS result (benefit streams).
+ *
+ * @param {object} deterministic - from runDeterministicSsAnalysis
+ * @param {{
+ *   startAge?: number,
+ *   primaryEnd?: number,
+ *   sessionName?: string|null,
+ * }} [opts]
+ */
+export function buildSsCashflowSeries(deterministic, opts = {}) {
+  const startAge = Number(opts.startAge) || 62;
+  const endAges = Array.isArray(deterministic?.endAges) ? deterministic.endAges : DEFAULT_END_AGES;
+  const primaryEnd = Number(opts.primaryEnd)
+    || endAges[endAges.length - 2]
+    || endAges[endAges.length - 1]
+    || 90;
+  const numYears = Math.max(1, primaryEnd - startAge + 1);
+  /** @type {Record<string, number[]>} */
+  const annualByStrategy = {};
+  for (const strategy of deterministic?.strategies || []) {
+    const flow = strategy?.byEndAge?.[primaryEnd]?.cashflow;
+    if (!flow) continue;
+    annualByStrategy[strategy.id] = remapAgeCashflowToYears(flow, startAge, numYears);
+  }
+  return buildCashflowSeries({
+    sourceFeature: 'ss-timing',
+    startAge,
+    sessionName: opts.sessionName ?? null,
+    numYears,
+    annualByStrategy,
+  });
 }

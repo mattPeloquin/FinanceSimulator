@@ -1,7 +1,8 @@
-// Cross-feature cashflow series contract (Phase 4a producer; Phase 5 consumer).
+// Cross-feature cashflow series contract.
 //
-// Yearly signed real-dollar amounts plus metadata. Producers attach series on
-// export; nothing consumes them until Plan's read-only preview (Phase 5).
+// Yearly signed real-dollar amounts plus metadata. Feature producers attach a
+// series on export/share (envelope field). Consumers (Plan preview / household
+// orchestrator) are reserved for a future plan — not wired into SOR Plan here.
 
 export const CASHFLOW_SERIES_VERSION = 1;
 
@@ -79,6 +80,64 @@ export function normalizeCashflowSeries(raw) {
     years,
     seriesByStrategy,
   };
+}
+
+/**
+ * Build a normalized series from a map of strategy id → annual real-$ arrays.
+ * @param {object} opts
+ * @param {string} opts.sourceFeature
+ * @param {number} [opts.startAge=0]
+ * @param {string|null} [opts.sessionName=null]
+ * @param {number} opts.numYears
+ * @param {Record<string, number[]>} opts.annualByStrategy
+ * @returns {CashflowSeries}
+ */
+export function buildCashflowSeries({
+  sourceFeature,
+  startAge = 0,
+  sessionName = null,
+  numYears = 0,
+  annualByStrategy = {},
+} = {}) {
+  const n = Math.max(0, numYears | 0);
+  const years = Array.from({ length: n }, (_, i) => i);
+  /** @type {Record<string, { annual: number[] }>} */
+  const seriesByStrategy = {};
+  for (const [id, annual] of Object.entries(annualByStrategy || {})) {
+    const arr = Array.isArray(annual) ? annual : [];
+    const padded = new Array(n);
+    for (let i = 0; i < n; i++) {
+      padded[i] = Number.isFinite(Number(arr[i])) ? Number(arr[i]) : 0;
+    }
+    seriesByStrategy[String(id)] = { annual: padded };
+  }
+  return normalizeCashflowSeries(createEmptyCashflowSeries({
+    sourceFeature: sourceFeature || '',
+    startAge,
+    sessionName,
+    years,
+    seriesByStrategy,
+  }));
+}
+
+/**
+ * Remap an age-indexed benefit stream onto year indices from startAge.
+ * @param {{ years?: number[], annual?: number[] }} cashflow
+ * @param {number} startAge
+ * @param {number} numYears
+ * @returns {number[]}
+ */
+export function remapAgeCashflowToYears(cashflow, startAge, numYears) {
+  const n = Math.max(0, numYears | 0);
+  const annual = new Array(n).fill(0);
+  const ages = Array.isArray(cashflow?.years) ? cashflow.years : [];
+  const amounts = Array.isArray(cashflow?.annual) ? cashflow.annual : [];
+  const base = Number(startAge) || 0;
+  for (let i = 0; i < ages.length; i++) {
+    const y = (Number(ages[i]) || 0) - base;
+    if (y >= 0 && y < n) annual[y] += Number(amounts[i]) || 0;
+  }
+  return annual;
 }
 
 /**

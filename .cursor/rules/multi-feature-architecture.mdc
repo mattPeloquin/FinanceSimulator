@@ -71,12 +71,25 @@ post `{ type: 'error', … }` and do not open a pool.
   `[feature, name]` (Phase 2+).
 - Export envelope: `type: "fs-scenario"` plus `feature` and per-feature
   `stateVersion`; dependency snapshots carry their own `feature` +
-  `stateVersion` + `state`. Legacy `sor-scenario` *file* import remains the
-  only backward-compat path (its file field is still `schemaVersion`).
+  `stateVersion` + `state`. Optional top-level **`cashflowSeries`** (see below)
+  may ride along on export/share. Legacy `sor-scenario` *file* import remains
+  the only backward-compat path (its file field is still `schemaVersion`).
 - **Clean break**: ignore legacy `sor:*` localStorage keys and the old
   `sor-sessions` IndexedDB database. Legacy share-link URL params are ignored
   (open fresh, no decode, no error). Do not dual-read envelope
   `schemaVersion` on `fs-scenario` payloads.
+
+### Cashflow series (producers only today)
+
+- Versioned contract in [`src/state/cashflowSeries.js`](../../src/state/cashflowSeries.js):
+  signed real-$ annual amounts by strategy, plus metadata (`sourceFeature`,
+  `sessionName`, `startAge`, `units: 'real-dollars'`).
+- Producers: Accumulation, Social Security, Roth Convert, House Equity attach
+  via session-adapter **`getCashflowSeries`** on export/share. Import accepts
+  and preserves the field but **does not** feed it into SOR Plan math or UI.
+- **Reserved for a future plan:** Plan (or a household orchestrator) consuming
+  imported series, and hard-linking one saved session per feature. Do not
+  half-build that consumer inside Plan.
 
 ### State versioning & migrations
 
@@ -137,7 +150,7 @@ Reuse for each new feature (`accumulation`, `ss-timing`, `roth-convert`,
   `index.html`; partial dir added to `partialDirectory` in
   [`vite.config.js`](../../vite.config.js)
 - Session adapter (`getState`, `applyState`, `stateVersion`, `migrate`,
-  `getDependencies` when applicable)
+  `getDependencies` / `getCashflowSeries` when applicable)
 - Compute in `src/core/<domain>.js`, invoked via the worker dispatcher and
   [`jobs.js`](../../src/state/jobs.js)
 - Charts rendered or resized in `onActivate` (hidden roots size to zero)

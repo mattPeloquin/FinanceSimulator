@@ -97,6 +97,18 @@ export function setRothConvertResultStale(stale) {
   rothResultStale = !!stale;
 }
 
+/**
+ * Last-run Roth tax cashflow series for export.
+ * @param {{ sessionName?: string|null }} [opts]
+ */
+export function getRothConvertCashflowSeries(opts = {}) {
+  if (!rothResult || rothResultStale || !rothResult.cashflowSeries) return null;
+  return {
+    ...rothResult.cashflowSeries,
+    sessionName: opts.sessionName ?? rothResult.cashflowSeries.sessionName ?? null,
+  };
+}
+
 export function normalizeRothConvertState(raw) {
   const base = defaultRothConvertState();
   if (!raw || typeof raw !== 'object') return base;

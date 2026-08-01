@@ -16,6 +16,7 @@ import {
   normalizeReturnsAllocationSlice,
   canonicalizeDistMethod,
 } from '../../state/returnsAllocationSlice.js';
+import { buildAccumulationCashflowSeries } from '../../core/accumulation.js';
 
 export { ACCUMULATION_STATE_VERSION };
 
@@ -92,6 +93,17 @@ export function isAccumulationResultStale() {
 
 export function setAccumulationResultStale(stale) {
   accumResultStale = !!stale;
+}
+
+/**
+ * Accumulation cashflow from current config (events + contribution outflows).
+ * Available even without a Monte Carlo run.
+ * @param {{ sessionName?: string|null }} [opts]
+ */
+export function getAccumulationCashflowSeries(opts = {}) {
+  return buildAccumulationCashflowSeries(accumState, {
+    sessionName: opts.sessionName ?? null,
+  });
 }
 
 function normalizeTier(tier, isLast) {

@@ -74,7 +74,7 @@ export function defaultHouseEquityState() {
     expectedRealAppreciation: 1,
     expectedInflation: 2.5,
     realRentGrowth: 0,
-    // Simplified RM
+    // Calibrated HECM (strategy id simplifiedRm) — rate is expected rate for PLF lookup
     simplifiedRmMode: 'loc',
     simplifiedRmFeePct: 2,
     simplifiedRmRate: 6,
@@ -250,6 +250,18 @@ export function resetHouseEquityToDefaults() {
   applyHouseEquityState(defaultHouseEquityState());
   const presets = getHouseEquityPresets();
   if (presets[0]) applyHouseEquityPreset(presets[0].id, { keepAttached: true });
+}
+
+/**
+ * Last-run cashflow series for export (null when missing or stale).
+ * @param {{ sessionName?: string|null }} [opts]
+ */
+export function getHouseEquityCashflowSeries(opts = {}) {
+  if (!heResult || heResultStale || !heResult.cashflowSeries) return null;
+  return {
+    ...heResult.cashflowSeries,
+    sessionName: opts.sessionName ?? heResult.cashflowSeries.sessionName ?? null,
+  };
 }
 
 export async function getHouseEquityDependencies() {

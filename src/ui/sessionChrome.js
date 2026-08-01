@@ -40,6 +40,7 @@ const sessionAdapters = new Map();
  * @property {() => void} [afterPersist]
  * @property {() => void} [afterDeleteCurrent]
  * @property {() => Promise<object[]> | object[]} [getDependencies]
+ * @property {(opts?: { sessionName?: string|null }) => object|null|undefined} [getCashflowSeries]
  */
 
 export function registerSessionAdapter(featureId, adapter) {
@@ -171,6 +172,16 @@ async function resolveDependencies(adapter) {
   if (!adapter?.getDependencies) return [];
   const deps = await adapter.getDependencies();
   return Array.isArray(deps) ? deps : [];
+}
+
+function resolveCashflowSeries(adapter, sessionName) {
+  if (!adapter?.getCashflowSeries) return null;
+  try {
+    const series = adapter.getCashflowSeries({ sessionName: sessionName || null });
+    return series && typeof series === 'object' ? series : null;
+  } catch {
+    return null;
+  }
 }
 
 async function persistSession(name, description, { includeUi = false } = {}) {
@@ -468,6 +479,7 @@ async function handleExportSession() {
   const feature = getActiveFeatureId();
   const adapter = sessionAdapters.get(feature);
   const dependencies = await resolveDependencies(adapter);
+  const cashflowSeries = resolveCashflowSeries(adapter, currentSessionName);
   exportScenario(
     readActiveFeatureState(),
     currentSessionName || 'scenario',
@@ -475,6 +487,7 @@ async function handleExportSession() {
     {
       feature,
       dependencies,
+      ...(cashflowSeries ? { cashflowSeries } : {}),
       ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
     },
   );
@@ -490,6 +503,7 @@ async function handleLinkCopy() {
   const feature = getActiveFeatureId();
   const adapter = sessionAdapters.get(feature);
   const dependencies = await resolveDependencies(adapter);
+  const cashflowSeries = resolveCashflowSeries(adapter, currentSessionName);
   let url;
   try {
     url = await buildShareUrl(readActiveFeatureState(), {
@@ -497,6 +511,7 @@ async function handleLinkCopy() {
       name: currentSessionName || '',
       description: currentSessionDescription || '',
       dependencies,
+      ...(cashflowSeries ? { cashflowSeries } : {}),
       ...(includeUi ? { ui: readUiPrefsSnapshot() } : {}),
     });
   } catch (err) {
