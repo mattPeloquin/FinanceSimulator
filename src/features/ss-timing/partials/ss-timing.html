@@ -1,0 +1,187 @@
+<section class="space-y-4" aria-labelledby="ss-timing-heading">
+  <div>
+    <h2 id="ss-timing-heading" class="text-xl font-semibold text-theme-heading">Social Security</h2>
+    <p class="mt-1 text-sm text-theme-muted max-w-3xl">
+      Explore when to claim. Couples use simplified educational spousal and survivor rules
+      (not an SSA manual). Benefits are in today’s dollars. Monte Carlo adds portfolio
+      opportunity cost of delaying a claim, plus optional tax-rate noise and benefit-cut shocks.
+      Claim factors and bend points are illustrative.
+    </p>
+  </div>
+
+  <div id="ss-timing-preset-control" class="rounded-lg border border-theme-border bg-theme-muted/40 px-4 py-3 space-y-2">
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-theme-body">
+      <input type="checkbox" id="ss-timing-preset-active" class="rounded border-theme-border" checked />
+      Easy Mode
+    </label>
+    <input type="range" id="ss-timing-preset-level" min="0" max="2" step="1" value="0" class="w-full accent-theme-accent" />
+    <p id="ss-timing-preset-name" class="text-xs text-theme-muted"></p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="space-y-4">
+      <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+        <input type="checkbox" id="ss-timing-couple" class="rounded border-theme-border" checked />
+        Model a couple
+      </label>
+
+      <div id="ss-timing-person-a" class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Person A</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Birth year</span>
+            <input type="number" id="ss-timing-a-birth" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Current age</span>
+            <input type="number" id="ss-timing-a-age" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">PIA ($/mo)</span>
+            <input type="number" id="ss-timing-a-pia" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Your claim age</span>
+            <input type="number" id="ss-timing-a-claim" min="62" max="70" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+      </div>
+
+      <div id="ss-timing-person-b" class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Person B</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Birth year</span>
+            <input type="number" id="ss-timing-b-birth" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Current age</span>
+            <input type="number" id="ss-timing-b-age" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">PIA ($/mo)</span>
+            <input type="number" id="ss-timing-b-pia" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Your claim age</span>
+            <input type="number" id="ss-timing-b-claim" min="62" max="70" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">End-age sensitivity strip</h3>
+        <p class="text-xs text-theme-faint">Comparisons run at each age (comma-separated). Ranking flips are highlighted in results.</p>
+        <input type="text" id="ss-timing-end-ages" value="80, 85, 90, 95"
+          class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Bridge portfolio (opportunity cost)</h3>
+        <p class="text-xs text-theme-faint">
+          While delaying a claim, spend from a portfolio. MC uses the shared historical return model.
+          Leave annual spend at 0 to default to an early-claim benefit estimate.
+        </p>
+        <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+          <input type="checkbox" id="ss-timing-bridge-enabled" class="rounded border-theme-border" checked />
+          Include bridge / opportunity-cost MC
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Start balance ($)</span>
+            <input type="number" id="ss-timing-bridge-balance" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Annual spend ($)</span>
+            <input type="number" id="ss-timing-bridge-spend" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Policy shocks</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Base tax rate</span>
+            <input type="number" id="ss-timing-tax-rate" step="0.01" min="0" max="0.5"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Tax noise (std)</span>
+            <input type="number" id="ss-timing-tax-noise" step="0.01" min="0" max="0.2"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+        </div>
+        <label class="block space-y-0.5">
+          <span class="text-xs text-theme-muted">Benefit cut</span>
+          <select id="ss-timing-cut-mode" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+            <option value="none">None</option>
+            <option value="discrete">Discrete cut</option>
+            <option value="phased">Phased cut</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Returns &amp; allocation</h3>
+        <div id="ss-timing-returns-host"></div>
+      </div>
+
+      <label class="block space-y-0.5">
+        <span class="text-xs text-theme-muted">MC paths</span>
+        <select id="ss-timing-paths" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+          <option value="200">200</option>
+          <option value="500" selected>500</option>
+          <option value="1000">1000</option>
+          <option value="2000">2000</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="text-center">
+    <button type="button" id="ss-timing-run"
+      class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg disabled:opacity-50"
+    >Run Analysis</button>
+  </div>
+
+  <div id="ss-timing-loading" class="hidden flex-col items-center justify-center space-y-4 py-10">
+    <div class="spinner"></div>
+    <p id="ss-timing-loading-text" class="text-theme-muted">Running…</p>
+    <div class="w-64 bg-theme-border rounded-full h-2 overflow-hidden">
+      <div id="ss-timing-loading-bar" class="bg-theme-accent h-2 transition-all duration-150" style="width: 0%"></div>
+    </div>
+    <button type="button" id="ss-timing-cancel"
+      class="px-4 py-2 bg-theme-surface border border-theme-input text-theme-body rounded-lg hover:bg-theme-muted text-sm font-medium transition-colors">
+      Cancel
+    </button>
+  </div>
+
+  <section id="ss-timing-results-section" class="hidden space-y-6" aria-labelledby="ss-timing-results-heading">
+    <h3 id="ss-timing-results-heading" class="text-lg font-semibold text-theme-heading">Results</h3>
+    <p id="ss-timing-stale" class="hidden text-xs text-amber-700 dark:text-amber-300">
+      Inputs changed since this run — results may be stale.
+    </p>
+    <p id="ss-timing-summary" class="text-sm text-theme-body"></p>
+    <div class="space-y-2">
+      <h4 class="text-sm font-semibold text-theme-heading">Lifetime benefits by strategy</h4>
+      <div class="relative h-72 w-full">
+        <canvas id="ss-timing-strategy-chart" aria-label="Strategy lifetime benefits"></canvas>
+      </div>
+    </div>
+    <div class="space-y-2">
+      <h4 class="text-sm font-semibold text-theme-heading">End-age sensitivity</h4>
+      <div id="ss-timing-strip" class="text-sm text-theme-body space-y-1"></div>
+    </div>
+    <div class="space-y-2">
+      <h4 class="text-sm font-semibold text-theme-heading">Claim-age grid (lifetime at primary end age)</h4>
+      <div id="ss-timing-grid" class="overflow-x-auto text-xs"></div>
+    </div>
+    <div class="space-y-2">
+      <h4 class="text-sm font-semibold text-theme-heading">Opportunity-cost MC</h4>
+      <div id="ss-timing-mc" class="text-sm text-theme-body space-y-2"></div>
+    </div>
+  </section>
+</section>

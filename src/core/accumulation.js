@@ -341,6 +341,117 @@ export function simulateAccumulationPath(params, rng) {
   };
 }
 
+// ---- Bridge portfolio (SS opportunity-cost of delaying a claim) -------------
+
+/**
+ * Simulate one bridge path: start with a portfolio, spend a fixed real annual
+ * amount each year until the claim age (or balance hits zero), growing with
+ * the shared market sampler between withdrawals.
+ *
+ * Year order: withdraw bridge spend → grow remaining balance (real return).
+ * No Plan withdrawal strategies / floors / guardrails — intentional.
+ *
+ * @param {object} params - needs distMethod/samples/logNormal/allocation + …
+ * @param {number} params.startBalance - real $
+ * @param {number} params.bridgeSpend - real $/year spent until claim
+ * @param {number} params.numYears - years from "now" until claim (bridge length)
+ * @param {object} rng - createRng instance
+ * @returns {{ endingBalance: number, depleted: boolean, balancesByYear: number[] }}
+ */
+export function simulateBridgePath(params, rng) {
+  const numYears = Math.max(0, params.numYears | 0);
+  const bridgeSpend = Math.max(0, Number(params.bridgeSpend) || 0);
+  let balance = Math.max(0, Number(params.startBalance) || 0);
+  const allocationSeries = params.allocationSeries
+    || buildAllocationOverTimeSeries(
+      params.allocationOverTimeTiers || [],
+      Math.max(1, numYears),
+      renormalizeAllocation(params.allocation),
+      params.allocationKeys,
+    );
+  const state = { bootIndex: -1, lnPrevZ: null };
+  const balancesByYear = [balance];
+  let depleted = false;
+
+  for (let y = 0; y < numYears; y++) {
+    // Spend first (opportunity cost of waiting to claim), then invest what remains.
+    balance = Math.max(0, balance - bridgeSpend);
+    if (balance <= 1e-9) {
+      depleted = true;
+      balance = 0;
+      balancesByYear.push(0);
+      // Still advance sampler state for CRN alignment across strategies.
+      const yearAlloc = allocationSeries[Math.min(y, allocationSeries.length - 1)]
+        || renormalizeAllocation(params.allocation);
+      sampleRealPortfolioReturn(params, rng, yearAlloc, y, state);
+      continue;
+    }
+    const yearAlloc = allocationSeries[Math.min(y, allocationSeries.length - 1)]
+      || renormalizeAllocation(params.allocation);
+    const { realReturn } = sampleRealPortfolioReturn(params, rng, yearAlloc, y, state);
+    balance *= 1 + realReturn;
+    balancesByYear.push(balance);
+  }
+
+  return { endingBalance: balance, depleted, balancesByYear };
+}
+
+/**
+ * Monte Carlo over bridge paths. CRN via deriveSeed(base, i).
+ */
+export function runBridgeMonteCarlo(params, { onProgress, startIndex = 0 } = {}) {
+  const numSimulations = Math.max(0, params.numSimulations | 0);
+  const numYears = Math.max(0, params.numYears | 0);
+  const baseSeed = (params.seed >>> 0) || 0;
+  const allocationSeries = buildAllocationOverTimeSeries(
+    params.allocationOverTimeTiers || [],
+    Math.max(1, numYears),
+    renormalizeAllocation(params.allocation),
+    params.allocationKeys,
+  );
+  const pathParams = {
+    ...params,
+    allocationSeries,
+    allocation: renormalizeAllocation(params.allocation),
+  };
+
+  const ending = new Float64Array(numSimulations);
+  let depletedCount = 0;
+
+  for (let i = 0; i < numSimulations; i++) {
+    const rng = createRng(deriveSeed(baseSeed, startIndex + i));
+    const path = simulateBridgePath(pathParams, rng);
+    ending[i] = path.endingBalance;
+    if (path.depleted) depletedCount += 1;
+    if (onProgress && (i % 64 === 0 || i === numSimulations - 1)) {
+      onProgress((i + 1) / numSimulations);
+    }
+  }
+
+  const sorted = Float64Array.from(ending);
+  sorted.sort();
+  const at = (p) => {
+    if (sorted.length === 0) return 0;
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
+    return sorted[idx];
+  };
+
+  return {
+    numSimulations,
+    numYears,
+    depletedCount,
+    successRate: numSimulations > 0 ? 1 - depletedCount / numSimulations : 0,
+    ending: {
+      p10: at(0.10),
+      p50: at(0.50),
+      p90: at(0.90),
+      mean: ending.length
+        ? Array.from(ending).reduce((s, v) => s + v, 0) / ending.length
+        : 0,
+    },
+  };
+}
+
 // ---- Monte Carlo ------------------------------------------------------------
 
 /**

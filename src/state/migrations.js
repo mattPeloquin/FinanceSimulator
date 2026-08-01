@@ -6,7 +6,12 @@
 // at module load or via registerFeatureMigrator; persistence stays branch-free.
 
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from './scenario.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from './storageKeys.js';
+import {
+  FEATURE_SOR_PLAN,
+  FEATURE_SOR_LAB,
+  FEATURE_ACCUMULATION,
+  FEATURE_SS_TIMING,
+} from './storageKeys.js';
 
 /** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
 export const LAB_STATE_VERSION = 1;
@@ -15,6 +20,10 @@ export const LAB_STATE_VERSION_MIN = 1;
 /** Accumulation session / envelope state version. */
 export const ACCUMULATION_STATE_VERSION = 1;
 export const ACCUMULATION_STATE_VERSION_MIN = 1;
+
+/** Social Security timing session / envelope state version. */
+export const SS_TIMING_STATE_VERSION = 1;
+export const SS_TIMING_STATE_VERSION_MIN = 1;
 
 /**
  * @typedef {object} FeatureMigrator
@@ -182,4 +191,33 @@ registerFeatureMigrator({
   id: FEATURE_ACCUMULATION,
   stateVersion: ACCUMULATION_STATE_VERSION,
   migrate: migrateAccumulationState,
+});
+
+/**
+ * Upgrade SS Timing session state within supported versions.
+ */
+export function migrateSsTimingState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Social Security state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('Social Security state version is missing or invalid.');
+  }
+  if (fromVersion < SS_TIMING_STATE_VERSION_MIN) {
+    throw new Error(
+      `This Social Security session uses state version ${fromVersion}, which is older than this app supports (${SS_TIMING_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > SS_TIMING_STATE_VERSION) {
+    throw new Error(
+      `This Social Security session uses state version ${fromVersion}, which is newer than this app supports (${SS_TIMING_STATE_VERSION}).`,
+    );
+  }
+  return { ...state };
+}
+
+registerFeatureMigrator({
+  id: FEATURE_SS_TIMING,
+  stateVersion: SS_TIMING_STATE_VERSION,
+  migrate: migrateSsTimingState,
 });

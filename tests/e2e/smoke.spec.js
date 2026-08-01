@@ -18,8 +18,8 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await disableGoalSeek(page);
 
   // Expect the initial state
-  await expect(page.locator('h1')).toHaveText('Finance Simulator');
-  // Primary Plan + Accumulation + More control (Lab lives under More).
+  await expect(page.locator('h1')).toHaveText('Personal Finance Simulator');
+  // Primary Plan + Accumulation + More control (Lab + SS live under More).
   await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(3);
   await expect(page.locator('#tab-sor-plan')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#tab-sor-plan')).toContainText('SOR Plan');
@@ -28,9 +28,12 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#feature-sor-plan')).toBeVisible();
   await expect(page.locator('#feature-accumulation')).toBeHidden();
   await expect(page.locator('#feature-sor-lab')).toBeHidden();
+  await expect(page.locator('#feature-ss-timing')).toBeHidden();
   await page.click('#feature-more-button');
   await expect(page.locator('#more-item-sor-lab')).toBeVisible();
   await expect(page.locator('#more-item-sor-lab')).toContainText('SOR Lab');
+  await expect(page.locator('#more-item-ss-timing')).toBeVisible();
+  await expect(page.locator('#more-item-ss-timing')).toContainText('Social Security');
   await page.keyboard.press('Escape');
   await expect(page.locator('#feature-more-menu')).toBeHidden();
   await expect(page.locator('#githubLink')).toBeVisible();

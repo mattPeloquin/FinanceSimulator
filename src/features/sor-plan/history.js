@@ -1,10 +1,16 @@
+// Plan history UI wrapper — keeps legacy DOM ids; shared slice helpers for samples.
+
 import { getSampleYears, computeProfiles, profilesToScenarioFields } from '../../core/history.js';
-import { minAvailableYear, maxAvailableYear } from '../../data/historicalData.js';
+import {
+  YEAR_RANGE,
+  isValidYearRange,
+  buildSamplesAndProfiles,
+} from '../../state/returnsAllocationSlice.js';
 import { updateMiniCharts } from './ui/charts/miniCharts.js';
 import { renderYearLabels } from './ui/inputs.js';
 import { showAlert } from '../../ui/dialogs.js';
 
-export const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
+export { YEAR_RANGE };
 
 // Mutable store (not `export let` reassignment) so importers always see the
 // current sample pool — Vite/bundlers can snapshot live `let` bindings.
@@ -43,18 +49,15 @@ function scheduleAutosave() {
 // Refresh charts + sample pool for the current year range, WITHOUT touching the
 // user's log-normal profile fields.
 export function refreshHistoryView(startYear, endYear) {
-  if (
-    !Number.isFinite(startYear) ||
-    !Number.isFinite(endYear) ||
-    startYear > endYear ||
-    startYear < YEAR_RANGE.minYear ||
-    endYear > YEAR_RANGE.maxYear
-  ) {
+  if (!isValidYearRange(startYear, endYear)) {
     return false;
   }
   const years = updateMiniCharts(startYear, endYear);
   renderYearLabels(years);
-  historicalSamples = { startYear, endYear, years: getSampleYears(startYear, endYear) };
+  const built = buildSamplesAndProfiles({ startYear, endYear, profiles: null });
+  historicalSamples = built.samples.years.length
+    ? built.samples
+    : { startYear, endYear, years: getSampleYears(startYear, endYear) };
   return true;
 }
 

@@ -136,6 +136,41 @@ export function profilesToScenarioFields(profiles) {
   };
 }
 
+// Keys match profilesToScenarioFields / Plan scenario log-normal fields.
+const PROFILE_MEAN_KEYS = {
+  usLgGrowth: 'usLgGrowthMean',
+  usLgValue: 'usLgValueMean',
+  usSmMid: 'usSmMidMean',
+  exUs: 'exUsMean',
+  bond: 'bondReturnMean',
+  cash: 'cashReturnMean',
+  inflation: 'inflationMean',
+};
+
+const PROFILE_STD_KEYS = {
+  usLgGrowth: 'usLgGrowthStdDev',
+  usLgValue: 'usLgValueStdDev',
+  usSmMid: 'usSmMidStdDev',
+  exUs: 'exUsStdDev',
+  bond: 'bondReturnStdDev',
+  cash: 'cashReturnStdDev',
+  inflation: 'inflationStdDev',
+};
+
+/** Convert scenario % profile fields into logNormal decimals for engines. */
+export function profilesToLogNormal(profiles) {
+  const logNormal = {};
+  for (const key of Object.keys(PROFILE_MEAN_KEYS)) {
+    const meanPct = Number(profiles?.[PROFILE_MEAN_KEYS[key]]);
+    const stdPct = Number(profiles?.[PROFILE_STD_KEYS[key]]);
+    logNormal[key] = {
+      mean: (Number.isFinite(meanPct) ? meanPct : 0) / 100,
+      stdDev: (Number.isFinite(stdPct) ? stdPct : 0) / 100,
+    };
+  }
+  return logNormal;
+}
+
 // Convert one year's nominal total return (%) and inflation (%) into a real
 // (purchasing-power) return (%): how much the investment grew after prices rose.
 export function toRealReturnPct(nominalPct, inflationPct) {

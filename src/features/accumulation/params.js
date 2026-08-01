@@ -6,66 +6,34 @@ import {
   ALLOCATION_ENGINE_KEYS,
 } from '../../core/accumulation.js';
 import {
-  getSampleYears,
-  computeProfiles,
-  profilesToScenarioFields,
   correlationCholesky,
   computeStandardizedYears,
+  profilesToLogNormal,
 } from '../../core/history.js';
+import {
+  buildSamplesAndProfiles,
+  pickReturnsAllocationSlice,
+  canonicalizeDistMethod,
+} from '../../state/returnsAllocationSlice.js';
 
-// Keys match profilesToScenarioFields / Plan scenario log-normal fields.
-const PROFILE_MEAN_KEYS = {
-  usLgGrowth: 'usLgGrowthMean',
-  usLgValue: 'usLgValueMean',
-  usSmMid: 'usSmMidMean',
-  exUs: 'exUsMean',
-  bond: 'bondReturnMean',
-  cash: 'cashReturnMean',
-  inflation: 'inflationMean',
-};
-
-const PROFILE_STD_KEYS = {
-  usLgGrowth: 'usLgGrowthStdDev',
-  usLgValue: 'usLgValueStdDev',
-  usSmMid: 'usSmMidStdDev',
-  exUs: 'exUsStdDev',
-  bond: 'bondReturnStdDev',
-  cash: 'cashReturnStdDev',
-  inflation: 'inflationStdDev',
-};
-
-/** Convert scenario % profile fields into logNormal decimals for the engine. */
-export function profilesToLogNormal(profiles) {
-  const logNormal = {};
-  for (const key of Object.keys(PROFILE_MEAN_KEYS)) {
-    const meanPct = Number(profiles?.[PROFILE_MEAN_KEYS[key]]);
-    const stdPct = Number(profiles?.[PROFILE_STD_KEYS[key]]);
-    logNormal[key] = {
-      mean: (Number.isFinite(meanPct) ? meanPct : 0) / 100,
-      stdDev: (Number.isFinite(stdPct) ? stdPct : 0) / 100,
-    };
-  }
-  return logNormal;
-}
+export { profilesToLogNormal };
 
 /** Ensure profiles exist; derive from the selected year range when missing. */
 export function ensureProfiles(state) {
   if (state.profiles && typeof state.profiles === 'object') return state.profiles;
-  const years = getSampleYears(state.startYear, state.endYear);
-  if (!years.length) return null;
-  return profilesToScenarioFields(computeProfiles(years));
+  const { profiles } = buildSamplesAndProfiles(pickReturnsAllocationSlice(state), {
+    forceProfiles: true,
+  });
+  return profiles;
 }
 
 /**
  * Build the pure params object posted to the accumulation worker.
  */
 export function buildAccumulationParams(state, { seed } = {}) {
-  const samples = {
-    startYear: state.startYear,
-    endYear: state.endYear,
-    years: getSampleYears(state.startYear, state.endYear),
-  };
-  const profiles = ensureProfiles(state) || {};
+  const slice = pickReturnsAllocationSlice(state);
+  const { samples, profiles: derived } = buildSamplesAndProfiles(slice);
+  const profiles = ensureProfiles({ ...state, profiles: state.profiles || derived }) || {};
   const logNormal = profilesToLogNormal(profiles);
   logNormal.chol = samples.years.length >= 2
     ? correlationCholesky(samples.years)
@@ -77,7 +45,7 @@ export function buildAccumulationParams(state, { seed } = {}) {
     numYears: state.numYears,
     numSimulations: state.numSimulations,
     seed: seed >>> 0,
-    distMethod: state.distMethod,
+    distMethod: canonicalizeDistMethod(state.distMethod),
     blockSize: state.blockSize,
     allocation,
     allocationKeys: ALLOCATION_KEYS,

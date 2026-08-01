@@ -4,7 +4,7 @@ import { HANDLERS, dispatchWorkerMessage } from '../src/workers/dispatch.js';
 describe('worker HANDLERS registry', () => {
   it('resolves the Plan/Lab infrastructure message types', () => {
     expect(Object.keys(HANDLERS).sort()).toEqual(
-      ['accumulation', 'chunk', 'connect', 'goalSeek', 'run', 'sensitivity'].sort(),
+      ['accumulation', 'chunk', 'connect', 'goalSeek', 'run', 'sensitivity', 'ssTiming'].sort(),
     );
     for (const type of Object.keys(HANDLERS)) {
       expect(typeof HANDLERS[type]).toBe('function');

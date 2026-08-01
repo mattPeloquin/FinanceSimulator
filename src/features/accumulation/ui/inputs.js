@@ -8,7 +8,8 @@ import {
   ALLOCATION_KEYS,
 } from '../session.js';
 import { getAccumulationPresets } from '../presets.js';
-import { applyAccumulationHistoryProfiles, YEAR_RANGE } from '../history.js';
+import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
+import { createReturnsAllocationUi } from '../../../ui/returnsAllocation/controller.js';
 import { buildAllocationOverTimeSeries, allocationFromConfig } from '../../../core/accumulation.js';
 
 const SLEEVE_META = [
@@ -17,17 +18,11 @@ const SLEEVE_META = [
   { id: 'afterTax', label: 'After-tax' },
 ];
 
-const ALLOC_LABELS = {
-  usLgGrowthAllocation: 'US Lg Growth',
-  usLgValueAllocation: 'US Lg Value',
-  usSmMidAllocation: 'US Sm/Mid',
-  exUsAllocation: 'Ex-US',
-  bondAllocation: 'Bond',
-  cashAllocation: 'Cash',
-};
-
 /** Guard while Easy Mode writes the form (avoid treating as a user detach). */
 let isApplyingPreset = false;
+
+/** @type {ReturnType<typeof createReturnsAllocationUi> | null} */
+let returnsUi = null;
 
 function el(id) {
   return document.getElementById(id);
@@ -104,10 +99,7 @@ export function syncAccumulationFormToState() {
     };
   }
 
-  const allocation = {};
-  for (const key of ALLOCATION_KEYS) {
-    allocation[key] = readNumber(`accumulation-alloc-${key}`, 0);
-  }
+  const returnsPartial = returnsUi?.readFromDom() || pickReturnsAllocationSlice(state);
 
   const events = [];
   document.querySelectorAll('#accumulation-events [data-accum-event-row]').forEach((row) => {
@@ -126,13 +118,10 @@ export function syncAccumulationFormToState() {
     numSimulations: Number(el('accumulation-paths')?.value) || state.numSimulations,
     sweepPaths: Number(el('accumulation-sweep-paths')?.value) || state.sweepPaths,
     exploreWeights: !!el('accumulation-explore-weights')?.checked,
-    startYear: readNumber('accumulation-start-year', state.startYear),
-    endYear: readNumber('accumulation-end-year', state.endYear),
-    distMethod: el('accumulation-dist-method')?.value || state.distMethod,
-    allocation,
+    ...returnsPartial,
     allocationOverTimeTiers: state.allocationOverTimeTiers?.length > 1
       ? state.allocationOverTimeTiers
-      : [allocation],
+      : [returnsPartial.allocation],
     sleeves,
     events,
     presetActive: isPresetAttached(),
@@ -217,18 +206,6 @@ function renderSleeves(state) {
   });
 }
 
-function renderAllocation(state) {
-  const host = el('accumulation-allocation');
-  if (!host) return;
-  host.innerHTML = ALLOCATION_KEYS.map((key) => `
-    <label class="block space-y-0.5">
-      <span class="text-xs text-theme-muted">${ALLOC_LABELS[key] || key}</span>
-      <input type="number" id="accumulation-alloc-${key}" min="0" max="100" step="1"
-        value="${state.allocation[key] ?? 0}"
-        class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
-    </label>`).join('');
-}
-
 function renderEvents(state) {
   const host = el('accumulation-events');
   if (!host) return;
@@ -284,13 +261,10 @@ export function renderAccumulationForm() {
   if (el('accumulation-paths')) el('accumulation-paths').value = String(state.numSimulations);
   if (el('accumulation-sweep-paths')) el('accumulation-sweep-paths').value = String(state.sweepPaths);
   if (el('accumulation-explore-weights')) el('accumulation-explore-weights').checked = state.exploreWeights !== false;
-  if (el('accumulation-start-year')) el('accumulation-start-year').value = state.startYear;
-  if (el('accumulation-end-year')) el('accumulation-end-year').value = state.endYear;
-  if (el('accumulation-dist-method')) el('accumulation-dist-method').value = state.distMethod;
   renderEasyMode(state);
   renderSleeves(state);
-  renderAllocation(state);
   renderEvents(state);
+  returnsUi?.refreshFromState();
 }
 
 /** Deterministic glidepath series for the preview chart (engine decimals). */
@@ -306,6 +280,26 @@ export function getGlidePreviewSeries() {
 }
 
 export function bindAccumulationInputs() {
+  const host = el('accumulation-returns-host');
+  if (host && !returnsUi) {
+    returnsUi = createReturnsAllocationUi(host, {
+      idPrefix: 'accumulation-',
+      mountMarkup: true,
+      getSlice: () => pickReturnsAllocationSlice(getAccumulationState()),
+      setSlice: (partial) => {
+        patchAccumulationState(partial);
+      },
+      onChange: () => {
+        if (isApplyingPreset) return;
+        if (getAccumulationState().presetActive) {
+          detachAccumulationPreset();
+          if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
+          updatePresetControlState();
+        }
+      },
+    });
+  }
+
   renderAccumulationForm();
 
   const root = el('feature-accumulation');
@@ -335,8 +329,11 @@ export function bindAccumulationInputs() {
       || e.target.closest('#accumulation-preset-control')) {
       return;
     }
+    if (e.target.closest('#accumulation-returns-host')) {
+      // Shared controller already patched state via setSlice.
+      return;
+    }
     if (e.target.closest('#accumulation-sleeves')
-      || e.target.closest('#accumulation-allocation')
       || e.target.closest('#accumulation-events')
       || e.target.id?.startsWith('accumulation-')) {
       const wasAttached = getAccumulationState().presetActive;
@@ -356,14 +353,5 @@ export function bindAccumulationInputs() {
     if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
     updatePresetControlState();
     renderAccumulationForm();
-  });
-
-  el('accumulation-refresh-profiles')?.addEventListener('click', () => {
-    syncAccumulationFormToState();
-    applyAccumulationHistoryProfiles({ force: true });
-    const status = el('accumulation-status');
-    if (status) {
-      status.textContent = `Profiles refreshed from ${YEAR_RANGE.minYear}–${YEAR_RANGE.maxYear} range selection.`;
-    }
   });
 }

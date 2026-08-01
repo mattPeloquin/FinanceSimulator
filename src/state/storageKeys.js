@@ -29,6 +29,7 @@ export function featureStorageKey(featureId, key) {
 export const FEATURE_SOR_PLAN = 'sor-plan';
 export const FEATURE_ACCUMULATION = 'accumulation';
 export const FEATURE_SOR_LAB = 'sor-lab';
+export const FEATURE_SS_TIMING = 'ss-timing';
 
 export const APP_PREFS_KEY = appStorageKey('prefs');
 export const SOR_PLAN_UI_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'ui');
@@ -36,3 +37,4 @@ export const SOR_PLAN_AUTOSAVE_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'autosa
 export const SOR_PLAN_UNSAVED_STASH_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'unsaved-stash');
 export const SOR_LAB_UI_KEY = featureStorageKey(FEATURE_SOR_LAB, 'ui');
 export const ACCUMULATION_UI_KEY = featureStorageKey(FEATURE_ACCUMULATION, 'ui');
+export const SS_TIMING_UI_KEY = featureStorageKey(FEATURE_SS_TIMING, 'ui');

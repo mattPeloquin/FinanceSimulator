@@ -43,7 +43,14 @@ fork `src/data/historicalData.js`, `src/core/history.js`, or
   (`usLgGrowth` … `cash`), no inflation.
 - **`LOGNORMAL_ORDER`** (`src/core/history.js`) — snake_case history keys including
   `inflation`.
-- Plan’s year-range / profile UI stays in `src/features/sor-plan/history.js`.
+- **Returns / allocation UI** is shared via
+  [`src/state/returnsAllocationSlice.js`](../../src/state/returnsAllocationSlice.js)
+  (pure slice + `distMethod` canonicalize) and
+  [`src/ui/returnsAllocation/controller.js`](../../src/ui/returnsAllocation/controller.js)
+  (mountable year range / distribution / allocation panel). Plan keeps legacy
+  DOM ids through a thin wrapper in `src/features/sor-plan/history.js`;
+  Accumulation and Social Security mount the shared controller. Do not fork
+  per-feature history/allocation panels.
 
 ### Worker dispatcher
 
@@ -97,8 +104,8 @@ from the registry. Active tab persists in `fs:app:prefs`.
 
 - `registerFeature({ …, placement })` — omit or `'primary'` for top-level tabs;
   `'more'` puts the feature under the More control (button + listbox).
-- **Primary today:** `sor-plan`, `accumulation`. **More today:** `sor-lab` (plus
-  future features). More is always rendered, even if empty.
+- **Primary today:** `sor-plan`, `accumulation`. **More today:** `sor-lab`,
+  `ss-timing` (plus future features). More is always rendered, even if empty.
 - When a More feature is active, the More control’s label becomes that feature’s
   title and the control is `aria-selected`. Escape closes the menu and returns
   focus to the More button.

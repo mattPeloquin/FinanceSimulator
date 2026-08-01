@@ -3,20 +3,28 @@ import {
   migrateScenario,
   migrateLabState,
   migrateAccumulationState,
+  migrateSsTimingState,
   migrateFeatureState,
   getFeatureStateVersion,
   LAB_STATE_VERSION,
   LAB_STATE_VERSION_MIN,
   ACCUMULATION_STATE_VERSION,
+  SS_TIMING_STATE_VERSION,
 } from '../src/state/migrations.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from '../src/state/storageKeys.js';
+import {
+  FEATURE_SOR_PLAN,
+  FEATURE_SOR_LAB,
+  FEATURE_ACCUMULATION,
+  FEATURE_SS_TIMING,
+} from '../src/state/storageKeys.js';
 
 describe('migrateFeatureState registry', () => {
-  it('exposes Plan, Lab, and Accumulation current versions', () => {
+  it('exposes Plan, Lab, Accumulation, and SS Timing current versions', () => {
     expect(getFeatureStateVersion(FEATURE_SOR_PLAN)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ACCUMULATION)).toBe(ACCUMULATION_STATE_VERSION);
+    expect(getFeatureStateVersion(FEATURE_SS_TIMING)).toBe(SS_TIMING_STATE_VERSION);
   });
 
   it('delegates Plan migration to migrateScenario', () => {
@@ -38,6 +46,13 @@ describe('migrateFeatureState registry', () => {
     const out = migrateFeatureState(FEATURE_ACCUMULATION, state, ACCUMULATION_STATE_VERSION);
     expect(out).toEqual(state);
     expect(migrateAccumulationState(state, ACCUMULATION_STATE_VERSION)).toEqual(state);
+  });
+
+  it('delegates SS Timing migration to migrateSsTimingState', () => {
+    const state = { couple: true };
+    const out = migrateFeatureState(FEATURE_SS_TIMING, state, SS_TIMING_STATE_VERSION);
+    expect(out).toEqual(state);
+    expect(migrateSsTimingState(state, SS_TIMING_STATE_VERSION)).toEqual(state);
   });
 
   it('rejects unknown features and missing versions', () => {

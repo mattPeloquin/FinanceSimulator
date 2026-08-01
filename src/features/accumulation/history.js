@@ -1,34 +1,22 @@
-// Feature-owned history wiring for Accumulation (does not import Plan's history.js).
+// Feature-owned history wiring for Accumulation — uses shared returns slice.
 
 import {
-  getSampleYears,
-  computeProfiles,
-  profilesToScenarioFields,
-} from '../../core/history.js';
-import { minAvailableYear, maxAvailableYear } from '../../data/historicalData.js';
+  YEAR_RANGE,
+  buildSamplesAndProfiles,
+  pickReturnsAllocationSlice,
+} from '../../state/returnsAllocationSlice.js';
 import { getAccumulationState, patchAccumulationState } from './session.js';
 
-export const YEAR_RANGE = { minYear: minAvailableYear, maxYear: maxAvailableYear };
+export { YEAR_RANGE };
 
 /** Refresh log-normal profile fields from the selected year range. */
 export function applyAccumulationHistoryProfiles({ force = false } = {}) {
   const state = getAccumulationState();
   if (state.profiles && !force) return state.profiles;
 
-  const startYear = state.startYear;
-  const endYear = state.endYear;
-  if (
-    !Number.isFinite(startYear)
-    || !Number.isFinite(endYear)
-    || startYear > endYear
-    || startYear < YEAR_RANGE.minYear
-    || endYear > YEAR_RANGE.maxYear
-  ) {
-    return null;
-  }
-  const years = getSampleYears(startYear, endYear);
-  if (!years.length) return null;
-  const profiles = profilesToScenarioFields(computeProfiles(years));
+  const slice = pickReturnsAllocationSlice(state);
+  const { profiles } = buildSamplesAndProfiles(slice, { forceProfiles: true });
+  if (!profiles) return null;
   patchAccumulationState({ profiles });
   return profiles;
 }

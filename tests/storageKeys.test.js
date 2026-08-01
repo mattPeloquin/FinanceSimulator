@@ -10,6 +10,7 @@ import {
   FEATURE_SOR_PLAN,
   FEATURE_ACCUMULATION,
   FEATURE_SOR_LAB,
+  FEATURE_SS_TIMING,
 } from '../src/state/storageKeys.js';
 
 describe('storageKeys', () => {
@@ -24,6 +25,7 @@ describe('storageKeys', () => {
     expect(FEATURE_SOR_PLAN).toBe('sor-plan');
     expect(FEATURE_ACCUMULATION).toBe('accumulation');
     expect(FEATURE_SOR_LAB).toBe('sor-lab');
+    expect(FEATURE_SS_TIMING).toBe('ss-timing');
     expect(APP_PREFS_KEY).toBe('fs:app:prefs');
     expect(SOR_PLAN_UI_KEY).toBe('fs:sor-plan:ui');
     expect(SOR_PLAN_AUTOSAVE_KEY).toBe('fs:sor-plan:autosave');

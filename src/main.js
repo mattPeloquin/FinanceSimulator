@@ -4,10 +4,16 @@ import './ui/theme.js';
 import * as sessions from './state/sessions.js';
 import { mountFeatureTabs, initFeatures } from './state/features.js';
 import { loadAutosave, loadUnsavedStash } from './state/persistence.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB, FEATURE_ACCUMULATION } from './state/storageKeys.js';
+import {
+  FEATURE_SOR_PLAN,
+  FEATURE_SOR_LAB,
+  FEATURE_ACCUMULATION,
+  FEATURE_SS_TIMING,
+} from './state/storageKeys.js';
 import { registerSorPlan } from './features/sor-plan/index.js';
 import { registerAccumulation } from './features/accumulation/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
+import { registerSsTiming } from './features/ss-timing/index.js';
 import { restoreUnsavedScenario } from './features/sor-plan/session.js';
 import {
   seedSessionUi,
@@ -18,10 +24,11 @@ import {
   restoreSessionUi,
 } from './ui/sessionChrome.js';
 
-// Registration order: primary Plan + Accumulation, then Lab under More.
+// Registration order: primary Plan + Accumulation, then More features.
 registerSorPlan();
 registerAccumulation();
 registerSorLab();
+registerSsTiming();
 
 async function init() {
   try {
@@ -40,6 +47,7 @@ async function init() {
       },
       [FEATURE_ACCUMULATION]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SOR_LAB]: { name: '', description: '', lastSelect: '' },
+      [FEATURE_SS_TIMING]: { name: '', description: '', lastSelect: '' },
     });
     setSessionMeta({
       name: autosaved.name || '',

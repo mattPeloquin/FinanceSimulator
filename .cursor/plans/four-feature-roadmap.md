@@ -31,8 +31,8 @@ Any Cursor UI plan copy outside the repo is a pointer only — edit and log prog
 - [x] Phase 0b — State Versioning (`stateVersion`, migrate hook, share-link size guard)
 - [x] Phase 0c — Worker Dispatcher & Scaffold (thin dispatcher, asset decoupling, checklist)
 - [x] Phase 1 — Accumulation (pilot)
-- [ ] Phase 2a — Social Security deterministic core
-- [ ] Phase 2b — Social Security Monte Carlo + policy shocks
+- [x] Phase 2a — Social Security deterministic core
+- [x] Phase 2b — Social Security Monte Carlo + policy shocks
 - [ ] Phase 3 — Roth Convert
 - [ ] Phase 4a — House Equity comparison
 - [ ] Phase 4b — HECM calibration (gated)
@@ -298,3 +298,11 @@ Framing: **leveraging house equity** — the goal is accessing equity as early a
   - Worker `type: 'accumulation'` handler runs on the **master worker** (Plan `ParallelPool` chunk shape is withdrawal-oriented; multi-core Accumulation chunking deferred).
   - Three presets: Steady Saver, Aggressive Builder, Catch-Up. Full session chrome; no Plan soft-link / no risk-preset write-back.
   - Tests: `accumulation.test.js`, `tests/e2e/accumulation.spec.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.62 MB).
+- 2026-08-01 — **Phase 2 shipped (merged 2a + 2b): Shared returns UI + Social Security full MC.**
+  - **Shared returns/allocation UI:** [`src/state/returnsAllocationSlice.js`](../../src/state/returnsAllocationSlice.js) (canonical slice + `historical`→`resampling`) and [`src/ui/returnsAllocation/controller.js`](../../src/ui/returnsAllocation/controller.js). Accumulation mounts the controller; Plan keeps legacy DOM ids via thin wrapper in `sor-plan/history.js`. Architecture rule updated. `profilesToLogNormal` promoted to `core/history.js`.
+  - **SS independent of Plan** — soft-link cancelled; self-contained bridge portfolio + shared returns UI only.
+  - Feature `ss-timing` under More: session (`SS_TIMING_STATE_VERSION = 1`), three presets (Both Delay to 70 / Both Claim Early / Split), worker `type: 'ssTiming'`.
+  - Deterministic core [`src/core/socialSecurity.js`](../../src/core/socialSecurity.js) (real $): own early/DRC factors, spousal `max(0, 0.5×otherPIA − ownPIA)` with simple early haircut, **survivor** = after one planning end age the living spouse gets `max(own package, deceased’s package at death)`; PIA helper with illustrative bend points; end-age strip 80/85/90/95; named strategies **and** 62–70 claim-age grid; break-even early vs 70.
+  - MC: bridge OC via `simulateBridgePath` / `runBridgeMonteCarlo` in `accumulation.js`; [`src/core/policyShocks.js`](../../src/core/policyShocks.js) tax-rate noise + discrete/phased benefit cuts (CRN via `deriveSeed`); born here for Roth reuse later.
+  - Views: strategy bar chart, strip + flips, claim grid, OC MC panel (shocked lifetime + bridge success/ending P10/P50/P90).
+  - Tests: `returnsAllocationSlice.test.js`, `socialSecurity.test.js`, `tests/e2e/ssTiming.spec.js`; full Vitest + Playwright green; `npm run build` ok (`dist/index.html` ~2.67 MB).

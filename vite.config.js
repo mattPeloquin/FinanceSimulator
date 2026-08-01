@@ -34,6 +34,8 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/features/sor-lab/partials')),
         resolve(__dirname, 'src/features/accumulation/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/accumulation/partials')),
+        resolve(__dirname, 'src/features/ss-timing/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/ss-timing/partials')),
       ],
     }),
     viteSingleFile(),

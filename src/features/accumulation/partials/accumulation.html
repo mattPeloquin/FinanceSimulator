@@ -84,35 +84,7 @@
 
         <div class="space-y-2">
           <h4 class="text-sm font-semibold text-theme-heading">History &amp; returns</h4>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block space-y-1">
-              <span class="text-sm font-medium text-theme-body">Start year</span>
-              <input type="number" id="accumulation-start-year"
-                class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
-            </label>
-            <label class="block space-y-1">
-              <span class="text-sm font-medium text-theme-body">End year</span>
-              <input type="number" id="accumulation-end-year"
-                class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading" />
-            </label>
-          </div>
-          <label class="block space-y-1">
-            <span class="text-sm font-medium text-theme-body">Distribution</span>
-            <select id="accumulation-dist-method" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
-              <option value="lognormal">Log-normal</option>
-              <option value="historical">Historical bootstrap</option>
-              <option value="scaledHistorical">Scaled historical</option>
-              <option value="historicalSequence">Historical sequence</option>
-            </select>
-          </label>
-          <button type="button" id="accumulation-refresh-profiles" class="text-xs text-theme-accent hover:underline">
-            Refresh profiles from year range
-          </button>
-        </div>
-
-        <div class="space-y-2">
-          <h4 class="text-sm font-semibold text-theme-heading">Starting allocation (%)</h4>
-          <div id="accumulation-allocation" class="grid grid-cols-2 gap-2"></div>
+          <div id="accumulation-returns-host"></div>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { handlePlanRun } from './handlers/planRun.js';
 import { handlePlanGoalSeek } from './handlers/planGoalSeek.js';
 import { handleSensitivity } from './handlers/sensitivity.js';
 import { handleAccumulation } from './handlers/accumulation.js';
+import { handleSsTiming } from './handlers/ssTiming.js';
 
 /** Message types that do not need a ParallelPool. */
 const NO_POOL_TYPES = new Set(['connect', 'chunk']);
@@ -19,6 +20,7 @@ export const HANDLERS = {
   goalSeek: handlePlanGoalSeek,
   sensitivity: handleSensitivity,
   accumulation: handleAccumulation,
+  ssTiming: handleSsTiming,
 };
 
 /**
