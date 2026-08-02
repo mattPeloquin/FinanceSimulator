@@ -2,7 +2,7 @@
 // Money fields are whole $000s; rate fields are percents (4 = 4%), matching Plan.
 
 import { HOUSE_EQUITY_STATE_VERSION } from '../../state/migrations.js';
-import { FEATURE_HOUSE_EQUITY, FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_HOUSE_EQUITY, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import { SCHEMA_VERSION } from '../../state/scenario.js';
 import * as sessions from '../../state/sessions.js';
 import {
@@ -138,7 +138,7 @@ export function normalizeHouseEquityState(raw) {
   let scenarioRef = null;
   if (raw.scenarioRef && typeof raw.scenarioRef === 'object' && raw.scenarioRef.name) {
     scenarioRef = {
-      feature: raw.scenarioRef.feature || FEATURE_SOR_PLAN,
+      feature: raw.scenarioRef.feature || FEATURE_WITHDRAW,
       name: String(raw.scenarioRef.name),
     };
   }
@@ -268,10 +268,10 @@ export async function getHouseEquityDependencies() {
   const ref = heState.scenarioRef;
   if (!ref?.name) return [];
   try {
-    const loaded = await sessions.load(ref.feature || FEATURE_SOR_PLAN, ref.name);
+    const loaded = await sessions.load(ref.feature || FEATURE_WITHDRAW, ref.name);
     if (!loaded?.payload) return [];
     return [{
-      feature: ref.feature || FEATURE_SOR_PLAN,
+      feature: ref.feature || FEATURE_WITHDRAW,
       name: ref.name,
       state: loaded.payload,
       stateVersion: SCHEMA_VERSION,
@@ -286,7 +286,7 @@ export async function applyImportedHouseEquity(loaded, { statusMessage, renames 
   let state = normalizeHouseEquityState(loaded.state || {});
   if (state.scenarioRef?.name && Array.isArray(renames) && renames.length) {
     const planRenames = renames.filter(
-      (r) => (r.feature || FEATURE_SOR_PLAN) === FEATURE_SOR_PLAN,
+      (r) => (r.feature || FEATURE_WITHDRAW) === FEATURE_WITHDRAW,
     );
     const exact = planRenames.find((r) => r.requestedName === state.scenarioRef.name);
     if (exact) {

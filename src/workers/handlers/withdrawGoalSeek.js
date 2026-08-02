@@ -1,9 +1,9 @@
 // Plan Goal Seek: search → confirm → classic 4% comparison.
 
 import { runGoalSeek } from '../../core/goalSeek.js';
-import { packageWithFourPercentComparison } from './planRun.js';
+import { packageWithFourPercentComparison } from './withdrawRun.js';
 
-export async function handlePlanGoalSeek(ctx, data) {
+export async function handleWithdrawGoalSeek(ctx, data) {
   const { pool, post } = ctx;
   const { params, goalSeekConfig } = data;
   const simulateAsync = (simParams) => pool.run(simParams);

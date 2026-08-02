@@ -1,7 +1,7 @@
 // Roth Convert config panel — DOM ↔ session + Easy Mode + Plan picker.
 
 import * as sessions from '../../../state/sessions.js';
-import { FEATURE_SOR_PLAN } from '../../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
 import { getRothConvertPresets } from '../presets.js';
 import {
   getRothConvertState,
@@ -122,7 +122,7 @@ export async function refreshRothScenarioPicker() {
   const current = getRothConvertState().scenarioRef?.name || '';
   let names;
   try {
-    const list = await sessions.list(FEATURE_SOR_PLAN);
+    const list = await sessions.list(FEATURE_WITHDRAW);
     names = (list || []).map((s) => s.name).filter(Boolean);
   } catch {
     names = [];
@@ -227,7 +227,7 @@ export function syncRothConvertFormToState() {
     qcdAnnual: parseCurrency(el('roth-convert-qcd-annual')?.value),
     spouseSoleBeneficiary: !!el('roth-convert-spouse-sole')?.checked,
     scenarioRef: scenarioName
-      ? { feature: FEATURE_SOR_PLAN, name: scenarioName }
+      ? { feature: FEATURE_WITHDRAW, name: scenarioName }
       : null,
     constantRealReturn: Number(el('roth-convert-const-return')?.value),
     numYears: parseInt(el('roth-convert-years')?.value, 10),

@@ -22,7 +22,7 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await page.click('#runButton');
   await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
 
-  const details = page.locator('#details-plan-report');
+  const details = page.locator('#details-withdraw-report');
   await expect(details).toBeAttached();
   await expect(details).not.toHaveAttribute('open', '');
 
@@ -34,7 +34,7 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   await expect(page.locator('#reportHeaderLine1')).not.toBeEmpty();
   await expect(page.locator('#reportHeaderLine2')).toHaveCount(0);
   await expect(page.locator('#reportSuccessBarFill')).toHaveCount(0);
-  await expect(page.locator('#reportOnPlanBarFill')).toHaveCount(0);
+  await expect(page.locator('#reportOnTargetBarFill')).toHaveCount(0);
   await expect(page.locator('#reportSequenceBullet')).toHaveCount(0);
 
   const bandCanvas = page.locator('#reportBandCanvas');
@@ -75,10 +75,10 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   const heroNumber = page.locator('#reportHeroSuccess');
   await expect(heroNumber).toBeVisible();
   await expect(heroNumber).toContainText('%');
-  const heroOnPlan = page.locator('#reportHeroOnPlan');
+  const heroOnPlan = page.locator('#reportHeroOnTarget');
   await expect(heroOnPlan).toBeVisible();
   await expect(heroOnPlan).toContainText('%');
-  await expect(page.locator('#reportHeroOnPlanLabel')).toContainText(/within \d+% of plan/);
+  await expect(page.locator('#reportHeroOnTargetLabel')).toContainText(/within \d+% of plan/);
   await expect(page.locator('#reportVerdictPill')).not.toBeEmpty();
 
   // 4% comparison is split into two minimized charts on honest scales.
@@ -89,7 +89,7 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
 
   // Tax-mode badges stay hidden until withdrawal tax is active.
   // In-report after-taxes pill shares a row with the status pill.
-  await expect(page.locator('#planReportTaxNote')).toBeHidden();
+  await expect(page.locator('#withdrawReportTaxNote')).toBeHidden();
   await expect(page.locator('#reportTitleTaxNote')).toBeHidden();
   await expect(page.locator('#reportBandTaxNote')).toBeHidden();
   await expect(page.locator('#reportVerdictPill').locator('xpath=..').locator('#reportTitleTaxNote')).toHaveCount(1);
@@ -101,11 +101,11 @@ test('Plan Snapshot report opens and updates with percentile sliders', async ({ 
   const themeMode = page.locator('#reportThemeMode');
   await expect(themeMode).toHaveValue('auto');
   await themeMode.selectOption('dark');
-  await expect(page.locator('#planReport')).toHaveClass(/report-force-dark/);
+  await expect(page.locator('#withdrawReport')).toHaveClass(/report-force-dark/);
   await themeMode.selectOption('light');
-  await expect(page.locator('#planReport')).toHaveClass(/report-force-light/);
+  await expect(page.locator('#withdrawReport')).toHaveClass(/report-force-light/);
   await themeMode.selectOption('auto');
-  await expect(page.locator('#planReport')).not.toHaveClass(/report-force-light|report-force-dark/);
+  await expect(page.locator('#withdrawReport')).not.toHaveClass(/report-force-light|report-force-dark/);
 
   await expect(page.locator('#reportExportPdf')).toBeVisible();
   await expect(page.locator('#reportNextMoves')).toHaveCount(0);

@@ -19,7 +19,7 @@ import {
   toggleGoalSeekMode,
   refreshDynamicAdjustmentPreviews,
   syncEarlyWeightPreview,
-  syncOnPlanYearlyPreview,
+  syncOnTargetYearlyPreview,
 } from './ui/inputs.js';
 import { syncRiskPresetUi } from './ui/riskPreset.js';
 import { syncAllocationPreview } from './ui/charts/allocationPreview.js';
@@ -34,7 +34,7 @@ import {
   snapshotSessionUi,
   maybeApplyAttachedUi,
 } from '../../ui/sessionChrome.js';
-import { FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import {
   resetProfilesEdited,
   refreshHistoryView,
@@ -118,7 +118,7 @@ export function applyScenario(scenario) {
   updateAllocationTotal();
   syncAllocationPreview();
   syncEarlyWeightPreview();
-  syncOnPlanYearlyPreview();
+  syncOnTargetYearlyPreview();
   // Reflect the loaded scenario's slider state only — never re-apply the
   // preset patch here; the saved values are the truth.
   syncRiskPresetUi(merged);
@@ -133,7 +133,7 @@ export function applyScenario(scenario) {
   scheduleAutosave();
 }
 
-/** Apply an imported/shared SOR Plan scenario as an unsaved workbench, then auto-run. */
+/** Apply an imported/shared Withdraw scenario as an unsaved workbench, then auto-run. */
 export async function applyImportedScenario({ scenario, state, name = '', description = '', ui } = {}, { statusMessage } = {}) {
   const planState = scenario || state;
   setSessionMeta({ name: '', description: description || '', lastSelect: '' });
@@ -147,7 +147,7 @@ export async function applyImportedScenario({ scenario, state, name = '', descri
   if (msg) document.getElementById('historical-range-msg').textContent = msg;
   await refreshSessionList('');
   flushAutosave();
-  snapshotSessionUi(FEATURE_SOR_PLAN);
+  snapshotSessionUi(FEATURE_WITHDRAW);
   await maybeApplyAttachedUi(ui);
   const { handleRunClick } = await import('./run.js');
   handleRunClick();

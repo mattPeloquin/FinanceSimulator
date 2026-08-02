@@ -15,14 +15,14 @@ function themeVarsPlugin({ addBase }) {
     '.dark': themeCssVars('dark'),
     // The Plan Snapshot report can be viewed in light/dark independent of the
     // app's theme (see reportThemeMode in report.js) by re-declaring the same
-    // CSS variables scoped to #planReport, overriding whatever the ancestor
+    // CSS variables scoped to #withdrawReport, overriding whatever the ancestor
     // (html/.dark) set.
-    '#planReport.report-force-light': themeCssVars('light'),
-    '#planReport.report-force-dark': themeCssVars('dark'),
+    '#withdrawReport.report-force-light': themeCssVars('light'),
+    '#withdrawReport.report-force-dark': themeCssVars('dark'),
     // No matter what's on screen (app theme or the report's own override),
     // printed/exported PDFs always render light so they stay paper-friendly.
     '@media print': {
-      '#planReport': important(themeCssVars('light')),
+      '#withdrawReport': important(themeCssVars('light')),
     },
   });
 }

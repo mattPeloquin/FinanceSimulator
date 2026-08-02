@@ -28,8 +28,8 @@ export default defineConfig({
       partialDirectory: [
         resolve(__dirname, 'src/partials'),
         ...getDirectories(resolve(__dirname, 'src/partials')),
-        resolve(__dirname, 'src/features/sor-plan/partials'),
-        ...getDirectories(resolve(__dirname, 'src/features/sor-plan/partials')),
+        resolve(__dirname, 'src/features/withdraw/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/withdraw/partials')),
         resolve(__dirname, 'src/features/sor-lab/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/sor-lab/partials')),
         resolve(__dirname, 'src/features/accumulation/partials'),

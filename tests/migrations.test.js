@@ -17,7 +17,7 @@ import {
 } from '../src/state/migrations.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
 import {
-  FEATURE_SOR_PLAN,
+  FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
@@ -27,7 +27,7 @@ import {
 
 describe('migrateFeatureState registry', () => {
   it('exposes Plan, Lab, Accumulation, SS Timing, Roth Convert, and House Equity current versions', () => {
-    expect(getFeatureStateVersion(FEATURE_SOR_PLAN)).toBe(SCHEMA_VERSION);
+    expect(getFeatureStateVersion(FEATURE_WITHDRAW)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ACCUMULATION)).toBe(ACCUMULATION_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_SS_TIMING)).toBe(SS_TIMING_STATE_VERSION);
@@ -37,7 +37,7 @@ describe('migrateFeatureState registry', () => {
 
   it('delegates Plan migration to migrateScenario', () => {
     const state = { startBalance: 100 };
-    const out = migrateFeatureState(FEATURE_SOR_PLAN, state, SCHEMA_VERSION);
+    const out = migrateFeatureState(FEATURE_WITHDRAW, state, SCHEMA_VERSION);
     expect(out).toEqual(state);
     expect(out).not.toBe(state);
   });
@@ -80,7 +80,7 @@ describe('migrateFeatureState registry', () => {
   it('rejects unknown features and missing versions', () => {
     expect(() => getFeatureStateVersion('nope')).toThrow(/no state migrator/i);
     expect(() => migrateFeatureState('nope', {}, 1)).toThrow(/no state migrator/i);
-    expect(() => migrateFeatureState(FEATURE_SOR_PLAN, { startBalance: 1 }, undefined))
+    expect(() => migrateFeatureState(FEATURE_WITHDRAW, { startBalance: 1 }, undefined))
       .toThrow(/missing or invalid/i);
   });
 });

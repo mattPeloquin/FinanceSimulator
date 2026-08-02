@@ -26,7 +26,7 @@ export function featureStorageKey(featureId, key) {
 }
 
 /** Canonical feature ids used by storage helpers below. */
-export const FEATURE_SOR_PLAN = 'sor-plan';
+export const FEATURE_WITHDRAW = 'withdraw';
 export const FEATURE_ACCUMULATION = 'accumulation';
 export const FEATURE_SOR_LAB = 'sor-lab';
 export const FEATURE_SS_TIMING = 'ss-timing';
@@ -34,9 +34,9 @@ export const FEATURE_ROTH_CONVERT = 'roth-convert';
 export const FEATURE_HOUSE_EQUITY = 'house-equity';
 
 export const APP_PREFS_KEY = appStorageKey('prefs');
-export const SOR_PLAN_UI_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'ui');
-export const SOR_PLAN_AUTOSAVE_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'autosave');
-export const SOR_PLAN_UNSAVED_STASH_KEY = featureStorageKey(FEATURE_SOR_PLAN, 'unsaved-stash');
+export const WITHDRAW_UI_KEY = featureStorageKey(FEATURE_WITHDRAW, 'ui');
+export const WITHDRAW_AUTOSAVE_KEY = featureStorageKey(FEATURE_WITHDRAW, 'autosave');
+export const WITHDRAW_UNSAVED_STASH_KEY = featureStorageKey(FEATURE_WITHDRAW, 'unsaved-stash');
 export const SOR_LAB_UI_KEY = featureStorageKey(FEATURE_SOR_LAB, 'ui');
 export const ACCUMULATION_UI_KEY = featureStorageKey(FEATURE_ACCUMULATION, 'ui');
 export const SS_TIMING_UI_KEY = featureStorageKey(FEATURE_SS_TIMING, 'ui');

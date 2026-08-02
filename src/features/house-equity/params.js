@@ -1,10 +1,10 @@
 // Build worker payload from House Equity session state.
 
 import * as sessions from '../../state/sessions.js';
-import { FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import {
   buildSamplesAndProfiles,
-  sliceFromPlanScenario,
+  sliceFromWithdrawScenario,
   canonicalizeDistMethod,
   ALLOCATION_PCT_KEYS,
 } from '../../state/returnsAllocationSlice.js';
@@ -37,15 +37,15 @@ export async function buildHouseEquityWorkerPayload(state, { seed } = {}) {
 
   if (linked) {
     const loaded = await sessions.load(
-      state.scenarioRef.feature || FEATURE_SOR_PLAN,
+      state.scenarioRef.feature || FEATURE_WITHDRAW,
       state.scenarioRef.name,
     );
     if (!loaded?.payload) {
       throw new Error(
-        `Could not load Plan session "${state.scenarioRef.name}". Save a scenario in SOR Plan first, or clear the link to use a constant return.`,
+        `Could not load Withdraw session "${state.scenarioRef.name}". Save a scenario in Withdraw first, or clear the link to use a constant return.`,
       );
     }
-    const slice = sliceFromPlanScenario(loaded.payload);
+    const slice = sliceFromWithdrawScenario(loaded.payload);
     const { samples, profiles: derived } = buildSamplesAndProfiles(slice, {
       forceProfiles: true,
     });

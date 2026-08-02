@@ -652,7 +652,7 @@ function estimateEvalBudget(params, config) {
 //   searchAggressiveness     fraction 0..1 — Find Best Plan search depth only:
 //                            scales market/balance/glide grids over the first 0–20%
 //                            and discounts targetEndingBalance
-//   onPlanScoring            { measure, yearlyEmphasisPct, yearlyLateFloorPct }
+//   onTargetScoring            { measure, yearlyEmphasisPct, yearlyLateFloorPct }
 //   pinBaseWithdrawal          bool — keep params.portfolio.base fixed; search levers only
 //   includeSpendingOverTime      bool — covers first-tier extra withdrawal
 //   includeMarketAdjustments   bool — covers dynLow/HighAdj only;
@@ -772,9 +772,9 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       perRunBenchmarks,
       failPct,
     );
-    // Missing onPlanScoring (older callers/tests) → lifetime-only, matching
+    // Missing onTargetScoring (older callers/tests) → lifetime-only, matching
     // pre-blend behavior. Production always passes scoring from buildGoalSeekConfig.
-    const scoring = config.onPlanScoring
+    const scoring = config.onTargetScoring
       ?? { measure: 'lifetime', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
     const nSims = result.numSimulations ?? result.horizonYears?.length ?? 1;
     const maxYears = params.maxYears
@@ -782,26 +782,26 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
       ?? (result.allYearsNetSpend
         ? Math.floor(result.allYearsNetSpend.length / Math.max(nSims, 1))
         : params.numYears);
-    const onPlanContext = {
+    const onTargetContext = {
       measure: scoring.measure ?? 'blend',
       yearlyEmphasisPct: scoring.yearlyEmphasisPct ?? 100,
       yearlyLateFloorPct: scoring.yearlyLateFloorPct ?? 100,
       allYearsNetSpend: result.allYearsNetSpend ?? result.allYearsWithdrawals,
       maxYears,
       horizonYears: result.horizonYears,
-      planByYearForHorizon: (h) => plannedYearlySchedule(working.portfolio, h),
+      targetByYearForHorizon: (h) => plannedYearlySchedule(working.portfolio, h),
     };
-    const onPlanRate = spendingTailRate(
+    const onTargetRate = spendingTailRate(
       actualWithdrawn,
       perRunBenchmarks,
       shortfallTolerance,
-      onPlanContext,
+      onTargetContext,
     );
     // Single comparable rate for summaries / pinBase climb: the tighter of
     // the two separate bars (each must clear Desired Success % for feasibility).
-    const successRateAchieved = onPlanRate == null
+    const successRateAchieved = onTargetRate == null
       ? legacyRate
-      : Math.min(legacyRate, onPlanRate);
+      : Math.min(legacyRate, onTargetRate);
     const rtFloor = 1 - shortfallTolerance;
     const tailRatioExcess = tailRatio == null
       ? 0
@@ -809,7 +809,7 @@ export async function runGoalSeek(params, config, simulateAsync, { onProgress } 
     return {
       successRateAchieved,
       legacyRate,
-      onPlanRate,
+      onTargetRate,
       tailRatio,
       tailRatioExcess,
       meetsSplitGate: legacyRate >= desiredSuccessRate

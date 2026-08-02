@@ -5,7 +5,7 @@ import {
   DENSITY_ALPHA_FLOOR,
   DENSITY_ALPHA_SPAN,
   DENSITY_ALPHA_GAMMA,
-} from '../src/features/sor-plan/ui/charts/reportCharts.js';
+} from '../src/features/withdraw/ui/charts/reportCharts.js';
 
 describe('densityAlpha', () => {
   it('returns 0 for non-positive density', () => {

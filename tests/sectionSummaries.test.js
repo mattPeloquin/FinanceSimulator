@@ -5,7 +5,7 @@ import {
   formatOutcomesSectionState,
   plannedYearlyAmountsIncludingGifts,
   countActiveWithdrawalAdjustments,
-} from '../src/features/sor-plan/ui/sectionSummaries.js';
+} from '../src/features/withdraw/ui/sectionSummaries.js';
 
 describe('formatInvestmentSectionState', () => {
   it('puts allocation and method on separate lines with year range', () => {

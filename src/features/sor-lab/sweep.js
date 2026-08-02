@@ -74,7 +74,7 @@ export function restoreSharedArrays(pointParams, baseParams) {
 /**
  * Build the full set of design points for a Lab run.
  *
- * @param {object} scenario — SOR Plan scenario payload
+ * @param {object} scenario — Withdraw scenario payload
  * @param {object} config
  * @param {number} config.seed — pinned CRN seed for every point
  * @param {number} [config.sweepPoints]

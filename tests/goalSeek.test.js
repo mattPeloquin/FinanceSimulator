@@ -373,7 +373,7 @@ const FAST_LEVER_GRIDS = {
 const DEFAULT_GOAL_SEEK_CONFIG = {
   shortfallTolerance: 0.2,
   searchAggressiveness: 0.2,
-  onPlanScoring: { measure: 'lifetime', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 },
+  onTargetScoring: { measure: 'lifetime', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 },
 };
 
 describe('buildPerRunPlanBenchmarks', () => {

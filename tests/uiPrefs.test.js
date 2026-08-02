@@ -51,10 +51,10 @@ describe('uiPrefs', () => {
     expect(n.balanceLogScale).toBe(true);
   });
 
-  it('load/save round-trips feature chrome through fs:sor-plan:ui', () => {
+  it('load/save round-trips feature chrome through fs:withdraw:ui', () => {
     saveUiPrefs({ theme: 'dark', balanceLogScale: true, reportThemeMode: 'light' });
     const raw = JSON.parse(localStorage.getItem(UI_STORAGE_KEY));
-    expect(UI_STORAGE_KEY).toBe('fs:sor-plan:ui');
+    expect(UI_STORAGE_KEY).toBe('fs:withdraw:ui');
     // Theme is app-wide — stripped from the feature key.
     expect(raw.theme).toBeUndefined();
     expect(raw.balanceLogScale).toBe(true);
@@ -92,7 +92,7 @@ describe('uiPrefs', () => {
     expect(optionalUiFromEnvelope({ theme: 'dark' }).theme).toBe('dark');
   });
 
-  it('accordion helpers write into fs:sor-plan:ui', () => {
+  it('accordion helpers write into fs:withdraw:ui', () => {
     setAccordionOpen('section-investment', true);
     expect(loadAccordionState()['section-investment']).toBe(true);
     const stored = JSON.parse(localStorage.getItem(UI_STORAGE_KEY));

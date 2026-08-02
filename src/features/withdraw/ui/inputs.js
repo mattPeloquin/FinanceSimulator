@@ -34,7 +34,7 @@ import { syncGlidePreview } from './charts/glidePreview.js';
 import { syncBaseWithdrawalPreview, destroyBaseWithdrawalPreviewChart } from './charts/basePreview.js';
 import { syncAllocationPreview } from './charts/allocationPreview.js';
 import { loadAccordionState, setAccordionOpen } from '../../../state/persistence.js';
-import { weightPreviewSeries, onPlanYearlyPreviewSeries } from '../../../core/statistics.js';
+import { weightPreviewSeries, onTargetYearlyPreviewSeries } from '../../../core/statistics.js';
 import { suppressAccordionPersist, onChartDetailsOpened } from './charts/chartThumbs.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -103,24 +103,24 @@ export function syncEarlyWeightPreview() {
 }
 
 /** Show/hide yearly impact curve when on-plan measure needs it. */
-export function syncOnPlanYearlyCurveVisibility() {
-  const wrap = document.getElementById('onPlanYearlyCurveControls');
-  const measure = document.getElementById('onPlanMeasure')?.value || 'blend';
+export function syncOnTargetYearlyCurveVisibility() {
+  const wrap = document.getElementById('onTargetYearlyCurveControls');
+  const measure = document.getElementById('onTargetMeasure')?.value || 'blend';
   if (!wrap) return;
   const show = measure === 'blend' || measure === 'yearly';
   wrap.classList.toggle('hidden', !show);
 }
 
 /** Redraw the Advanced on-plan yearly impact preview. */
-export function syncOnPlanYearlyPreview() {
-  syncOnPlanYearlyCurveVisibility();
-  const svg = document.getElementById('onPlanYearlyPreview');
-  const caption = document.getElementById('onPlanYearlyPreviewCaption');
+export function syncOnTargetYearlyPreview() {
+  syncOnTargetYearlyCurveVisibility();
+  const svg = document.getElementById('onTargetYearlyPreview');
+  const caption = document.getElementById('onTargetYearlyPreviewCaption');
   if (!svg) return;
   const horizon = Math.max(1, parseInt(document.getElementById('numYears')?.value, 10) || 30);
-  const earlyEmphasisPct = Number(document.getElementById('onPlanYearlyEmphasisPct')?.value);
-  const lateFloorPct = Number(document.getElementById('onPlanYearlyLateFloorPct')?.value);
-  const preview = onPlanYearlyPreviewSeries(horizon, {
+  const earlyEmphasisPct = Number(document.getElementById('onTargetYearlyEmphasisPct')?.value);
+  const lateFloorPct = Number(document.getElementById('onTargetYearlyLateFloorPct')?.value);
+  const preview = onTargetYearlyPreviewSeries(horizon, {
     earlyEmphasisPct: Number.isFinite(earlyEmphasisPct) ? earlyEmphasisPct : 100,
     lateFloorPct: Number.isFinite(lateFloorPct) ? lateFloorPct : 100,
   });
@@ -180,7 +180,7 @@ export function setupAccordionResize() {
       }
       if (details.id === 'section-advanced') {
         syncEarlyWeightPreview();
-        syncOnPlanYearlyPreview();
+        syncOnTargetYearlyPreview();
       }
     });
   });
@@ -925,15 +925,15 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   }
 
-  const planRiskTolerancePct = document.getElementById('planRiskTolerancePct');
-  const planRiskTolerancePctSlider = document.getElementById('planRiskTolerancePctSlider');
-  if (planRiskTolerancePct && planRiskTolerancePctSlider) {
-    planRiskTolerancePctSlider.addEventListener('input', (e) => {
-      planRiskTolerancePct.value = e.target.value;
+  const withdrawRiskTolerancePct = document.getElementById('withdrawRiskTolerancePct');
+  const withdrawRiskTolerancePctSlider = document.getElementById('withdrawRiskTolerancePctSlider');
+  if (withdrawRiskTolerancePct && withdrawRiskTolerancePctSlider) {
+    withdrawRiskTolerancePctSlider.addEventListener('input', (e) => {
+      withdrawRiskTolerancePct.value = e.target.value;
       notify();
     });
-    planRiskTolerancePct.addEventListener('input', (e) => {
-      planRiskTolerancePctSlider.value = e.target.value;
+    withdrawRiskTolerancePct.addEventListener('input', (e) => {
+      withdrawRiskTolerancePctSlider.value = e.target.value;
       notify();
     });
   }
@@ -962,31 +962,31 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
   pairEarlyWeightKnob('earlyWeightLateFloorPct', 'earlyWeightLateFloorPctSlider');
   syncEarlyWeightPreview();
 
-  function pairOnPlanYearlyKnob(numberId, sliderId) {
+  function pairOnTargetYearlyKnob(numberId, sliderId) {
     const numberEl = document.getElementById(numberId);
     const sliderEl = document.getElementById(sliderId);
     if (!numberEl || !sliderEl) return;
     sliderEl.addEventListener('input', (e) => {
       numberEl.value = e.target.value;
-      syncOnPlanYearlyPreview();
+      syncOnTargetYearlyPreview();
       notify();
     });
     numberEl.addEventListener('input', (e) => {
       sliderEl.value = e.target.value;
-      syncOnPlanYearlyPreview();
+      syncOnTargetYearlyPreview();
       notify();
     });
   }
-  pairOnPlanYearlyKnob('onPlanYearlyEmphasisPct', 'onPlanYearlyEmphasisPctSlider');
-  pairOnPlanYearlyKnob('onPlanYearlyLateFloorPct', 'onPlanYearlyLateFloorPctSlider');
-  const onPlanMeasure = document.getElementById('onPlanMeasure');
-  if (onPlanMeasure) {
-    onPlanMeasure.addEventListener('change', () => {
-      syncOnPlanYearlyPreview();
+  pairOnTargetYearlyKnob('onTargetYearlyEmphasisPct', 'onTargetYearlyEmphasisPctSlider');
+  pairOnTargetYearlyKnob('onTargetYearlyLateFloorPct', 'onTargetYearlyLateFloorPctSlider');
+  const onTargetMeasure = document.getElementById('onTargetMeasure');
+  if (onTargetMeasure) {
+    onTargetMeasure.addEventListener('change', () => {
+      syncOnTargetYearlyPreview();
       notify();
     });
   }
-  syncOnPlanYearlyPreview();
+  syncOnTargetYearlyPreview();
 
   document.querySelectorAll('input[name="distribution-method"]').forEach((radio) => {
     radio.addEventListener('change', (e) => {
@@ -1115,11 +1115,11 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
       input.id === 'scaledHistoricalSmoothingSlider' ||
       input.id === 'goalSeekDesiredSuccessPctSlider' ||
       input.id === 'goalSeekRiskTolerancePctSlider' ||
-      input.id === 'planRiskTolerancePctSlider' ||
+      input.id === 'withdrawRiskTolerancePctSlider' ||
       input.id === 'earlyWeightEmphasisPctSlider' ||
       input.id === 'earlyWeightLateFloorPctSlider' ||
-      input.id === 'onPlanYearlyEmphasisPctSlider' ||
-      input.id === 'onPlanYearlyLateFloorPctSlider'
+      input.id === 'onTargetYearlyEmphasisPctSlider' ||
+      input.id === 'onTargetYearlyLateFloorPctSlider'
     ) return;
     // The Risk Level control notifies through its own module (riskPreset.js).
     if (input.id === 'presetLevel' || input.id === 'presetActive') return;
@@ -1153,8 +1153,8 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     numYearsEl.addEventListener('input', syncAllocationPreview);
     numYearsEl.addEventListener('change', syncEarlyWeightPreview);
     numYearsEl.addEventListener('input', syncEarlyWeightPreview);
-    numYearsEl.addEventListener('change', syncOnPlanYearlyPreview);
-    numYearsEl.addEventListener('input', syncOnPlanYearlyPreview);
+    numYearsEl.addEventListener('change', syncOnTargetYearlyPreview);
+    numYearsEl.addEventListener('input', syncOnTargetYearlyPreview);
   }
 
   // Redraw the base spending preview's minimum-withdrawal guide line whenever

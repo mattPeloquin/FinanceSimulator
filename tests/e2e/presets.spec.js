@@ -6,7 +6,7 @@ async function waitForInit(page) {
 
 async function waitForAutosave(page, check) {
   await page.waitForFunction((checkSrc) => {
-    const raw = localStorage.getItem('fs:sor-plan:autosave');
+    const raw = localStorage.getItem('fs:withdraw:autosave');
     if (!raw) return false;
     const { scenario } = JSON.parse(raw);
     return new Function('scenario', `return ${checkSrc}`)(scenario);

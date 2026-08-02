@@ -7,7 +7,7 @@
 
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from './scenario.js';
 import {
-  FEATURE_SOR_PLAN,
+  FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
@@ -95,7 +95,7 @@ export function migrateFeatureState(featureId, state, fromVersion) {
 }
 
 /**
- * Upgrade SOR Plan scenarios within the versions this build supports.
+ * Upgrade Withdraw scenarios within the versions this build supports.
  * Historical migrations below SCHEMA_VERSION_MIN were removed for production;
  * add forward steps here when bumping SCHEMA_VERSION (e.g. `if (schemaVersion < 14)`).
  */
@@ -188,7 +188,7 @@ export function migrateAccumulationState(state, fromVersion) {
 // Built-in features register at module load so sessions/persistence work in
 // unit tests without booting the full UI.
 registerFeatureMigrator({
-  id: FEATURE_SOR_PLAN,
+  id: FEATURE_WITHDRAW,
   stateVersion: SCHEMA_VERSION,
   migrate: migrateScenario,
 });

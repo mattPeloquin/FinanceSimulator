@@ -120,7 +120,7 @@ export function applyReportViewPrefs({ reportBand, reportThemeMode } = {}) {
   const modeEl = document.getElementById('reportThemeMode');
   if (modeEl) modeEl.value = themeOverride || 'auto';
   applyThemeOverrideClass();
-  const details = document.getElementById('details-plan-report');
+  const details = document.getElementById('details-withdraw-report');
   if (details?.open && lastRun) renderFull();
   else dirty = true;
 }
@@ -135,7 +135,7 @@ function effectiveDark() {
 /** Scope the report's CSS variables to the override via report-force-* classes
  * (see tailwind.config.js) so it can show light/dark independent of the app. */
 function applyThemeOverrideClass() {
-  const el = document.getElementById('planReport');
+  const el = document.getElementById('withdrawReport');
   if (!el) return;
   el.classList.toggle('report-force-light', themeOverride === 'light');
   el.classList.toggle('report-force-dark', themeOverride === 'dark');
@@ -209,8 +209,8 @@ function fillLegend(el, items) {
 function successHeroEls() {
   return {
     number: document.getElementById('reportHeroSuccess'),
-    onPlanNumber: document.getElementById('reportHeroOnPlan'),
-    onPlanLabel: document.getElementById('reportHeroOnPlanLabel'),
+    onTargetNumber: document.getElementById('reportHeroOnTarget'),
+    onTargetLabel: document.getElementById('reportHeroOnTargetLabel'),
     pill: document.getElementById('reportVerdictPill'),
   };
 }
@@ -326,7 +326,7 @@ export function ensureReportPainted() {
 
 /** Show/hide every Plan Snapshot "after taxes" badge from one taxActive flag. */
 function setTaxNotesVisible(taxActive) {
-  for (const id of ['planReportTaxNote', 'reportTitleTaxNote', 'reportBandTaxNote']) {
+  for (const id of ['withdrawReportTaxNote', 'reportTitleTaxNote', 'reportBandTaxNote']) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('hidden', !taxActive);
   }
@@ -337,7 +337,7 @@ export function onNewRun(run) {
   dirty = true;
   // Accordion badge should update even while the report stays closed.
   setTaxNotesVisible(!!run?.result?.withdrawalTaxActive);
-  const details = document.getElementById('details-plan-report');
+  const details = document.getElementById('details-withdraw-report');
   if (details?.open) {
     renderFull();
   }
@@ -360,7 +360,7 @@ export function initReport() {
     syncPxLabels();
     const { pLow, pHigh } = getPx();
     saveBandPrefs(pLow, pHigh);
-    const details = document.getElementById('details-plan-report');
+    const details = document.getElementById('details-withdraw-report');
     if (details?.open && lastRun) renderBandDependent();
   };
   lowEl?.addEventListener('input', onPxInput);
@@ -370,11 +370,11 @@ export function initReport() {
     themeOverride = modeEl.value === 'light' || modeEl.value === 'dark' ? modeEl.value : null;
     saveThemeOverride(themeOverride);
     applyThemeOverrideClass();
-    const details = document.getElementById('details-plan-report');
+    const details = document.getElementById('details-withdraw-report');
     if (details?.open && lastRun) renderFull();
   });
 
-  const details = document.getElementById('details-plan-report');
+  const details = document.getElementById('details-withdraw-report');
   details?.addEventListener('toggle', () => {
     if (!details.open) return;
     // Canvases size to zero while hidden; wait a frame so layout settles.

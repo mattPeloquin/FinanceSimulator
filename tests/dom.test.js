@@ -29,7 +29,7 @@ function inlinePartials(source, partials) {
 
 const root = join(__dirname, '..', 'src');
 const partials = loadPartials(join(root, 'partials'));
-loadPartials(join(root, 'features', 'sor-plan', 'partials'), partials);
+loadPartials(join(root, 'features', 'withdraw', 'partials'), partials);
 const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials);
 
 // Required non-field element ids the app wires up at runtime.
@@ -74,12 +74,12 @@ const REQUIRED_IDS = [
   'scaledHistoricalSmoothingSlider',
   'goalSeekDesiredSuccessPctSlider',
   'goalSeekRiskTolerancePctSlider',
-  'onPlanMeasure',
-  'onPlanYearlyEmphasisPct',
-  'onPlanYearlyEmphasisPctSlider',
-  'onPlanYearlyLateFloorPct',
-  'onPlanYearlyLateFloorPctSlider',
-  'onPlanYearlyPreview',
+  'onTargetMeasure',
+  'onTargetYearlyEmphasisPct',
+  'onTargetYearlyEmphasisPctSlider',
+  'onTargetYearlyLateFloorPct',
+  'onTargetYearlyLateFloorPctSlider',
+  'onTargetYearlyPreview',
   'blockSizeSlider',
   'sessionSelect',
   'newSessionButton',

@@ -43,7 +43,7 @@ test('Charts receive the expected data arrays after a run', async ({ page }) => 
   await expect(page.locator('#irrScatterThumb')).toHaveAttribute('src', /^data:image\//);
   await expect(page.locator('#averageTimelinesThumb')).toHaveAttribute('src', /^data:image\//);
   await expect(page.locator('#returnDistributionThumb')).toHaveAttribute('src', /^data:image\//);
-  await expect(page.locator('#planReportThumb')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.locator('#withdrawReportThumb')).toHaveAttribute('src', /^data:image\//);
   await expect(page.locator('#surfaceChartThumb')).toHaveAttribute('src', /^data:image\//, {
     timeout: 30_000,
   });

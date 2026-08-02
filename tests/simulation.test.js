@@ -6,7 +6,7 @@ import {
   chartPathFromRegen,
   sumWithdrawalBreakdown,
 } from '../src/core/simulation.js';
-import { formatWithdrawalBreakdownLine } from '../src/features/sor-plan/ui/charts/surface3d.js';
+import { formatWithdrawalBreakdownLine } from '../src/features/withdraw/ui/charts/surface3d.js';
 import { createRng, deriveSeed } from '../src/core/rng.js';
 import { successRate } from '../src/core/statistics.js';
 import { computeProfiles, computeStandardizedYears } from '../src/core/history.js';

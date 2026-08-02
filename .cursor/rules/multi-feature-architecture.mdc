@@ -12,24 +12,29 @@ Background jobs keep running across tab switches.
 ## Naming
 
 - **App**: "Finance Simulator"; app-wide prefix is **`fs`**.
-- **Feature ids** (kebab-case): `sor-plan` → "SOR Plan"; `sor-lab` → "SOR Lab".
+- **Feature ids** (kebab-case): `withdraw` → "Withdraw"; `sor-lab` → "SOR Lab";
+  `accumulation` → "Accumulation"; etc.
 - Folders: `src/features/<feature-id>/` for feature-owned logic, UI, and partials.
 - DOM: feature roots `id="feature-<feature-id>"`; new element ids prefixed
-  `<feature-id>-...`. Existing SOR Plan ids are renamed only opportunistically.
+  `<feature-id>-...`.
+- **Reserved:** bare `plan` / `FEATURE_PLAN` / `src/features/plan/` for a future
+  household aggregator feature. Withdraw must not own those names.
+- **`onTarget*`** in code/state means spending-target adherence scoring (UX may
+  still say “on plan”); it is not the future Plan feature.
 
 ## Shared vs feature code
 
 | Lives in | Examples |
 |---|---|
-| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/shared/`, `src/data/`) | Scenario model + defaults/presets, RNG, sensitivity summarizer (`sensitivity.js`), workers + dispatcher handlers, chart theme/setup, dialogs, header, session chrome, feature registry, session/job abstractions, historical returns (`data/historicalData.js`), history sampling (`core/history.js`), allocation glide math (`core/allocation.js`) |
-| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature charts, run orchestration, Lab variable registry, Plan history UI wrapper (`sor-plan/history.js`) |
+| Shared (`src/core`, `src/ui`, `src/state`, `src/workers`, `src/partials/`, `src/data/`) | Scenario model + defaults/presets, RNG, sensitivity summarizer (`sensitivity.js`), workers + dispatcher handlers, chart theme/setup, dialogs, header, session chrome, feature registry, session/job abstractions, historical returns (`data/historicalData.js`), history sampling (`core/history.js`), allocation glide math (`core/allocation.js`) |
+| Feature (`src/features/<id>/`) | Feature partials, input wiring, results/report UI, feature charts, run orchestration, Lab variable registry, Withdraw history UI wrapper (`withdraw/history.js`) |
 
 Truly shared code stays shared. Risk-preset *data* (`src/state/presets/`) stays
 shared with the scenario model; only the Easy Mode UI lives under the feature.
 Feature-specific code must not reach into another feature's DOM or module state —
 consume scenarios only through `scenario.js` / session-store interfaces.
 
-SOR Lab keeps sweep *results* in memory (config + Plan dependency snapshots are
+SOR Lab keeps sweep *results* in memory (config + Withdraw dependency snapshots are
 what save/share). Visualizations read stored curves through pure selectors — do
 not bake tornado-only shapes into the persisted result model.
 
@@ -47,8 +52,8 @@ fork `src/data/historicalData.js`, `src/core/history.js`, or
   [`src/state/returnsAllocationSlice.js`](../../src/state/returnsAllocationSlice.js)
   (pure slice + `distMethod` canonicalize) and
   [`src/ui/returnsAllocation/controller.js`](../../src/ui/returnsAllocation/controller.js)
-  (mountable year range / distribution / allocation panel). Plan keeps legacy
-  DOM ids through a thin wrapper in `src/features/sor-plan/history.js`;
+  (mountable year range / distribution / allocation panel). Withdraw keeps legacy
+  DOM ids through a thin wrapper in `src/features/withdraw/history.js`;
   Accumulation and Social Security mount the shared controller. Do not fork
   per-feature history/allocation panels.
 
@@ -61,6 +66,8 @@ handlers must not import `src/features/*`. Later features add a handler module +
 a `HANDLERS` map entry that calls their `src/core/<domain>.js`. Unknown types
 post `{ type: 'error', … }` and do not open a pool.
 
+Withdraw worker message types: `withdraw`, `withdrawGoalSeek`.
+
 ## Storage namespaces
 
 - localStorage:
@@ -72,12 +79,11 @@ post `{ type: 'error', … }` and do not open a pool.
 - Export envelope: `type: "fs-scenario"` plus `feature` and per-feature
   `stateVersion`; dependency snapshots carry their own `feature` +
   `stateVersion` + `state`. Optional top-level **`cashflowSeries`** (see below)
-  may ride along on export/share. Legacy `sor-scenario` *file* import remains
-  the only backward-compat path (its file field is still `schemaVersion`).
-- **Clean break**: ignore legacy `sor:*` localStorage keys and the old
-  `sor-sessions` IndexedDB database. Legacy share-link URL params are ignored
-  (open fresh, no decode, no error). Do not dual-read envelope
-  `schemaVersion` on `fs-scenario` payloads.
+  may ride along on export/share.
+- **Clean break**: ignore legacy `sor:*` / `sor-plan` localStorage keys, the old
+  `sor-sessions` IndexedDB database, and legacy `sor-scenario` file imports.
+  Legacy share-link URL params are ignored (open fresh, no decode, no error).
+  Do not dual-read envelope `schemaVersion` on `fs-scenario` payloads.
 
 ### Cashflow series (producers only today)
 
@@ -86,15 +92,15 @@ post `{ type: 'error', … }` and do not open a pool.
   `sessionName`, `startAge`, `units: 'real-dollars'`).
 - Producers: Accumulation, Social Security, Roth Convert, House Equity attach
   via session-adapter **`getCashflowSeries`** on export/share. Import accepts
-  and preserves the field but **does not** feed it into SOR Plan math or UI.
-- **Reserved for a future plan:** Plan (or a household orchestrator) consuming
-  imported series, and hard-linking one saved session per feature. Do not
-  half-build that consumer inside Plan.
+  and preserves the field but **does not** feed it into Withdraw math or UI.
+- **Reserved for a future Plan feature:** Plan (or a household orchestrator)
+  consuming imported series, and hard-linking one saved session per feature.
+  Do not half-build that consumer inside Withdraw.
 
 ### State versioning & migrations
 
 - Every session record, export/share envelope, and dependency snapshot writes
-  **`stateVersion`** for that feature (Plan uses `SCHEMA_VERSION`; Lab uses
+  **`stateVersion`** for that feature (Withdraw uses `SCHEMA_VERSION`; Lab uses
   `LAB_STATE_VERSION`).
 - All migrate implementations and the dispatch registry live in
   [`src/state/migrations.js`](../../src/state/migrations.js)
@@ -117,7 +123,8 @@ from the registry. Active tab persists in `fs:app:prefs`.
 
 - `registerFeature({ …, placement })` — omit or `'primary'` for top-level tabs;
   `'more'` puts the feature under the More control (button + listbox).
-- **Primary today:** `sor-plan`, `accumulation`. **More today:** `sor-lab`,
+- **Primary today:** `accumulation`, `withdraw` (tab order; default active is
+  still `withdraw`). **More today:** `sor-lab`,
   `ss-timing`, `roth-convert`, `house-equity` (plus future features). More is always rendered, even if empty.
 - When a More feature is active, the More control’s label becomes that feature’s
   title and the control is `aria-selected`. Escape closes the menu and returns

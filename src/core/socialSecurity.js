@@ -1,7 +1,7 @@
 // Social Security timing — deterministic educational model.
 //
 // Units: REAL / today's dollars everywhere. Benefits are constant in
-// purchasing power (no COLA inflation modeling); this matches SOR Plan.
+// purchasing power (no COLA inflation modeling); this matches Withdraw.
 //
 // This is NOT an SSA manual. Rules are simplified for exploration:
 //   - Own retired-worker benefit with standard early / delayed factors vs FRA

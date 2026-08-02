@@ -14,7 +14,7 @@ import { readUiPrefsSnapshot } from '../state/uiPrefs.js';
 import { applyUiPrefs } from './applyUiPrefs.js';
 import { openDialog, showAlert } from './dialogs.js';
 import { getActiveFeature, setActiveFeature } from '../state/features.js';
-import { FEATURE_SOR_PLAN } from '../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../state/storageKeys.js';
 
 /** @type {Map<string, { name: string, description: string, lastSelect: string }>} */
 const sessionUiByFeature = new Map();
@@ -58,7 +58,7 @@ export function registerSessionAdapter(featureId, adapter) {
 }
 
 export function getActiveFeatureId() {
-  return getActiveFeature()?.id || FEATURE_SOR_PLAN;
+  return getActiveFeature()?.id || FEATURE_WITHDRAW;
 }
 
 export function getSessionMeta() {
@@ -543,7 +543,7 @@ export async function applyImportedEnvelope(loaded, { statusMessage } = {}) {
     setActiveFeature(loaded.feature);
     await restoreSessionUi(loaded.feature);
   }
-  const feature = loaded.feature || FEATURE_SOR_PLAN;
+  const feature = loaded.feature || FEATURE_WITHDRAW;
   const adapter = sessionAdapters.get(feature);
   if (adapter?.applyImported) {
     await adapter.applyImported(loaded, { statusMessage, renames });

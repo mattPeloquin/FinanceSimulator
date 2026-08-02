@@ -4,7 +4,7 @@ import { HANDLERS, dispatchWorkerMessage } from '../src/workers/dispatch.js';
 describe('worker HANDLERS registry', () => {
   it('resolves the Plan/Lab infrastructure message types', () => {
     expect(Object.keys(HANDLERS).sort()).toEqual(
-      ['accumulation', 'chunk', 'connect', 'goalSeek', 'houseEquity', 'rothConvert', 'run', 'sensitivity', 'ssTiming'].sort(),
+      ['accumulation', 'chunk', 'connect', 'houseEquity', 'rothConvert', 'sensitivity', 'ssTiming', 'withdraw', 'withdrawGoalSeek'].sort(),
     );
     for (const type of Object.keys(HANDLERS)) {
       expect(typeof HANDLERS[type]).toBe('function');
@@ -43,18 +43,18 @@ describe('dispatchWorkerMessage', () => {
     const createPool = vi.fn(() => pool);
 
     // Stub the run handler so we do not need a full Monte Carlo.
-    const original = HANDLERS.run;
-    HANDLERS.run = async (ctx) => {
+    const original = HANDLERS.withdraw;
+    HANDLERS.withdraw = async (ctx) => {
       ctx.post({ type: 'done', result: { ok: true } });
     };
 
     try {
       await dispatchWorkerMessage(
-        { type: 'run', params: {}, numCores: 2, subWorkerPorts: [] },
+        { type: 'withdraw', params: {}, numCores: 2, subWorkerPorts: [] },
         { post, createPool },
       );
     } finally {
-      HANDLERS.run = original;
+      HANDLERS.withdraw = original;
     }
 
     expect(createPool).toHaveBeenCalledWith([], 2);
@@ -67,18 +67,18 @@ describe('dispatchWorkerMessage', () => {
     const terminate = vi.fn();
     const createPool = vi.fn(() => ({ terminate }));
 
-    const original = HANDLERS.goalSeek;
-    HANDLERS.goalSeek = async () => {
+    const original = HANDLERS.withdrawGoalSeek;
+    HANDLERS.withdrawGoalSeek = async () => {
       throw new Error('boom');
     };
 
     try {
       await dispatchWorkerMessage(
-        { type: 'goalSeek', params: {}, goalSeekConfig: {} },
+        { type: 'withdrawGoalSeek', params: {}, goalSeekConfig: {} },
         { post, createPool },
       );
     } finally {
-      HANDLERS.goalSeek = original;
+      HANDLERS.withdrawGoalSeek = original;
     }
 
     expect(post).toHaveBeenCalledWith({ type: 'error', message: 'boom' });

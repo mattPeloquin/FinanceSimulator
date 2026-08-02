@@ -149,7 +149,7 @@ describe('buildRunResult withdrawalHeatmap', () => {
   });
 
   it('exposes the deterministic planned schedule as the deviation baseline', () => {
-    expect(Array.from(src.planByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
+    expect(Array.from(src.targetByYear)).toEqual(plannedYearlySchedule(p.portfolio, p.numYears));
   });
 
   it('exposes a flat classic 4% of start schedule for the vs 4% encoding', () => {

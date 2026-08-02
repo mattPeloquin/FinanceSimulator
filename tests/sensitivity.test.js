@@ -156,7 +156,7 @@ describe('sensitivity core', () => {
           isSentinel: true,
         },
       ],
-      baselineRef: { feature: 'sor-plan', name: 'Demo' },
+      baselineRef: { feature: 'withdraw', name: 'Demo' },
       meta: { seed: 1, pathsPerPoint: 200, sweepPoints: 3 },
     });
     expect(result.variables).toHaveLength(1);
@@ -252,7 +252,7 @@ describe('Lab sweep construction', () => {
       seed: 12345,
       sweepPoints: 3,
       pathsPerPoint: 50,
-      baselineRef: { feature: 'sor-plan', name: 'Demo' },
+      baselineRef: { feature: 'withdraw', name: 'Demo' },
       envelopeOverrides: {
         // Disable most variables for a fast unit build — keep a couple.
         ...Object.fromEntries(
@@ -337,7 +337,7 @@ describe('Lab selectors', () => {
           isSentinel: true,
         },
       ],
-      baselineRef: { feature: 'sor-plan', name: 'Demo' },
+      baselineRef: { feature: 'withdraw', name: 'Demo' },
       meta: { seed: 1, pathsPerPoint: 100, sweepPoints: 3 },
     });
   }

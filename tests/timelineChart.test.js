@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { niceBalanceLogFloor, timelinePointDetails } from '../src/features/sor-plan/ui/charts/timeline.js';
-import { formatWithdrawnLine } from '../src/features/sor-plan/ui/charts/withdrawalTooltipFormat.js';
+import { niceBalanceLogFloor, timelinePointDetails } from '../src/features/withdraw/ui/charts/timeline.js';
+import { formatWithdrawnLine } from '../src/features/withdraw/ui/charts/withdrawalTooltipFormat.js';
 
 describe('niceBalanceLogFloor', () => {
   it('returns the hard minimum for missing or tiny starts', () => {

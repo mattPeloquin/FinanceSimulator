@@ -236,7 +236,7 @@ export function weightPreviewSeries(horizonYears, knobs = {}) {
  * approaches 100 — so a big gap concentrates weight nearer the high end.
  * Field name lateFloorPct is kept for save compatibility.
  */
-export function onPlanYearlyRawCurve(
+export function onTargetYearlyRawCurve(
   horizonYears,
   { earlyEmphasisPct = 100, lateFloorPct = 100 } = {},
 ) {
@@ -272,9 +272,9 @@ export function onPlanYearlyRawCurve(
 }
 
 /** Mean-rescaled on-plan yearly weights (average weight = 1). */
-export function onPlanYearWeights(horizonYears, knobs = {}) {
+export function onTargetYearWeights(horizonYears, knobs = {}) {
   const horizon = Math.max(0, Math.floor(horizonYears) || 0);
-  const weights = onPlanYearlyRawCurve(horizon, knobs);
+  const weights = onTargetYearlyRawCurve(horizon, knobs);
   if (horizon === 0) return weights;
   let sum = 0;
   for (let t = 0; t < horizon; t++) sum += weights[t];
@@ -286,9 +286,9 @@ export function onPlanYearWeights(horizonYears, knobs = {}) {
 }
 
 /** Preview series for the Advanced on-plan yearly impact chart. */
-export function onPlanYearlyPreviewSeries(horizonYears, knobs = {}) {
-  const weights = onPlanYearWeights(horizonYears, knobs);
-  const raw = onPlanYearlyRawCurve(horizonYears, knobs);
+export function onTargetYearlyPreviewSeries(horizonYears, knobs = {}) {
+  const weights = onTargetYearWeights(horizonYears, knobs);
+  const raw = onTargetYearlyRawCurve(horizonYears, knobs);
   const horizon = weights.length;
   const year1 = horizon > 0 ? weights[0] : 0;
   const yearLast = horizon > 0 ? weights[horizon - 1] : 0;
@@ -500,14 +500,14 @@ export function goalSuccessRate(
   if (n === 0) return 0;
   const fixedHorizon = typeof horizonYears === 'number';
   const fixedBenchmark = plannedBenchmark == null || typeof plannedBenchmark === 'number';
-  const checkOnPlan = actualWithdrawn != null && plannedBenchmark != null
+  const checkOnTarget = actualWithdrawn != null && plannedBenchmark != null
     && (fixedBenchmark ? plannedBenchmark > 0 : true);
   let met = 0;
   for (let i = 0; i < n; i++) {
     const h = fixedHorizon ? horizonYears : horizonYears[i];
     if (depletionYear[i] <= h) continue;
     if (finalBalance[i] < targetEndingBalance) continue;
-    if (checkOnPlan) {
+    if (checkOnTarget) {
       const benchmark = fixedBenchmark ? plannedBenchmark : plannedBenchmark[i];
       // Non-positive benchmark = no on-plan requirement for this run (same as scalar 0).
       if (benchmark > 0) {
@@ -535,7 +535,7 @@ export const ON_PLAN_MAX_SHORTFALL = 0.35;
  *   yearly   → 1 (only weighted year-hit rate)
  *   blend    → 1 at RT 0%, 0 at RT 35% (linear in between)
  */
-export function onPlanBlendAlpha(measure, shortfallTolerance) {
+export function onTargetBlendAlpha(measure, shortfallTolerance) {
   const mode = measure || 'blend';
   if (mode === 'lifetime') return 0;
   if (mode === 'yearly') return 1;
@@ -548,7 +548,7 @@ export function onPlanBlendAlpha(measure, shortfallTolerance) {
  * shortfall band. Both sides are unitless ratios so surplus lifetime can
  * offset some missed years (and vice versa) when α is in the middle.
  */
-export function onPlanScore(lifetimeRatio, yearHitRate, alpha) {
+export function onTargetScore(lifetimeRatio, yearHitRate, alpha) {
   const a = Math.min(Math.max(Number(alpha) || 0, 0), 1);
   const life = Number.isFinite(lifetimeRatio) ? lifetimeRatio : 0;
   // No eligible plan years → treat yearly side as fully on plan.
@@ -566,17 +566,17 @@ export function onPlanScore(lifetimeRatio, yearHitRate, alpha) {
  */
 export function weightedYearHitRateFromSeries(
   yearlyActuals,
-  planByYear,
+  targetByYear,
   tolerance = 0.05,
   weighting = null,
 ) {
   const horizon = Math.min(
     yearlyActuals?.length ?? 0,
-    planByYear?.length ?? 0,
+    targetByYear?.length ?? 0,
   );
   if (horizon <= 0) return 1;
 
-  const weights = onPlanYearWeights(horizon, {
+  const weights = onTargetYearWeights(horizon, {
     earlyEmphasisPct: weighting?.earlyEmphasisPct ?? weighting?.yearlyEmphasisPct ?? 100,
     lateFloorPct: weighting?.lateFloorPct ?? weighting?.yearlyLateFloorPct ?? 100,
   });
@@ -585,7 +585,7 @@ export function weightedYearHitRateFromSeries(
   let hitWeight = 0;
   const tol = Math.min(Math.max(Number(tolerance) || 0, 0), ON_PLAN_MAX_SHORTFALL);
   for (let t = 0; t < horizon; t++) {
-    const plan = planByYear[t];
+    const plan = targetByYear[t];
     if (!(plan > 0)) continue;
     const actual = yearlyActuals[t];
     if (!Number.isFinite(actual)) continue;
@@ -602,24 +602,24 @@ export function weightedYearHitRate(
   maxYears,
   simIndex,
   horizon,
-  planByYear,
+  targetByYear,
   tolerance = 0.05,
   weighting = null,
 ) {
   if (!allYearsMatrix || maxYears <= 0 || horizon <= 0) return 1;
-  const h = Math.min(horizon, maxYears, planByYear?.length ?? 0);
+  const h = Math.min(horizon, maxYears, targetByYear?.length ?? 0);
   if (h <= 0) return 1;
   const base = simIndex * maxYears;
   const series = new Float64Array(h);
   for (let t = 0; t < h; t++) series[t] = allYearsMatrix[base + t];
-  return weightedYearHitRateFromSeries(series, planByYear, tolerance, weighting);
+  return weightedYearHitRateFromSeries(series, targetByYear, tolerance, weighting);
 }
 
 /**
  * One run clears on-plan when the blend score is at least (1 − tolerance).
  * With measure "lifetime" this matches meetsWithdrawalTarget exactly.
  */
-export function meetsOnPlanBlend(
+export function meetsOnTargetBlend(
   actualWithdrawn,
   plannedBenchmark,
   tolerance = 0.05,
@@ -630,34 +630,34 @@ export function meetsOnPlanBlend(
 ) {
   if (!(plannedBenchmark > 0)) return true;
   const lifetimeRatio = actualWithdrawn / plannedBenchmark;
-  const alpha = onPlanBlendAlpha(measure, tolerance);
-  return onPlanScore(lifetimeRatio, yearHitRate, alpha) >= (1 - tolerance);
+  const alpha = onTargetBlendAlpha(measure, tolerance);
+  return onTargetScore(lifetimeRatio, yearHitRate, alpha) >= (1 - tolerance);
 }
 
 /**
  * Fraction of simulations on plan.
- * Optional `onPlanContext` enables blend/yearly scoring from the net yearly
+ * Optional `onTargetContext` enables blend/yearly scoring from the net yearly
  * matrix; without it (or measure "lifetime") this is the legacy lifetime check.
  *
- * onPlanContext shape:
+ * onTargetContext shape:
  *   measure, yearlyEmphasisPct, yearlyLateFloorPct,
  *   allYearsNetSpend, maxYears, horizonYears (array|number),
- *   planByYearForHorizon(h) → per-year plan amounts
+ *   targetByYearForHorizon(h) → per-year plan amounts
  */
 export function withdrawalTargetSuccessRate(
   actualWithdrawn,
   plannedBenchmark,
   tolerance = 0.05,
-  onPlanContext = null,
+  onTargetContext = null,
 ) {
   const n = actualWithdrawn.length;
   if (n === 0) return null;
 
-  const measure = onPlanContext?.measure ?? 'lifetime';
-  const useBlend = onPlanContext
+  const measure = onTargetContext?.measure ?? 'lifetime';
+  const useBlend = onTargetContext
     && measure !== 'lifetime'
-    && onPlanContext.allYearsNetSpend
-    && typeof onPlanContext.planByYearForHorizon === 'function';
+    && onTargetContext.allYearsNetSpend
+    && typeof onTargetContext.targetByYearForHorizon === 'function';
 
   if (!useBlend) {
     if (typeof plannedBenchmark === 'number') {
@@ -681,15 +681,15 @@ export function withdrawalTargetSuccessRate(
   }
 
   const weighting = {
-    earlyEmphasisPct: onPlanContext.yearlyEmphasisPct ?? 100,
-    lateFloorPct: onPlanContext.yearlyLateFloorPct ?? 100,
+    earlyEmphasisPct: onTargetContext.yearlyEmphasisPct ?? 100,
+    lateFloorPct: onTargetContext.yearlyLateFloorPct ?? 100,
   };
-  const maxYears = onPlanContext.maxYears;
-  const horizonYears = onPlanContext.horizonYears;
+  const maxYears = onTargetContext.maxYears;
+  const horizonYears = onTargetContext.horizonYears;
   const fixedHorizon = typeof horizonYears === 'number';
   const planCache = new Map();
   const planFor = (h) => {
-    if (!planCache.has(h)) planCache.set(h, onPlanContext.planByYearForHorizon(h));
+    if (!planCache.has(h)) planCache.set(h, onTargetContext.targetByYearForHorizon(h));
     return planCache.get(h);
   };
 
@@ -699,7 +699,7 @@ export function withdrawalTargetSuccessRate(
     for (let i = 0; i < n; i++) {
       const h = fixedHorizon ? horizonYears : horizonYears[i];
       const yearHitRate = weightedYearHitRate(
-        onPlanContext.allYearsNetSpend,
+        onTargetContext.allYearsNetSpend,
         maxYears,
         i,
         h,
@@ -707,7 +707,7 @@ export function withdrawalTargetSuccessRate(
         tolerance,
         weighting,
       );
-      if (meetsOnPlanBlend(actualWithdrawn[i], plannedBenchmark, tolerance, { measure, yearHitRate })) {
+      if (meetsOnTargetBlend(actualWithdrawn[i], plannedBenchmark, tolerance, { measure, yearHitRate })) {
         metTarget++;
       }
     }
@@ -722,7 +722,7 @@ export function withdrawalTargetSuccessRate(
     eligible++;
     const h = fixedHorizon ? horizonYears : horizonYears[i];
     const yearHitRate = weightedYearHitRate(
-      onPlanContext.allYearsNetSpend,
+      onTargetContext.allYearsNetSpend,
       maxYears,
       i,
       h,
@@ -730,7 +730,7 @@ export function withdrawalTargetSuccessRate(
       tolerance,
       weighting,
     );
-    if (meetsOnPlanBlend(actualWithdrawn[i], benchmark, tolerance, { measure, yearHitRate })) {
+    if (meetsOnTargetBlend(actualWithdrawn[i], benchmark, tolerance, { measure, yearHitRate })) {
       metTarget++;
     }
   }
@@ -742,13 +742,13 @@ export function spendingTailRate(
   actualWithdrawn,
   plannedBenchmark,
   shortfallTolerance = 0,
-  onPlanContext = null,
+  onTargetContext = null,
 ) {
   return withdrawalTargetSuccessRate(
     actualWithdrawn,
     plannedBenchmark,
     shortfallTolerance,
-    onPlanContext,
+    onTargetContext,
   );
 }
 

@@ -1,13 +1,13 @@
-// Feature chrome prefs for SOR Plan (report band, accordions, chart view).
-// Stored under fs:sor-plan:ui. App-wide theme / active tab live in appPrefs.js.
+// Feature chrome prefs for Withdraw (report band, accordions, chart view).
+// Stored under fs:withdraw:ui. App-wide theme / active tab live in appPrefs.js.
 //
 // Snapshots attached to sessions/export/share still include `theme` so a shared
 // link can paint the same look; applyUiPrefs routes theme into app prefs.
 
 import { loadAppPrefs } from './appPrefs.js';
-import { SOR_PLAN_UI_KEY } from './storageKeys.js';
+import { WITHDRAW_UI_KEY } from './storageKeys.js';
 
-export const UI_STORAGE_KEY = SOR_PLAN_UI_KEY;
+export const UI_STORAGE_KEY = WITHDRAW_UI_KEY;
 
 export const DEFAULT_UI_PREFS = Object.freeze({
   theme: null, // carried in snapshots / envelopes only; not stored here

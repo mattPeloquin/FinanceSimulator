@@ -12,12 +12,12 @@ import {
   spendingTailRate,
   meetsWithdrawalTarget,
   withdrawalTargetSuccessRate,
-  onPlanBlendAlpha,
-  onPlanScore,
-  meetsOnPlanBlend,
+  onTargetBlendAlpha,
+  onTargetScore,
+  meetsOnTargetBlend,
   weightedYearHitRateFromSeries,
-  onPlanYearlyRawCurve,
-  onPlanYearWeights,
+  onTargetYearlyRawCurve,
+  onTargetYearWeights,
   mean,
   median,
   stdDev,
@@ -480,16 +480,16 @@ describe('withdrawalTargetSuccessRate', () => {
   });
 });
 
-describe('onPlanYearlyRawCurve (symmetrical end-weights)', () => {
+describe('onTargetYearlyRawCurve (symmetrical end-weights)', () => {
   it('is flat when early and late emphasis are equal', () => {
-    const raw = onPlanYearlyRawCurve(10, { earlyEmphasisPct: 100, lateFloorPct: 100 });
+    const raw = onTargetYearlyRawCurve(10, { earlyEmphasisPct: 100, lateFloorPct: 100 });
     for (let i = 0; i < raw.length; i++) expect(raw[i]).toBeCloseTo(1, 9);
   });
 
   it('front-loads when early > late and back-loads when late > early', () => {
-    const front = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 20 });
+    const front = onTargetYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 20 });
     expect(front[0]).toBeGreaterThan(front[4]);
-    const back = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 20, lateFloorPct: 100 });
+    const back = onTargetYearlyRawCurve(5, { earlyEmphasisPct: 20, lateFloorPct: 100 });
     expect(back[4]).toBeGreaterThan(back[0]);
     // Symmetry: reversing ends mirrors the curve.
     for (let i = 0; i < 5; i++) {
@@ -499,8 +499,8 @@ describe('onPlanYearlyRawCurve (symmetrical end-weights)', () => {
 
   it('bends more toward the high end as Early and Late diverge', () => {
     // Midpoint of a linear 100→20 fade would be 60; a bent curve sits closer to 20.
-    const mild = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 60, lateFloorPct: 40 });
-    const strong = onPlanYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 0 });
+    const mild = onTargetYearlyRawCurve(5, { earlyEmphasisPct: 60, lateFloorPct: 40 });
+    const strong = onTargetYearlyRawCurve(5, { earlyEmphasisPct: 100, lateFloorPct: 0 });
     const mildMid = mild[2];
     const strongMid = strong[2];
     const mildLinearMid = (0.6 + 0.4) / 2;
@@ -511,7 +511,7 @@ describe('onPlanYearlyRawCurve (symmetrical end-weights)', () => {
   });
 
   it('mean-rescales so average weight is 1', () => {
-    const w = onPlanYearWeights(8, { earlyEmphasisPct: 100, lateFloorPct: 25 });
+    const w = onTargetYearWeights(8, { earlyEmphasisPct: 100, lateFloorPct: 25 });
     const mean = Array.from(w).reduce((a, b) => a + b, 0) / w.length;
     expect(mean).toBeCloseTo(1, 9);
   });
@@ -519,35 +519,35 @@ describe('onPlanYearlyRawCurve (symmetrical end-weights)', () => {
 
 describe('on-plan blend scoring', () => {
   it('maps blend alpha from Plan RT endpoints', () => {
-    expect(onPlanBlendAlpha('lifetime', 0.1)).toBe(0);
-    expect(onPlanBlendAlpha('yearly', 0.1)).toBe(1);
-    expect(onPlanBlendAlpha('blend', 0)).toBe(1);
-    expect(onPlanBlendAlpha('blend', 0.35)).toBe(0);
-    expect(onPlanBlendAlpha('blend', 0.175)).toBeCloseTo(0.5, 6);
+    expect(onTargetBlendAlpha('lifetime', 0.1)).toBe(0);
+    expect(onTargetBlendAlpha('yearly', 0.1)).toBe(1);
+    expect(onTargetBlendAlpha('blend', 0)).toBe(1);
+    expect(onTargetBlendAlpha('blend', 0.35)).toBe(0);
+    expect(onTargetBlendAlpha('blend', 0.175)).toBeCloseTo(0.5, 6);
   });
 
   it('lifetime mode matches meetsWithdrawalTarget', () => {
-    expect(meetsOnPlanBlend(800, 1000, 0.2, { measure: 'lifetime', yearHitRate: 0 })).toBe(true);
-    expect(meetsOnPlanBlend(799, 1000, 0.2, { measure: 'lifetime', yearHitRate: 1 })).toBe(false);
+    expect(meetsOnTargetBlend(800, 1000, 0.2, { measure: 'lifetime', yearHitRate: 0 })).toBe(true);
+    expect(meetsOnTargetBlend(799, 1000, 0.2, { measure: 'lifetime', yearHitRate: 1 })).toBe(false);
   });
 
   it('blend at RT 0% equals yearly; at RT 35% equals lifetime', () => {
     // lifetimeRatio 0.9, yearHitRate 0 → fail lifetime at RT 0, pass yearly? year=0 fails yearly
-    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'blend', yearHitRate: 0 })).toBe(false);
-    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 0 })).toBe(false);
-    expect(meetsOnPlanBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 1 })).toBe(true);
+    expect(meetsOnTargetBlend(900, 1000, 0, { measure: 'blend', yearHitRate: 0 })).toBe(false);
+    expect(meetsOnTargetBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 0 })).toBe(false);
+    expect(meetsOnTargetBlend(900, 1000, 0, { measure: 'yearly', yearHitRate: 1 })).toBe(true);
     // At max RT, α=0 so only lifetime matters (0.9 >= 0.65)
-    expect(meetsOnPlanBlend(900, 1000, 0.35, { measure: 'blend', yearHitRate: 0 })).toBe(true);
-    expect(meetsOnPlanBlend(600, 1000, 0.35, { measure: 'blend', yearHitRate: 1 })).toBe(false);
+    expect(meetsOnTargetBlend(900, 1000, 0.35, { measure: 'blend', yearHitRate: 0 })).toBe(true);
+    expect(meetsOnTargetBlend(600, 1000, 0.35, { measure: 'blend', yearHitRate: 1 })).toBe(false);
   });
 
   it('surplus lifetime can offset some missed years when alpha is mid', () => {
     // r=0.175 → α=0.5, need score >= 0.825
     // lifetimeRatio=1.2, yearHitRate=0.5 → score = 0.5*0.5 + 0.5*1.2 = 0.85
-    expect(onPlanScore(1.2, 0.5, 0.5)).toBeCloseTo(0.85, 6);
-    expect(meetsOnPlanBlend(1200, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(true);
+    expect(onTargetScore(1.2, 0.5, 0.5)).toBeCloseTo(0.85, 6);
+    expect(meetsOnTargetBlend(1200, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(true);
     // lifetimeRatio=1.0, yearHitRate=0.5 → score = 0.75 < 0.825
-    expect(meetsOnPlanBlend(1000, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(false);
+    expect(meetsOnTargetBlend(1000, 1000, 0.175, { measure: 'blend', yearHitRate: 0.5 })).toBe(false);
   });
 
   it('weights year hits with front-loaded or back-loaded curves', () => {
@@ -585,7 +585,7 @@ describe('on-plan blend scoring', () => {
       allYearsNetSpend,
       maxYears,
       horizonYears: 2,
-      planByYearForHorizon: () => [100, 100],
+      targetByYearForHorizon: () => [100, 100],
     };
     // RT 0 → need yearHitRate >= 1; only sim0 passes
     expect(withdrawalTargetSuccessRate(actualWithdrawn, 200, 0, context)).toBe(0.5);

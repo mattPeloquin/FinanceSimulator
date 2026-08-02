@@ -3,13 +3,13 @@
 // storage without a circular dependency through apply.
 //
 // Theme is app-wide (fs:app:prefs); report/accordion/chart prefs are
-// feature chrome (fs:sor-plan:ui).
+// feature chrome (fs:withdraw:ui).
 
 import { replaceUiPrefs, normalizeUiPrefs } from '../state/uiPrefs.js';
 import { saveAppPrefs } from '../state/appPrefs.js';
 import { setTheme } from './theme.js';
-import { applyReportViewPrefs } from '../features/sor-plan/ui/report.js';
-import { applyBalanceLogScalePref } from '../features/sor-plan/ui/charts/timeline.js';
+import { applyReportViewPrefs } from '../features/withdraw/ui/report.js';
+import { applyBalanceLogScalePref } from '../features/withdraw/ui/charts/timeline.js';
 
 /** Persist prefs and push them into the current page controls. */
 export function applyUiPrefs(raw) {

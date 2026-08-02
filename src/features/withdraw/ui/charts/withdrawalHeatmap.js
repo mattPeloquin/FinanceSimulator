@@ -500,9 +500,9 @@ function anchorInfo() {
   const anchors = windowAnchors();
   let anchor;
   if (state.encoding === 'plan') {
-    anchor = hm.planByYear;
+    anchor = hm.targetByYear;
   } else if (state.encoding === 'classic') {
-    // Flat start × 4% schedule packaged next to planByYear.
+    // Flat start × 4% schedule packaged next to targetByYear.
     anchor = hm.classicByYear;
   } else {
     anchor = anchors.median;
@@ -1025,7 +1025,7 @@ function showTooltip(ev, cell) {
     pctLabel: percentileLabelForRank(hm.colCenterRank[cell.col], hm.numSimulations),
     simIndex: displayedSimIndex(cell.col),
     value: cellValue(cell.col, cell.year),
-    plan: hm.planByYear[cell.year],
+    plan: hm.targetByYear[cell.year],
     classic: hm.classicByYear?.[cell.year] ?? 0,
     median: anchors.median[cell.year],
     // While showing individual runs each cell is exactly one real run, so the

@@ -11,7 +11,7 @@ import {
 } from '../../state/scenario.js';
 import * as jobs from '../../state/jobs.js';
 import { getActiveFeature } from '../../state/features.js';
-import { FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import { showAlert } from '../../ui/dialogs.js';
 import { refreshDynamicAdjustmentPreviews } from './ui/inputs.js';
 import { renderResults } from './ui/results.js';
@@ -24,8 +24,8 @@ import {
 } from './history.js';
 import { scheduleAutosave } from './session.js';
 
-/** Stashed SOR Plan results when a job finishes while another tab is active. */
-let pendingSorPlanResults = null;
+/** Stashed Withdraw results when a job finishes while another tab is active. */
+let pendingWithdrawResults = null;
 
 let currentNumCores = 1;
 
@@ -71,7 +71,7 @@ export function resolveRunNumCores(scenario) {
 // from a previous HMR generation cannot outlive the page logic that owns them.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    jobs.cancelAll(FEATURE_SOR_PLAN);
+    jobs.cancelAll(FEATURE_WITHDRAW);
   });
 }
 
@@ -93,7 +93,7 @@ export function spawnSubWorkerPorts(numCores, bucket) {
   return masterPorts;
 }
 
-export function paintSorPlanResults(payload) {
+export function paintWithdrawResults(payload) {
   document.getElementById('resultsSection').classList.remove('hidden');
 
   let reportScenario = payload.reportScenario;
@@ -117,27 +117,27 @@ export function paintSorPlanResults(payload) {
   });
 }
 
-/** Deliver results now, or stash until SOR Plan is visible (Chart.js sizing). */
-export function deliverSorPlanResults(payload) {
-  if (getActiveFeature()?.id === FEATURE_SOR_PLAN) {
-    pendingSorPlanResults = null;
-    paintSorPlanResults(payload);
+/** Deliver results now, or stash until Withdraw is visible (Chart.js sizing). */
+export function deliverWithdrawResults(payload) {
+  if (getActiveFeature()?.id === FEATURE_WITHDRAW) {
+    pendingWithdrawResults = null;
+    paintWithdrawResults(payload);
   } else {
-    pendingSorPlanResults = payload;
+    pendingWithdrawResults = payload;
   }
 }
 
-export function flushPendingSorPlanResults() {
-  if (!pendingSorPlanResults) return;
-  const payload = pendingSorPlanResults;
-  pendingSorPlanResults = null;
+export function flushPendingWithdrawResults() {
+  if (!pendingWithdrawResults) return;
+  const payload = pendingWithdrawResults;
+  pendingWithdrawResults = null;
   setLoading(false);
-  paintSorPlanResults(payload);
+  paintWithdrawResults(payload);
 }
 
 function finishWithError(prefix, err) {
   setLoading(false);
-  pendingSorPlanResults = null;
+  pendingWithdrawResults = null;
   showAlert(`${prefix}: ${err?.message || err}`);
 }
 
@@ -165,12 +165,12 @@ export function runSimulation() {
   if (!params) return;
   currentNumCores = resolveRunNumCores(scenario);
 
-  pendingSorPlanResults = null;
+  pendingWithdrawResults = null;
   setLoading(true);
 
   try {
     const subWorkers = [];
-    const job = jobs.start(FEATURE_SOR_PLAN, {
+    const job = jobs.start(FEATURE_WITHDRAW, {
       createWorker: () => new SimulationWorker(),
       onCleanup: () => {
         for (const w of subWorkers) w.terminate();
@@ -183,7 +183,7 @@ export function runSimulation() {
         setLoading(false);
         try {
           const fourPercentComparison = msg.fourPercentComparison ?? null;
-          deliverSorPlanResults({
+          deliverWithdrawResults({
             kind: 'sim',
             result: msg.result,
             params,
@@ -204,7 +204,7 @@ export function runSimulation() {
 
     const subWorkerPorts = spawnSubWorkerPorts(currentNumCores, subWorkers);
     job.post(
-      { type: 'run', params, numCores: currentNumCores, subWorkerPorts },
+      { type: 'withdraw', params, numCores: currentNumCores, subWorkerPorts },
       subWorkerPorts,
     );
   } catch (err) {
@@ -273,12 +273,12 @@ export function runGoalSeekSearch() {
   const goalSeekConfig = buildGoalSeekConfig(scenario);
   currentNumCores = resolveRunNumCores(scenario);
 
-  pendingSorPlanResults = null;
+  pendingWithdrawResults = null;
   setLoading(true);
 
   try {
     const subWorkers = [];
-    const job = jobs.start(FEATURE_SOR_PLAN, {
+    const job = jobs.start(FEATURE_WITHDRAW, {
       createWorker: () => new SimulationWorker(),
       onCleanup: () => {
         for (const w of subWorkers) w.terminate();
@@ -296,7 +296,7 @@ export function runGoalSeekSearch() {
             : summary?.reason || 'Find Best Plan could not find a plan meeting your target.';
           const finalParams = msg.finalParams ?? params;
           const fourPercentComparison = msg.fourPercentComparison ?? null;
-          deliverSorPlanResults({
+          deliverWithdrawResults({
             kind: 'goalSeek',
             goalSeekSummary: summary,
             scenario,
@@ -319,7 +319,7 @@ export function runGoalSeekSearch() {
 
     const subWorkerPorts = spawnSubWorkerPorts(currentNumCores, subWorkers);
     job.post(
-      { type: 'goalSeek', params, goalSeekConfig, numCores: currentNumCores, subWorkerPorts },
+      { type: 'withdrawGoalSeek', params, goalSeekConfig, numCores: currentNumCores, subWorkerPorts },
       subWorkerPorts,
     );
   } catch (err) {
@@ -339,7 +339,7 @@ export function handleRunClick() {
 
 // Stop an in-flight simulation and return the UI to its idle state.
 export function cancelSimulation() {
-  jobs.cancelAll(FEATURE_SOR_PLAN);
-  pendingSorPlanResults = null;
+  jobs.cancelAll(FEATURE_WITHDRAW);
+  pendingWithdrawResults = null;
   setLoading(false);
 }

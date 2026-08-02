@@ -56,9 +56,9 @@ describe('migrateScenario', () => {
       startBalance: 4000,
       presetActive: true,
       presetLevel: 4,
-      onPlanMeasure: 'blend',
-      onPlanYearlyEmphasisPct: 100,
-      onPlanYearlyLateFloorPct: 100,
+      onTargetMeasure: 'blend',
+      onTargetYearlyEmphasisPct: 100,
+      onTargetYearlyLateFloorPct: 100,
     };
     const migrated = migrateScenario(s, SCHEMA_VERSION);
     expect(migrated).toEqual(s);
@@ -347,9 +347,9 @@ describe('buildSimParams', () => {
     const s = defaultScenario();
     // defaultScenario overlays the Balanced risk preset (15% plan risk tolerance).
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.15, 6);
-    s.planRiskTolerancePct = 20;
+    s.withdrawRiskTolerancePct = 20;
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.2, 6);
-    s.planRiskTolerancePct = 150;
+    s.withdrawRiskTolerancePct = 150;
     expect(buildSimParams(s, { years: [] }).shortfallTolerance).toBeCloseTo(0.35, 6);
   });
 });
@@ -359,7 +359,7 @@ describe('buildGoalSeekConfig', () => {
     const s = defaultScenario();
     s.goalSeekTargetEndingBalance = 500;
     s.goalSeekDesiredSuccessPct = 85;
-    s.planRiskTolerancePct = 10;
+    s.withdrawRiskTolerancePct = 10;
     s.goalSeekRiskTolerancePct = 20;
     s.goalSeekIncludeSpendingOverTime = true;
     // Defaults (Balanced preset) turn every lever on; pin the rest off so the
@@ -373,7 +373,7 @@ describe('buildGoalSeekConfig', () => {
     // On-plan grading uses Plan Risk Tolerance; search depth uses FBP slider.
     expect(config.shortfallTolerance).toBeCloseTo(0.1, 6);
     expect(config.searchAggressiveness).toBeCloseTo(0.2, 6);
-    expect(config.onPlanScoring.measure).toBe('blend');
+    expect(config.onTargetScoring.measure).toBe('blend');
     expect(config.includeSpendingOverTime).toBe(true);
     expect(config.includeMarketAdjustments).toBe(false);
     expect(config.includeBalanceOverrides).toBe(false);
@@ -382,7 +382,7 @@ describe('buildGoalSeekConfig', () => {
 
   it('keeps Plan RT and Search Aggressiveness independent in Goal Seek config', () => {
     const s = defaultScenario();
-    s.planRiskTolerancePct = 5;
+    s.withdrawRiskTolerancePct = 5;
     s.goalSeekRiskTolerancePct = 25;
     const config = buildGoalSeekConfig(s);
     expect(config.shortfallTolerance).toBeCloseTo(0.05, 6);
@@ -413,17 +413,17 @@ describe('buildGoalSeekConfig', () => {
     expect(buildGoalSeekConfig(s).searchAggressiveness).toBe(0);
   });
 
-  it('passes onPlanScoring from Advanced fields into sim params and Goal Seek', () => {
+  it('passes onTargetScoring from Advanced fields into sim params and Goal Seek', () => {
     const s = defaultScenario();
-    s.onPlanMeasure = 'yearly';
-    s.onPlanYearlyEmphasisPct = 40;
-    s.onPlanYearlyLateFloorPct = 20;
-    expect(buildSimParams(s, { years: [] }).onPlanScoring).toEqual({
+    s.onTargetMeasure = 'yearly';
+    s.onTargetYearlyEmphasisPct = 40;
+    s.onTargetYearlyLateFloorPct = 20;
+    expect(buildSimParams(s, { years: [] }).onTargetScoring).toEqual({
       measure: 'yearly',
       yearlyEmphasisPct: 40,
       yearlyLateFloorPct: 20,
     });
-    expect(buildGoalSeekConfig(s).onPlanScoring).toEqual({
+    expect(buildGoalSeekConfig(s).onTargetScoring).toEqual({
       measure: 'yearly',
       yearlyEmphasisPct: 40,
       yearlyLateFloorPct: 20,
@@ -677,11 +677,11 @@ describe('validateScenario', () => {
 
   it('flags an out-of-range plan risk tolerance', () => {
     const s = defaultScenario();
-    s.planRiskTolerancePct = 36;
+    s.withdrawRiskTolerancePct = 36;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(true);
-    s.planRiskTolerancePct = 0;
+    s.withdrawRiskTolerancePct = 0;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
-    s.planRiskTolerancePct = 35;
+    s.withdrawRiskTolerancePct = 35;
     expect(validateScenario(s, range).some((e) => e.includes('Plan risk tolerance'))).toBe(false);
   });
 

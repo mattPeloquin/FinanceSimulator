@@ -6,9 +6,10 @@ Welcome to the Personal Finance Simulator! This interactive tool helps you visua
 
 The entire simulator is a **single, self-contained HTML file**. One app hosts several features (tabs under the title); Easy Mode and built-in help will get you started.
 
-- **SOR Plan** — Build a retirement spending plan and run Monte Carlo simulations (the main planner).
-- **Accumulation** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title next to SOR Plan).
-- **SOR Lab** — Sensitivity analysis on a saved Plan session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
+- **Accumulation** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title, left of Withdraw).
+- **Withdraw** — Build a retirement spending plan and run Monte Carlo simulations (the main planner; opens by default).
+
+- **SOR Lab** — Sensitivity analysis on a saved Withdraw session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
 - **Social Security** — Compare claim ages for one person or a couple (under **More**), with an end-age sensitivity strip and Monte Carlo opportunity cost of delaying a claim. Educational simplifications — not an SSA calculator.
 - **Roth Convert** — Explore how much Roth conversion (if any) helps under uncertain future tax rates (under **More**), with an editable rate ladder, RMD/QCD options, and a $0 baseline in every run. Educational — not a tax-prep tool.
 - **House Equity** — Compare ways to access home equity earlier (under **More**): calibrated HECM (published PLF tables), private RM-style, HELOC, cash-out & invest, or sell and rent. Educational — not a lender quote or tax calculator.
@@ -141,12 +142,12 @@ flowchart TD
 | The math of growth/withdrawals          | `src/core/simulation.js`, `src/core/withdrawal.js`                                                   |
 | Find Best Plan's search logic           | `src/core/goalSeek.js`                                                                               |
 | The historical dataset                  | `src/data/historicalData.js`                                                                         |
-| An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial under `src/features/sor-plan/partials/` |
-| Fees & taxes (AUM fee / withdrawal tax) | Plan fees/taxes partial, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
-| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/features/sor-plan/ui/riskPreset.js` |
-| A Plan chart's look or behavior         | `src/features/sor-plan/ui/charts/` (one file per chart) |
+| An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial under `src/features/withdraw/partials/` |
+| Fees & taxes (AUM fee / withdrawal tax) | Withdraw fees/taxes partial, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
+| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/features/withdraw/ui/riskPreset.js` |
+| A Withdraw chart's look or behavior     | `src/features/withdraw/ui/charts/` (one file per chart) |
 | SOR Lab sensitivity / tornado           | `src/features/sor-lab/`, `src/core/sensitivity.js` |
-| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, Plan chart helpers |
+| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, Withdraw chart helpers |
 | The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js` |
 | Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js` |
 

@@ -12,7 +12,7 @@ import {
 } from '../src/state/persistence.js';
 import { defaultScenario, SCHEMA_VERSION } from '../src/state/scenario.js';
 import { LAB_STATE_VERSION } from '../src/state/migrations.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../src/state/storageKeys.js';
+import { FEATURE_WITHDRAW, FEATURE_SOR_LAB } from '../src/state/storageKeys.js';
 
 describe('share link encode/decode', () => {
   it('round-trips a scenario through gzip + base64url', async () => {
@@ -23,7 +23,7 @@ describe('share link encode/decode', () => {
       goalSeekMode: false,
     };
     const param = await encodeScenarioToShareParam(scenario, {
-      feature: FEATURE_SOR_PLAN,
+      feature: FEATURE_WITHDRAW,
       name: 'Test Plan',
       description: 'Shared baseline',
     });
@@ -33,7 +33,7 @@ describe('share link encode/decode', () => {
     const loaded = await decodeScenarioFromShareParam(param);
     expect(loaded.name).toBe('Test Plan');
     expect(loaded.description).toBe('Shared baseline');
-    expect(loaded.feature).toBe(FEATURE_SOR_PLAN);
+    expect(loaded.feature).toBe(FEATURE_WITHDRAW);
     expect(loaded.scenario.startBalance).toBe(3000);
     expect(loaded.scenario.baseWithdrawal).toBe(120);
     expect(loaded.scenario.goalSeekMode).toBe(false);
@@ -50,7 +50,7 @@ describe('share link encode/decode', () => {
     const json = JSON.parse(new TextDecoder().decode(await new Response(stream).arrayBuffer()));
     expect(json).toEqual({
       type: 'fs-scenario',
-      feature: FEATURE_SOR_PLAN,
+      feature: FEATURE_WITHDRAW,
       stateVersion: SCHEMA_VERSION,
       state: { startBalance: 1000 },
       dependencies: [],
@@ -89,15 +89,16 @@ describe('share link encode/decode', () => {
     expect(await decodeScenarioFromShareParam(legacyUncompressed)).toBeNull();
   });
 
-  it('rejects unsupported older schemaVersion the same way as import', async () => {
+  it('rejects unsupported older stateVersion the same way as import', async () => {
     const oldPayload = {
-      type: 'sor-scenario',
-      schemaVersion: 1,
-      scenario: { startBalance: 4_000_000, baseWithdrawal: 80_000, numYears: 40 },
+      type: 'fs-scenario',
+      feature: FEATURE_WITHDRAW,
+      stateVersion: 1,
+      state: { startBalance: 4_000_000, baseWithdrawal: 80_000, numYears: 40 },
     };
     expect(() => parseScenarioPayload(oldPayload)).toThrow(/older than this app supports/i);
 
-    // Legacy share encoding of old schema is silent ignore (not an alert path).
+    // Uncompressed share encoding is silent ignore (not an alert path).
     const param = btoa(JSON.stringify(oldPayload))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
@@ -141,14 +142,15 @@ describe('share link encode/decode', () => {
     expect(loaded.ui).toEqual(ui);
 
     const fromParse = parseScenarioPayload({
-      type: 'sor-scenario',
-      schemaVersion: SCHEMA_VERSION,
-      scenario: { startBalance: 1 },
+      type: 'fs-scenario',
+      feature: FEATURE_WITHDRAW,
+      stateVersion: SCHEMA_VERSION,
+      state: { startBalance: 1 },
       ui: { theme: 'nope', reportBand: { low: 20, high: 80 } },
     });
     expect(fromParse.ui.theme).toBeNull();
     expect(fromParse.ui.reportBand).toEqual({ low: 20, high: 80 });
-    expect(fromParse.feature).toBe(FEATURE_SOR_PLAN);
+    expect(fromParse.feature).toBe(FEATURE_WITHDRAW);
   });
 
   it('parses fs-scenario with per-feature stateVersion and dependency versions', () => {
@@ -159,7 +161,7 @@ describe('share link encode/decode', () => {
       state: { version: LAB_STATE_VERSION, sweepPoints: 7 },
       dependencies: [
         {
-          feature: FEATURE_SOR_PLAN,
+          feature: FEATURE_WITHDRAW,
           name: 'Dep',
           stateVersion: SCHEMA_VERSION,
           state: { startBalance: 7 },
@@ -177,7 +179,7 @@ describe('share link encode/decode', () => {
   it('rejects fs-scenario missing stateVersion', () => {
     expect(() => parseScenarioPayload({
       type: 'fs-scenario',
-      feature: FEATURE_SOR_PLAN,
+      feature: FEATURE_WITHDRAW,
       state: { startBalance: 42 },
       dependencies: [],
     })).toThrow(/missing or invalid/i);

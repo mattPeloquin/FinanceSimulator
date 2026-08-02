@@ -34,8 +34,8 @@ export function bandPercentileSeries(heatmap, pLow, pHigh) {
   const numYears = heatmap.numYears;
   const span = heatmap.sourceSpan;
   const values = heatmap.sourceValues;
-  const plan = heatmap.planByYear
-    ? Array.from(heatmap.planByYear, (v) => (Number.isFinite(v) ? Math.max(0, v) : 0))
+  const plan = heatmap.targetByYear
+    ? Array.from(heatmap.targetByYear, (v) => (Number.isFinite(v) ? Math.max(0, v) : 0))
     : new Array(numYears).fill(0);
   // Flat classic 4% schedule (start × 0.04 every year) — drawn on the hero as
   // a light dotted reference line. Same dollar scale as the band values.
@@ -402,13 +402,13 @@ export function buildPlanSnapshot(result, scenario, fourPercentComparison, {
     planBullets: buildPlanBullets(scenario || {}, goalSeekWarning),
     success: {
       successRate: result.successRate ?? 0,
-      onPlanRate: result.withdrawalTargetSuccessRate ?? 0,
-      onPlanMeasure: result.onPlanMeasure ?? 'blend',
+      onTargetRate: result.withdrawalTargetSuccessRate ?? 0,
+      onTargetMeasure: result.onTargetMeasure ?? 'blend',
     },
     // Same Plan Risk Tolerance fraction used for the on-plan rate —
     // the withdrawal band chart uses it as the near-plan color width.
     shortfallTolerance: result.shortfallTolerance ?? 0.05,
-    onPlanMeasure: result.onPlanMeasure ?? 'blend',
+    onTargetMeasure: result.onTargetMeasure ?? 'blend',
     allocation: allocationSummary(scenario || {}),
     taxActive: !!result.withdrawalTaxActive,
     pLow,

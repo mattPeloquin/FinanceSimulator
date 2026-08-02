@@ -53,13 +53,13 @@ export const BASE_DEFAULTS = {
   //   'lifetime' — aggregate only (legacy)
   //   'blend'    — mix yearly hit-rate with lifetime (default); Plan RT sets α
   //   'yearly'   — weighted year-hit rate only
-  onPlanMeasure: 'blend',
+  onTargetMeasure: 'blend',
 
   // Advanced on-plan yearly impact curve: relative weight of year 1 vs the last
   // year (linear blend between). Equal values = flat. Raise Early to front-load,
   // Late to back-load. Field lateFloorPct kept for save compatibility.
-  onPlanYearlyEmphasisPct: 100,
-  onPlanYearlyLateFloorPct: 100,
+  onTargetYearlyEmphasisPct: 100,
+  onTargetYearlyLateFloorPct: 100,
 
   // Five-stop Withdrawals slider: how much early-weighted spending matters when
   // ranking futures and on-plan success. 0 = Total Lifetime (flat years),

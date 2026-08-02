@@ -310,7 +310,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     'goalSeekIncludeBaseWithdrawal', 'goalSeekIncludeSpendingOverTime',
     'goalSeekIncludeMarketAdjustments', 'goalSeekIncludeBalanceOverrides',
     'goalSeekIncludeGlidePath',
-    'planRiskTolerancePct', 'planRiskTolerancePctSlider',
+    'withdrawRiskTolerancePct', 'withdrawRiskTolerancePctSlider',
     'dynLowRet', 'dynMedRet', 'dynHighRet',
     'dynNoCutBal',
     'dynMaxBoostDrawdownPct',

@@ -67,7 +67,7 @@ describe('bandPercentileSeries', () => {
       numYears: 3,
       sourceSpan: 5,
       sourceValues,
-      planByYear: Float64Array.from([25, 25, 25]),
+      targetByYear: Float64Array.from([25, 25, 25]),
     };
     const band = bandPercentileSeries(heatmap, 0, 100);
     expect(band.low[0]).toBe(0);

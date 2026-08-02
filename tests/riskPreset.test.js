@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setupWithdrawalFloorList, setupSpecificWithdrawalFloorList } from '../src/features/sor-plan/ui/inputs.js';
-import { setupRiskPresetControl, applyPresetLevel } from '../src/features/sor-plan/ui/riskPreset.js';
+import { setupWithdrawalFloorList, setupSpecificWithdrawalFloorList } from '../src/features/withdraw/ui/inputs.js';
+import { setupRiskPresetControl, applyPresetLevel } from '../src/features/withdraw/ui/riskPreset.js';
 import { PRESETS, DEFAULT_PRESET_LEVEL } from '../src/state/presets/index.js';
 import {
   readWithdrawalFloorsFromDom,
@@ -27,8 +27,8 @@ function mountPresetDom({ attached = false } = {}) {
     <input type="checkbox" id="goalSeekIncludeMarketAdjustments" checked>
     <input type="checkbox" id="goalSeekIncludeBalanceOverrides" checked>
     <input type="checkbox" id="goalSeekIncludeGlidePath" checked>
-    <input id="planRiskTolerancePct" value="10">
-    <input id="planRiskTolerancePctSlider" value="10">
+    <input id="withdrawRiskTolerancePct" value="10">
+    <input id="withdrawRiskTolerancePctSlider" value="10">
     <input id="dynLowRet" value="-15">
     <input id="dynMedRet" value="5">
     <input id="dynHighRet" value="20">

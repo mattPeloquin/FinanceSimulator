@@ -542,12 +542,12 @@ export function drawBalanceFan(canvas, fan, { dark = false } = {}) {
  * Keeping both rates in one compact chart makes the right-side bento column
  * readable without duplicating the verdict prose.
  */
-export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = false } = {}) {
+export function drawSuccessDonut(canvas, { successRate, onTargetRate }, { dark = false } = {}) {
   if (!canvas) return;
   destroyChart(canvas);
   const pal = paletteFor(dark);
   const success = Math.min(1, Math.max(0, successRate ?? 0));
-  const onPlan = Math.min(1, Math.max(0, onPlanRate ?? 0));
+  const onPlan = Math.min(1, Math.max(0, onTargetRate ?? 0));
 
   // No center text: the hero stat card already shows the big "not depleted"
   // number, so repeating it inside the donut would be a third copy. The two
@@ -591,17 +591,17 @@ export function drawSuccessDonut(canvas, { successRate, onPlanRate }, { dark = f
 
 /**
  * Hero verdict stats — two big numbers given equal weight: "not depleted"
- * (successRate) and "on plan" (onPlanRate), plus an On track / Monitor /
+ * (successRate) and "on plan" (onTargetRate), plus an On track / Monitor /
  * At risk pill driven by the success rate. The detailed rates also live in
  * the donut, so this is the single large-format presentation of both.
  *
- * @param {{number: HTMLElement, onPlanNumber: HTMLElement, onPlanLabel?: HTMLElement, pill: HTMLElement}} els
+ * @param {{number: HTMLElement, onTargetNumber: HTMLElement, onTargetLabel?: HTMLElement, pill: HTMLElement}} els
  */
-export function renderSuccessHero(els, { successRate, onPlanRate, shortfallTolerance, onPlanMeasure }, { dark = false } = {}) {
+export function renderSuccessHero(els, { successRate, onTargetRate, shortfallTolerance, onTargetMeasure }, { dark = false } = {}) {
   if (!els) return;
   const pal = paletteFor(dark);
   const success = Math.min(1, Math.max(0, successRate ?? 0));
-  const onPlan = Math.min(1, Math.max(0, onPlanRate ?? 0));
+  const onPlan = Math.min(1, Math.max(0, onTargetRate ?? 0));
   const tone = verdictTone(success, pal);
 
   if (els.number) {
@@ -612,18 +612,18 @@ export function renderSuccessHero(els, { successRate, onPlanRate, shortfallToler
     // from the darker on-track pill.
     els.number.style.color = pal.success;
   }
-  if (els.onPlanNumber) {
-    els.onPlanNumber.textContent = formatPercent(onPlan, 0) || '—';
+  if (els.onTargetNumber) {
+    els.onTargetNumber.textContent = formatPercent(onPlan, 0) || '—';
     // Match the donut's inner ring (on plan = accent/purple).
-    els.onPlanNumber.style.color = pal.accent;
+    els.onTargetNumber.style.color = pal.accent;
   }
   // Same wording as the main results "Success Rate (within X% of plan)" card —
   // Plan Risk Tolerance is the shortfall fraction baked into the on-plan rate.
-  if (els.onPlanLabel) {
+  if (els.onTargetLabel) {
     const tol = Number.isFinite(shortfallTolerance) ? shortfallTolerance : 0.05;
     const tolerancePct = Math.round(Math.min(0.35, Math.max(0, tol)) * 100);
-    const measure = onPlanMeasure || 'blend';
-    els.onPlanLabel.textContent = measure === 'yearly'
+    const measure = onTargetMeasure || 'blend';
+    els.onTargetLabel.textContent = measure === 'yearly'
       ? `yearly within ${tolerancePct}% of plan`
       : measure === 'lifetime'
         ? `within ${tolerancePct}% of plan`

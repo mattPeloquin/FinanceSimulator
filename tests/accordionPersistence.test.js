@@ -5,7 +5,7 @@ import {
   saveAccordionState,
   setAccordionOpen,
 } from '../src/state/persistence.js';
-import { setupAccordionResize } from '../src/features/sor-plan/ui/inputs.js';
+import { setupAccordionResize } from '../src/features/withdraw/ui/inputs.js';
 
 describe('accordion persistence', () => {
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('accordion persistence', () => {
 
   it('setupAccordionResize restores saved open state and persists toggles', () => {
     localStorage.setItem(
-      'fs:sor-plan:ui',
+      'fs:withdraw:ui',
       JSON.stringify({
         accordions: { 'section-investment': true, 'section-withdrawal': false },
       }),

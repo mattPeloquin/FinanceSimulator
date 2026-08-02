@@ -33,7 +33,7 @@ export async function packageWithFourPercentComparison(pool, params, userRaw, {
   return { userResult, classicResult, fourPercentComparison };
 }
 
-export async function handlePlanRun(ctx, data) {
+export async function handleWithdrawRun(ctx, data) {
   const { pool, post } = ctx;
   const { params } = data;
   const userRaw = await pool.run(params, {

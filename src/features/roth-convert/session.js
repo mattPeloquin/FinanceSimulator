@@ -1,7 +1,7 @@
 // Roth Convert session state — config persisted; results in memory only.
 
 import { ROTH_CONVERT_STATE_VERSION } from '../../state/migrations.js';
-import { FEATURE_ROTH_CONVERT, FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_ROTH_CONVERT, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import { SCHEMA_VERSION } from '../../state/scenario.js';
 import * as sessions from '../../state/sessions.js';
 import {
@@ -120,7 +120,7 @@ export function normalizeRothConvertState(raw) {
   let scenarioRef = null;
   if (raw.scenarioRef && typeof raw.scenarioRef === 'object' && raw.scenarioRef.name) {
     scenarioRef = {
-      feature: raw.scenarioRef.feature || FEATURE_SOR_PLAN,
+      feature: raw.scenarioRef.feature || FEATURE_WITHDRAW,
       name: String(raw.scenarioRef.name),
     };
   }
@@ -234,10 +234,10 @@ export async function getRothConvertDependencies() {
   const ref = rothState.scenarioRef;
   if (!ref?.name) return [];
   try {
-    const loaded = await sessions.load(ref.feature || FEATURE_SOR_PLAN, ref.name);
+    const loaded = await sessions.load(ref.feature || FEATURE_WITHDRAW, ref.name);
     if (!loaded?.payload) return [];
     return [{
-      feature: ref.feature || FEATURE_SOR_PLAN,
+      feature: ref.feature || FEATURE_WITHDRAW,
       name: ref.name,
       state: loaded.payload,
       stateVersion: SCHEMA_VERSION,
@@ -252,7 +252,7 @@ export async function applyImportedRothConvert(loaded, { statusMessage, renames 
   let state = normalizeRothConvertState(loaded.state || {});
   if (state.scenarioRef?.name && Array.isArray(renames) && renames.length) {
     const planRenames = renames.filter(
-      (r) => (r.feature || FEATURE_SOR_PLAN) === FEATURE_SOR_PLAN,
+      (r) => (r.feature || FEATURE_WITHDRAW) === FEATURE_WITHDRAW,
     );
     const exact = planRenames.find((r) => r.requestedName === state.scenarioRef.name);
     if (exact) {

@@ -329,9 +329,9 @@ test('Share link can attach view settings and prompt the recipient', async ({ pa
   await page.evaluate(() => {
     localStorage.setItem('fs:app:prefs', JSON.stringify({
       theme: 'dark',
-      activeFeature: 'sor-plan',
+      activeFeature: 'withdraw',
     }));
-    localStorage.setItem('fs:sor-plan:ui', JSON.stringify({
+    localStorage.setItem('fs:withdraw:ui', JSON.stringify({
       reportBand: { low: 25, high: 75 },
       reportThemeMode: null,
       accordions: {},
@@ -352,9 +352,9 @@ test('Share link can attach view settings and prompt the recipient', async ({ pa
   await page.evaluate(() => {
     localStorage.setItem('fs:app:prefs', JSON.stringify({
       theme: 'light',
-      activeFeature: 'sor-plan',
+      activeFeature: 'withdraw',
     }));
-    localStorage.setItem('fs:sor-plan:ui', JSON.stringify({
+    localStorage.setItem('fs:withdraw:ui', JSON.stringify({
       reportBand: { low: 10, high: 90 },
       reportThemeMode: null,
       accordions: {},

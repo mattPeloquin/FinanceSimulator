@@ -1,8 +1,8 @@
 // SOR Lab session state: config-only (sweep results stay in memory).
-// Share/export embeds a snapshot of the referenced SOR Plan scenario.
+// Share/export embeds a snapshot of the referenced Withdraw scenario.
 
 import * as sessions from '../../state/sessions.js';
-import { FEATURE_SOR_PLAN, FEATURE_SOR_LAB } from '../../state/storageKeys.js';
+import { FEATURE_WITHDRAW, FEATURE_SOR_LAB } from '../../state/storageKeys.js';
 import { LAB_STATE_VERSION } from '../../state/migrations.js';
 import { SCHEMA_VERSION } from '../../state/scenario.js';
 import {
@@ -42,7 +42,7 @@ let labResultStale = false;
 export function defaultLabConfig() {
   return {
     version: LAB_STATE_VERSION,
-    scenarioRef: null, // { feature: 'sor-plan', name }
+    scenarioRef: null, // { feature: 'withdraw', name }
     seed: null,
     sweepPoints: DEFAULT_SWEEP_POINTS,
     pathsPerPoint: DEFAULT_PATHS_PER_POINT,
@@ -99,7 +99,7 @@ export function normalizeLabState(raw) {
   if (!raw || typeof raw !== 'object') return base;
   const scenarioRef = raw.scenarioRef && typeof raw.scenarioRef === 'object'
     ? {
-      feature: raw.scenarioRef.feature || FEATURE_SOR_PLAN,
+      feature: raw.scenarioRef.feature || FEATURE_WITHDRAW,
       name: String(raw.scenarioRef.name || ''),
     }
     : null;
@@ -205,10 +205,10 @@ export async function getLabDependencies() {
   const ref = labConfig.scenarioRef;
   if (!ref?.name) return [];
   try {
-    const loaded = await sessions.load(ref.feature || FEATURE_SOR_PLAN, ref.name);
+    const loaded = await sessions.load(ref.feature || FEATURE_WITHDRAW, ref.name);
     if (!loaded?.payload) return [];
     return [{
-      feature: ref.feature || FEATURE_SOR_PLAN,
+      feature: ref.feature || FEATURE_WITHDRAW,
       name: ref.name,
       state: loaded.payload,
       stateVersion: SCHEMA_VERSION,
@@ -221,14 +221,14 @@ export async function getLabDependencies() {
 
 /**
  * Apply an imported Lab envelope. `renames` comes from
- * importEnvelopeDependencies — remap scenarioRef when the Plan session
+ * importEnvelopeDependencies — remap scenarioRef when the Withdraw session
  * was auto-renamed on collision.
  */
 export async function applyImportedLab(loaded, { statusMessage, renames } = {}) {
   let state = normalizeLabState(loaded.state || {});
   if (state.scenarioRef?.name && Array.isArray(renames) && renames.length) {
     // Prefer exact original-name match; else if only one Plan dep, use it.
-    const planRenames = renames.filter((r) => (r.feature || FEATURE_SOR_PLAN) === FEATURE_SOR_PLAN);
+    const planRenames = renames.filter((r) => (r.feature || FEATURE_WITHDRAW) === FEATURE_WITHDRAW);
     const exact = planRenames.find((r) => r.requestedName === state.scenarioRef.name);
     if (exact) {
       state = {

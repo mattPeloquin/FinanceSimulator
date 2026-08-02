@@ -48,8 +48,8 @@ test('SOR Lab sensitivity run paints tornado and survives tab switch', async ({ 
   await page.click('#sor-lab-run');
 
   // Switch away mid-run; Lab job should roll up a badge onto More.
-  await page.click('#tab-sor-plan');
-  await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await page.click('#tab-withdraw');
+  await expect(page.locator('#feature-withdraw')).toBeVisible();
   await expect(page.locator('#feature-more-button [data-more-badge]')).toBeVisible({
     timeout: 10_000,
   });

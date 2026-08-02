@@ -37,7 +37,7 @@ export const METRIC_DEFS = Object.freeze([
     higherIsBetter: true,
   },
   {
-    id: 'onPlanRate',
+    id: 'onTargetRate',
     label: 'On-plan rate',
     kind: 'rate',
     unit: 'fraction',
@@ -168,22 +168,22 @@ export function summarizeSweepPoint(raw, params) {
       withdrawalMetric,
       rankingWeighting,
     );
-    const onPlanScoring = params.onPlanScoring
+    const onTargetScoring = params.onTargetScoring
       ?? { measure: 'blend', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
-    const onPlanContext = {
-      measure: onPlanScoring.measure ?? 'blend',
-      yearlyEmphasisPct: onPlanScoring.yearlyEmphasisPct ?? 100,
-      yearlyLateFloorPct: onPlanScoring.yearlyLateFloorPct ?? 100,
+    const onTargetContext = {
+      measure: onTargetScoring.measure ?? 'blend',
+      yearlyEmphasisPct: onTargetScoring.yearlyEmphasisPct ?? 100,
+      yearlyLateFloorPct: onTargetScoring.yearlyLateFloorPct ?? 100,
       allYearsNetSpend: raw.allYearsNetSpend ?? raw.allYearsWithdrawals,
       maxYears,
       horizonYears: raw.horizonYears,
-      planByYearForHorizon: (h) => plannedYearlySchedule(params.portfolio, h),
+      targetByYearForHorizon: (h) => plannedYearlySchedule(params.portfolio, h),
     };
     onPlan = withdrawalTargetSuccessRate(
       actuals,
       benchmarks,
       tolerance,
-      onPlanContext,
+      onTargetContext,
     );
   }
 
@@ -200,7 +200,7 @@ export function summarizeSweepPoint(raw, params) {
   return {
     rates: {
       successRate: rateEntry(surv, n),
-      onPlanRate: rateEntry(onPlan == null ? 0 : onPlan, n),
+      onTargetRate: rateEntry(onPlan == null ? 0 : onPlan, n),
       depletionRate: rateEntry(deplete, n),
     },
     perPath: {
@@ -213,7 +213,7 @@ export function summarizeSweepPoint(raw, params) {
     },
     // Kept for selectors that need to know whether on-plan was undefined
     // (no positive plan benchmark) vs genuinely zero.
-    onPlanDefined: onPlan != null,
+    onTargetDefined: onPlan != null,
   };
 }
 

@@ -38,7 +38,7 @@ export const PRESET_SCENARIO_KEYS = [
   'goalSeekIncludeMarketAdjustments',
   'goalSeekIncludeBalanceOverrides',
   'goalSeekIncludeGlidePath',
-  'planRiskTolerancePct',
+  'withdrawRiskTolerancePct',
   'usLgGrowthAllocation',
   'usLgValueAllocation',
   'usSmMidAllocation',

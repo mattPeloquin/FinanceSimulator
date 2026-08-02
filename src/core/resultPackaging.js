@@ -22,7 +22,7 @@ import {
   isMedianYearlyMetric,
   weightedScheduleScore,
   weightedYearHitRate,
-  meetsOnPlanBlend,
+  meetsOnTargetBlend,
 } from './statistics.js';
 import {
   plannedScheduleTotal,
@@ -77,7 +77,7 @@ export function buildWithdrawalHeatmapSource(
   rankW,
   loRank,
   hiRank,
-  planByYear,
+  targetByYear,
   maxYears,
   classicByYear = null,
   { useNetSpend = false } = {},
@@ -113,7 +113,7 @@ export function buildWithdrawalHeatmapSource(
     sourceSpan: span,
     sourceValues,
     sourceSimIndex,
-    planByYear,
+    targetByYear,
     // Anchor for the "vs 4%" delta encoding (flat start × 4% schedule).
     classicByYear: classicByYear ?? buildClassicFourPercentByYear(0, maxYears),
   };
@@ -126,7 +126,7 @@ export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
   const {
     p5Rank,
     numYears,
-    planByYear,
+    targetByYear,
     classicByYear,
     sourceValues,
     sourceSimIndex,
@@ -203,7 +203,7 @@ export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
     colCenterRank,
     colSimIndex,
     colRunCount,
-    planByYear,
+    targetByYear,
     classicByYear,
     numFrames,
     frameValues,
@@ -212,13 +212,13 @@ export function bandWithdrawalHeatmap(source, loRank, hiRank, maxCols) {
 }
 
 // Legacy alias kept for tests that call the old name directly.
-export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, planByYear, maxYears, classicByYear) {
+export function buildWithdrawalHeatmap(result, rankW, p5Rank, hiRank, targetByYear, maxYears, classicByYear) {
   const source = buildWithdrawalHeatmapSource(
     result,
     rankW,
     p5Rank,
     hiRank,
-    planByYear,
+    targetByYear,
     maxYears,
     classicByYear,
   );
@@ -546,16 +546,16 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   for (const amount of grossPlanSchedule) plannedGrossTotal += amount;
   const plannedGrossMedianYearly = median(grossPlanSchedule);
   const plannedGrossMeanYearly = endpointYears > 0 ? plannedGrossTotal / endpointYears : 0;
-  const onPlanBenchmark = weightedPlannedBenchmark(
+  const onTargetBenchmark = weightedPlannedBenchmark(
     params.portfolio,
     endpointYears,
     withdrawalMetric,
     rankingWeighting,
   );
-  // Gross twin of onPlanBenchmark (same metric / early-weighting), for the
+  // Gross twin of onTargetBenchmark (same metric / early-weighting), for the
   // pre-tax subline under the planned card when tax is active.
-  const onPlanGrossBenchmark = (() => {
-    if (!taxActive) return onPlanBenchmark;
+  const onTargetGrossBenchmark = (() => {
+    if (!taxActive) return onTargetBenchmark;
     const schedule = grossPlanSchedule;
     if (!earlyWeightingActive) {
       if (isMedianYearlyMetric(withdrawalMetric)) return plannedGrossMedianYearly;
@@ -570,22 +570,22 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   const rankedMetricGross = taxActive
     ? perRunWithdrawalMetric(result, withdrawalMetric, rankingWeighting, { useGross: true })
     : rankedMetric;
-  const onPlanActuals = rankedMetric;
+  const onTargetActuals = rankedMetric;
   const perRunBenchmarks = buildPerRunPlanBenchmarks(
     params.portfolio,
     result.horizonYears,
     withdrawalMetric,
     rankingWeighting,
   );
-  const onPlanScoring = params.onPlanScoring ?? { measure: 'blend', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
-  const onPlanContext = {
-    measure: onPlanScoring.measure ?? 'blend',
-    yearlyEmphasisPct: onPlanScoring.yearlyEmphasisPct ?? 100,
-    yearlyLateFloorPct: onPlanScoring.yearlyLateFloorPct ?? 100,
+  const onTargetScoring = params.onTargetScoring ?? { measure: 'blend', yearlyEmphasisPct: 100, yearlyLateFloorPct: 100 };
+  const onTargetContext = {
+    measure: onTargetScoring.measure ?? 'blend',
+    yearlyEmphasisPct: onTargetScoring.yearlyEmphasisPct ?? 100,
+    yearlyLateFloorPct: onTargetScoring.yearlyLateFloorPct ?? 100,
     allYearsNetSpend: result.allYearsNetSpend ?? result.allYearsWithdrawals,
     maxYears,
     horizonYears: result.horizonYears,
-    planByYearForHorizon: (h) => plannedYearlySchedule(params.portfolio, h),
+    targetByYearForHorizon: (h) => plannedYearlySchedule(params.portfolio, h),
   };
 
   const totalNet = result.totalNetSpend ?? result.totalWithdrawn;
@@ -607,9 +607,9 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
   // Per-path outcome tags for the IRR-vs-avg-return scatter: 0 = met plan,
   // 1 = below plan (within horizon but short of the benchmark), 2 = ran out.
   const scatterOutcome = new Uint8Array(n);
-  const onPlanYearWeighting = {
-    earlyEmphasisPct: onPlanContext.yearlyEmphasisPct,
-    lateFloorPct: onPlanContext.yearlyLateFloorPct,
+  const onTargetYearWeighting = {
+    earlyEmphasisPct: onTargetContext.yearlyEmphasisPct,
+    lateFloorPct: onTargetContext.yearlyLateFloorPct,
   };
   const scatterPlanCache = new Map();
   for (let i = 0; i < n; i++) {
@@ -621,16 +621,16 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
         scatterPlanCache.set(h, plannedYearlySchedule(params.portfolio, h));
       }
       const yearHitRate = weightedYearHitRate(
-        onPlanContext.allYearsNetSpend,
+        onTargetContext.allYearsNetSpend,
         maxYears,
         i,
         h,
         scatterPlanCache.get(h),
         tolerance,
-        onPlanYearWeighting,
+        onTargetYearWeighting,
       );
-      if (!meetsOnPlanBlend(onPlanActuals[i], perRunBenchmarks[i], tolerance, {
-        measure: onPlanContext.measure,
+      if (!meetsOnTargetBlend(onTargetActuals[i], perRunBenchmarks[i], tolerance, {
+        measure: onTargetContext.measure,
         yearHitRate,
       })) {
         scatterOutcome[i] = 1;
@@ -660,15 +660,15 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     earlyWeightingActive,
     successRate: successRate(result.depletionYear, result.horizonYears),
     withdrawalTargetSuccessRate: withdrawalTargetSuccessRate(
-      onPlanActuals,
+      onTargetActuals,
       perRunBenchmarks,
       tolerance,
-      onPlanContext,
+      onTargetContext,
     ),
     shortfallTolerance: tolerance,
-    onPlanMeasure: onPlanContext.measure,
-    onPlanYearlyEmphasisPct: onPlanContext.yearlyEmphasisPct,
-    onPlanYearlyLateFloorPct: onPlanContext.yearlyLateFloorPct,
+    onTargetMeasure: onTargetContext.measure,
+    onTargetYearlyEmphasisPct: onTargetContext.yearlyEmphasisPct,
+    onTargetYearlyLateFloorPct: onTargetContext.yearlyLateFloorPct,
     medianBalance: median(result.finalBalance),
     medianWithdrawn: median(result.totalWithdrawn),
     medianYearlyWithdrawn: median(result.medianYearlyWithdrawal),
@@ -679,7 +679,7 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     medianNetSpend: median(totalNet),
     medianYearlyNetSpend: median(medianYearlyNet),
     meanYearlyNetSpend: median(meanYearlyWithdrawals(totalNet, result.horizonYears)),
-    medianEarlyWeightedWithdrawn: median(onPlanActuals),
+    medianEarlyWeightedWithdrawn: median(onTargetActuals),
     medianEarlyWeightedGrossWithdrawn: median(rankedMetricGross),
     plannedWithdrawn,
     plannedMedianYearly,
@@ -689,8 +689,8 @@ export function buildRunResult(params, result, { shortfallTolerance } = {}) {
     plannedGrossMeanYearly,
     withdrawalTaxActive: taxActive,
     advisorFeeActive,
-    onPlanBenchmark,
-    onPlanGrossBenchmark,
+    onTargetBenchmark,
+    onTargetGrossBenchmark,
     percentiles,
     surfacePaths,
     surfaceMeta: {

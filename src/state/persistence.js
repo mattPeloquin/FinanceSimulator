@@ -14,17 +14,16 @@ import {
   optionalUiFromEnvelope,
 } from './uiPrefs.js';
 import {
-  SOR_PLAN_AUTOSAVE_KEY,
-  SOR_PLAN_UNSAVED_STASH_KEY,
-  FEATURE_SOR_PLAN,
+  WITHDRAW_AUTOSAVE_KEY,
+  WITHDRAW_UNSAVED_STASH_KEY,
+  FEATURE_WITHDRAW,
 } from './storageKeys.js';
 import * as sessions from './sessions.js';
 
 export { loadAccordionState, saveAccordionState, setAccordionOpen };
 
-const AUTOSAVE_KEY = SOR_PLAN_AUTOSAVE_KEY;
+const AUTOSAVE_KEY = WITHDRAW_AUTOSAVE_KEY;
 const EXPORT_TYPE = 'fs-scenario';
-const LEGACY_EXPORT_TYPE = 'sor-scenario';
 const SHARE_PARAM = 's';
 
 /** Full share URL length ceiling; over this, use Export instead. */
@@ -75,7 +74,7 @@ export function clearAutosave() {
   }
 }
 
-const UNSAVED_STASH_KEY = SOR_PLAN_UNSAVED_STASH_KEY;
+const UNSAVED_STASH_KEY = WITHDRAW_UNSAVED_STASH_KEY;
 
 /** Snapshot of the unsaved workbench, kept when switching to a named session. */
 export function saveUnsavedStash(scenario) {
@@ -112,8 +111,7 @@ export function clearUnsavedStash() {
 // ---- Export / Import (JSON file) + share-link encoding -----------------------
 
 /**
- * Normalize a parsed export/share envelope.
- * Accepts `fs-scenario` and legacy `sor-scenario` files.
+ * Normalize a parsed export/share envelope (`fs-scenario` only).
  * @returns {{
  *   feature: string,
  *   state: object,
@@ -130,30 +128,11 @@ export function parseScenarioPayload(parsed) {
     throw new Error('Not a valid simulator scenario file.');
   }
 
-  if (parsed.type === LEGACY_EXPORT_TYPE) {
-    if (!parsed.scenario) {
-      throw new Error('Not a valid simulator scenario file.');
-    }
-    // Legacy file field is still `schemaVersion`; only file-compat path.
-    const scenario = migrateScenario(parsed.scenario, parsed.schemaVersion);
-    const out = {
-      feature: FEATURE_SOR_PLAN,
-      state: scenario,
-      scenario,
-      name: parsed.name || '',
-      description: parsed.description || '',
-      dependencies: [],
-    };
-    const ui = optionalUiFromEnvelope(parsed.ui);
-    if (ui) out.ui = ui;
-    return out;
-  }
-
   if (parsed.type !== EXPORT_TYPE) {
     throw new Error('Not a valid simulator scenario file.');
   }
 
-  const feature = parsed.feature || FEATURE_SOR_PLAN;
+  const feature = parsed.feature || FEATURE_WITHDRAW;
   const rawState = parsed.state != null ? parsed.state : parsed.scenario;
   if (rawState == null) {
     throw new Error('Not a valid simulator scenario file.');
@@ -176,7 +155,7 @@ export function parseScenarioPayload(parsed) {
   const out = {
     feature,
     state,
-    // Alias for SOR Plan callers / older tests.
+    // Alias for Withdraw callers / older tests.
     scenario: state,
     name: parsed.name || '',
     description: parsed.description || '',
@@ -247,7 +226,7 @@ async function gunzipBytes(bytes) {
  * }} [meta]
  */
 export function buildExportEnvelope(state, meta = {}) {
-  const feature = meta.feature || FEATURE_SOR_PLAN;
+  const feature = meta.feature || FEATURE_WITHDRAW;
   const stateVersion = meta.stateVersion ?? getFeatureStateVersion(feature);
   const payload = {
     type: EXPORT_TYPE,
@@ -373,7 +352,7 @@ export function exportScenario(
   state,
   name = 'scenario',
   description = '',
-  { ui, feature = FEATURE_SOR_PLAN, dependencies = [], cashflowSeries } = {},
+  { ui, feature = FEATURE_WITHDRAW, dependencies = [], cashflowSeries } = {},
 ) {
   const payload = buildExportEnvelope(state, {
     feature,

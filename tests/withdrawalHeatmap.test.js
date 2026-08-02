@@ -15,7 +15,7 @@ import {
   windowAbsoluteDomain,
   clampHeatmapDeposit,
   formatHeatmapTooltip,
-} from '../src/features/sor-plan/ui/charts/withdrawalHeatmap.js';
+} from '../src/features/withdraw/ui/charts/withdrawalHeatmap.js';
 
 function channels(rgb) {
   return rgb.match(/\d+/g).map(Number);

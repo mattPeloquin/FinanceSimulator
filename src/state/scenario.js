@@ -45,11 +45,11 @@ const FIELDS = [
   field('numSimulations', 'numSimulations', 'int'),
   field('randomSeed', 'randomSeed', 'string'),
   field('smoothWindowPct', 'smoothWindowPct', 'float'),
-  field('planRiskTolerancePct', 'planRiskTolerancePct', 'float'),
+  field('withdrawRiskTolerancePct', 'withdrawRiskTolerancePct', 'float'),
   field('withdrawalMetric', 'withdrawalMetric', 'string'),
-  field('onPlanMeasure', 'onPlanMeasure', 'string'),
-  field('onPlanYearlyEmphasisPct', 'onPlanYearlyEmphasisPct', 'float'),
-  field('onPlanYearlyLateFloorPct', 'onPlanYearlyLateFloorPct', 'float'),
+  field('onTargetMeasure', 'onTargetMeasure', 'string'),
+  field('onTargetYearlyEmphasisPct', 'onTargetYearlyEmphasisPct', 'float'),
+  field('onTargetYearlyLateFloorPct', 'onTargetYearlyLateFloorPct', 'float'),
   // Range input is the canonical control (no paired number box).
   field('earlyWeightSlot', 'earlyWeightSlot', 'int'),
   field('earlyWeightEmphasisPct', 'earlyWeightEmphasisPct', 'float'),
@@ -1162,11 +1162,11 @@ const PAIRED_SLIDER_IDS = {
   scaledHistoricalSmoothing: 'scaledHistoricalSmoothingSlider',
   goalSeekDesiredSuccessPct: 'goalSeekDesiredSuccessPctSlider',
   goalSeekRiskTolerancePct: 'goalSeekRiskTolerancePctSlider',
-  planRiskTolerancePct: 'planRiskTolerancePctSlider',
+  withdrawRiskTolerancePct: 'withdrawRiskTolerancePctSlider',
   earlyWeightEmphasisPct: 'earlyWeightEmphasisPctSlider',
   earlyWeightLateFloorPct: 'earlyWeightLateFloorPctSlider',
-  onPlanYearlyEmphasisPct: 'onPlanYearlyEmphasisPctSlider',
-  onPlanYearlyLateFloorPct: 'onPlanYearlyLateFloorPctSlider',
+  onTargetYearlyEmphasisPct: 'onTargetYearlyEmphasisPctSlider',
+  onTargetYearlyLateFloorPct: 'onTargetYearlyLateFloorPctSlider',
 };
 
 // Same scenario value shown in both Base and Specific minimum-withdrawal panels.
@@ -1483,29 +1483,29 @@ export function buildSimParams(scenario, samples) {
       1,
     ),
     // Max allowed spending shortfall vs. plan when packaging / grading on-plan.
-    shortfallTolerance: planShortfallTolerance(scenario),
-    onPlanScoring: resolveOnPlanScoring(scenario),
+    shortfallTolerance: withdrawShortfallTolerance(scenario),
+    onTargetScoring: resolveOnTargetScoring(scenario),
     samples,
   };
 }
 
 /** Fraction 0–0.35 from the independent Plan Risk Tolerance setting. */
-export function planShortfallTolerance(scenario) {
-  return Math.min(Math.max(num(scenario.planRiskTolerancePct) / 100, 0), 0.35);
+export function withdrawShortfallTolerance(scenario) {
+  return Math.min(Math.max(num(scenario.withdrawRiskTolerancePct) / 100, 0), 0.35);
 }
 
-const ON_PLAN_MEASURES = new Set(['lifetime', 'blend', 'yearly']);
+const ON_TARGET_MEASURES = new Set(['lifetime', 'blend', 'yearly']);
 
 /** Advanced on-plan blend shape (measure + yearly impact curve). */
-export function resolveOnPlanScoring(scenario = {}) {
-  const raw = scenario.onPlanMeasure ?? SCENARIO_DEFAULTS.onPlanMeasure ?? 'blend';
-  const measure = ON_PLAN_MEASURES.has(raw) ? raw : 'blend';
-  const early = scenario.onPlanYearlyEmphasisPct != null
-    ? num(scenario.onPlanYearlyEmphasisPct)
-    : SCENARIO_DEFAULTS.onPlanYearlyEmphasisPct;
-  const late = scenario.onPlanYearlyLateFloorPct != null
-    ? num(scenario.onPlanYearlyLateFloorPct)
-    : SCENARIO_DEFAULTS.onPlanYearlyLateFloorPct;
+export function resolveOnTargetScoring(scenario = {}) {
+  const raw = scenario.onTargetMeasure ?? SCENARIO_DEFAULTS.onTargetMeasure ?? 'blend';
+  const measure = ON_TARGET_MEASURES.has(raw) ? raw : 'blend';
+  const early = scenario.onTargetYearlyEmphasisPct != null
+    ? num(scenario.onTargetYearlyEmphasisPct)
+    : SCENARIO_DEFAULTS.onTargetYearlyEmphasisPct;
+  const late = scenario.onTargetYearlyLateFloorPct != null
+    ? num(scenario.onTargetYearlyLateFloorPct)
+    : SCENARIO_DEFAULTS.onTargetYearlyLateFloorPct;
   return {
     measure,
     yearlyEmphasisPct: Math.min(Math.max(early, 0), 100),
@@ -1567,10 +1567,10 @@ export function buildGoalSeekConfig(scenario) {
     targetEndingBalance: toDollars(scenario.goalSeekTargetEndingBalance),
     desiredSuccessRate: Math.min(Math.max(num(scenario.goalSeekDesiredSuccessPct) / 100, 0), 1),
     // On-plan grading uses Plan Risk Tolerance (same r as Run results).
-    shortfallTolerance: planShortfallTolerance(scenario),
+    shortfallTolerance: withdrawShortfallTolerance(scenario),
     // Search-only: dyn-adj / balance grid depth and TEB discount.
     searchAggressiveness: goalSeekSearchAggressiveness(scenario),
-    onPlanScoring: resolveOnPlanScoring(scenario),
+    onTargetScoring: resolveOnTargetScoring(scenario),
     pinBaseWithdrawal: isSpecific ? true : !scenario.goalSeekIncludeBaseWithdrawal,
     includeSpendingOverTime: isSpecific ? false : !!scenario.goalSeekIncludeSpendingOverTime,
     spendingFirstTierYears: isSpecific
@@ -1635,19 +1635,19 @@ export function validateScenario(scenario, { minYear, maxYear }) {
   ) {
     errors.push(`Number of simulations must be between 1 and ${MAX_NUM_SIMULATIONS.toLocaleString('en-US')}.`);
   }
-  const planRisk = scenario.planRiskTolerancePct;
+  const planRisk = scenario.withdrawRiskTolerancePct;
   if (!Number.isFinite(planRisk) || planRisk < 0 || planRisk > 35) {
     errors.push('Plan risk tolerance must be between 0 and 35.');
   }
-  const onPlanMeasure = scenario.onPlanMeasure ?? SCENARIO_DEFAULTS.onPlanMeasure;
-  if (!ON_PLAN_MEASURES.has(onPlanMeasure)) {
+  const onTargetMeasure = scenario.onTargetMeasure ?? SCENARIO_DEFAULTS.onTargetMeasure;
+  if (!ON_TARGET_MEASURES.has(onTargetMeasure)) {
     errors.push('On-plan measure must be lifetime, blend, or yearly.');
   }
-  const onPlanEmp = scenario.onPlanYearlyEmphasisPct;
+  const onPlanEmp = scenario.onTargetYearlyEmphasisPct;
   if (onPlanEmp != null && (!Number.isFinite(onPlanEmp) || onPlanEmp < 0 || onPlanEmp > 100)) {
     errors.push('On-plan yearly early emphasis must be between 0 and 100.');
   }
-  const onPlanLate = scenario.onPlanYearlyLateFloorPct;
+  const onPlanLate = scenario.onTargetYearlyLateFloorPct;
   if (onPlanLate != null && (!Number.isFinite(onPlanLate) || onPlanLate < 0 || onPlanLate > 100)) {
     errors.push('On-plan yearly late floor must be between 0 and 100.');
   }

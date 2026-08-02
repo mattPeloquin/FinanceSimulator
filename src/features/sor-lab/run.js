@@ -6,7 +6,7 @@ import { resolveNumCores } from '../../workers/parallelConfig.js';
 import * as jobs from '../../state/jobs.js';
 import * as sessions from '../../state/sessions.js';
 import { getActiveFeature } from '../../state/features.js';
-import { FEATURE_SOR_LAB, FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_SOR_LAB, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import { showAlert } from '../../ui/dialogs.js';
 import { buildSweepJob, estimateSweepCost, DEFAULT_SWEEP_POINTS, DEFAULT_PATHS_PER_POINT } from './sweep.js';
 import { getLabConfig, setLabResultStale } from './session.js';
@@ -17,7 +17,7 @@ let pendingSorLabResults = null;
 
 let currentNumCores = 1;
 
-// Sub-workers must be spawned on the main thread (same constraint as SOR Plan).
+// Sub-workers must be spawned on the main thread (same constraint as Withdraw).
 function spawnSubWorkerPorts(numCores, bucket) {
   const masterPorts = [];
   if (numCores <= 1) return masterPorts;
@@ -63,11 +63,11 @@ export function cancelLabRun() {
 export function getLabCostEstimate() {
   const config = getLabConfig();
   if (!config.scenarioRef?.name) {
-    return { error: 'Pick a saved SOR Plan session first.' };
+    return { error: 'Pick a saved Withdraw session first.' };
   }
-  return sessions.load(FEATURE_SOR_PLAN, config.scenarioRef.name).then((loaded) => {
+  return sessions.load(FEATURE_WITHDRAW, config.scenarioRef.name).then((loaded) => {
     if (!loaded?.payload) {
-      return { error: `Could not load Plan session "${config.scenarioRef.name}".` };
+      return { error: `Could not load Withdraw session "${config.scenarioRef.name}".` };
     }
     return estimateSweepCost(loaded.payload, {
       sweepPoints: config.sweepPoints || DEFAULT_SWEEP_POINTS,
@@ -80,20 +80,20 @@ export function getLabCostEstimate() {
 export async function handleLabRunClick() {
   const config = getLabConfig();
   if (!config.scenarioRef?.name) {
-    showAlert('Pick a saved SOR Plan session to analyze.', 'SOR Lab');
+    showAlert('Pick a saved Withdraw session to analyze.', 'SOR Lab');
     return;
   }
 
   let loaded;
   try {
-    loaded = await sessions.load(FEATURE_SOR_PLAN, config.scenarioRef.name);
+    loaded = await sessions.load(FEATURE_WITHDRAW, config.scenarioRef.name);
   } catch (err) {
-    showAlert(`Could not load Plan session: ${err.message}`, 'SOR Lab');
+    showAlert(`Could not load Withdraw session: ${err.message}`, 'SOR Lab');
     return;
   }
   if (!loaded?.payload) {
     showAlert(
-      `Could not find saved Plan session "${config.scenarioRef.name}". Save a scenario in SOR Plan first.`,
+      `Could not find saved Withdraw session "${config.scenarioRef.name}". Save a scenario in Withdraw first.`,
       'SOR Lab',
     );
     return;
@@ -110,7 +110,7 @@ export async function handleLabRunClick() {
       sweepPoints: config.sweepPoints || DEFAULT_SWEEP_POINTS,
       pathsPerPoint: config.pathsPerPoint || DEFAULT_PATHS_PER_POINT,
       envelopeOverrides: config.envelopeOverrides || {},
-      baselineRef: { feature: FEATURE_SOR_PLAN, name: config.scenarioRef.name },
+      baselineRef: { feature: FEATURE_WITHDRAW, name: config.scenarioRef.name },
     });
   } catch (err) {
     showAlert(err?.message || String(err), 'SOR Lab');
@@ -146,7 +146,7 @@ export async function handleLabRunClick() {
             config: {
               ...config,
               seed,
-              scenarioRef: { feature: FEATURE_SOR_PLAN, name: config.scenarioRef.name },
+              scenarioRef: { feature: FEATURE_WITHDRAW, name: config.scenarioRef.name },
             },
           });
         } catch (err) {

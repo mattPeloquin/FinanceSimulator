@@ -331,7 +331,7 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   const useMeanYearly = isMeanYearlyMetric(metric);
   const taxActive = !!result.withdrawalTaxActive;
   const feeOrTaxActive = taxActive || !!result.advisorFeeActive;
-  const plannedBenchmark = result.onPlanBenchmark
+  const plannedBenchmark = result.onTargetBenchmark
     ?? (useMedianYearly ? result.plannedMedianYearly : useMeanYearly ? result.plannedMeanYearly : result.plannedWithdrawn);
   const cardSpend = spendingCardValues(result, { taxActive });
   const medianActual = earlyWeighted
@@ -351,7 +351,7 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
         ? cardSpend.grossMeanYearly
         : cardSpend.grossTotal;
   const plannedGrossBenchmark = earlyWeighted
-    ? (result.onPlanGrossBenchmark
+    ? (result.onTargetGrossBenchmark
       ?? (useMeanYearly ? cardSpend.plannedGrossMeanYearly : cardSpend.plannedGrossTotal))
     : useMedianYearly
       ? cardSpend.plannedGrossMedianYearly
@@ -382,12 +382,12 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
   };
   const chartYears = result.maxYears ?? result.numYears;
   const tolerancePct = Math.round((result.shortfallTolerance ?? 0.05) * 100);
-  const onPlanMeasure = result.onPlanMeasure || 'blend';
-  const onPlanLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
-  if (onPlanLabel) {
-    onPlanLabel.textContent = `Within ${tolerancePct}% of plan`;
+  const onTargetMeasure = result.onTargetMeasure || 'blend';
+  const onTargetLabel = document.getElementById('withdrawalTargetSuccessRateLabel');
+  if (onTargetLabel) {
+    onTargetLabel.textContent = `Within ${tolerancePct}% of plan`;
   }
-  const onPlanCard = onPlanLabel?.closest('.rounded-lg');
+  const onPlanCard = onTargetLabel?.closest('.rounded-lg');
   if (onPlanCard) {
     const lifetimeLens = earlyWeighted
       ? `early-weighted spending vs early-weighted plan`
@@ -396,9 +396,9 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
         : useMeanYearly
           ? `mean yearly withdrawal vs planned mean per year`
           : `total withdrawn vs planned schedule`;
-    const measureNote = onPlanMeasure === 'yearly'
+    const measureNote = onTargetMeasure === 'yearly'
       ? `Share of runs whose weighted year-hit rate (spend each year within ${tolerancePct}% of that year's plan) cleared the Plan Risk Tolerance floor`
-      : onPlanMeasure === 'lifetime'
+      : onTargetMeasure === 'lifetime'
         ? `Share of runs whose ${lifetimeLens} reached at least ${100 - tolerancePct}% of plan`
         : `Share of runs whose blend of ${lifetimeLens} and yearly path quality cleared the Plan Risk Tolerance floor (Blend shifts toward lifetime as Plan RT rises)`;
     onPlanCard.title = measureNote;
@@ -412,7 +412,7 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
     'withdrawalTargetSuccessRate',
     result.withdrawalTargetSuccessRate == null ? '—' : formatPercent(result.withdrawalTargetSuccessRate, 0),
   );
-  setNoteVisible('onPlanTaxNote', taxActive);
+  setNoteVisible('onTargetTaxNote', taxActive);
 
   const [secondarySlot1, secondarySlot2] = secondaryMetricSlots(metric);
   setText('medianBalance', formatK(result.medianBalance));
@@ -540,12 +540,12 @@ export function renderResults(result, params, { goalSeekWarning, fourPercentComp
         seed: result.seed,
         surfaceMeta: result.surfaceMeta,
         shortfallTolerance: result.shortfallTolerance ?? 0.05,
-        onPlanMeasure: result.onPlanMeasure ?? 'blend',
-        onPlanYearlyEmphasisPct: result.onPlanYearlyEmphasisPct ?? 100,
-        onPlanYearlyLateFloorPct: result.onPlanYearlyLateFloorPct ?? 100,
+        onTargetMeasure: result.onTargetMeasure ?? 'blend',
+        onTargetYearlyEmphasisPct: result.onTargetYearlyEmphasisPct ?? 100,
+        onTargetYearlyLateFloorPct: result.onTargetYearlyLateFloorPct ?? 100,
         plannedWithdrawn: result.plannedWithdrawn,
         plannedMedianYearly: result.plannedMedianYearly,
-        onPlanBenchmark: plannedBenchmark,
+        onTargetBenchmark: plannedBenchmark,
         withdrawalMetric: result.withdrawalMetric ?? 'total',
         horizonVariable: !!result.horizonVariable,
       });

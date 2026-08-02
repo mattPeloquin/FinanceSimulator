@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { spendingCardValues, percentileSpendingValues } from '../src/features/sor-plan/ui/results.js';
+import { spendingCardValues, percentileSpendingValues } from '../src/features/withdraw/ui/results.js';
 
 describe('spendingCardValues', () => {
   const result = {

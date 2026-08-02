@@ -7,7 +7,7 @@ export { APP_PREFS_KEY };
 
 export const DEFAULT_APP_PREFS = Object.freeze({
   theme: null, // null → follow system; otherwise 'light' | 'dark'
-  activeFeature: 'sor-plan',
+  activeFeature: 'withdraw',
 });
 
 function structuredCloneDefaults() {

@@ -1,7 +1,7 @@
 // SOR Lab configuration panel: scenario picker, fidelity, variable envelopes.
 
 import * as sessions from '../../../state/sessions.js';
-import { FEATURE_SOR_PLAN } from '../../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
 import {
   getLabConfig,
   patchLabConfig,
@@ -26,14 +26,14 @@ async function refreshScenarioPicker() {
   if (!select) return;
   let listed;
   try {
-    listed = await sessions.list(FEATURE_SOR_PLAN);
+    listed = await sessions.list(FEATURE_WITHDRAW);
   } catch {
     listed = [];
   }
   if (!Array.isArray(listed)) listed = [];
   const config = getLabConfig();
   const current = config.scenarioRef?.name || '';
-  const options = ['<option value="">Select a saved Plan session…</option>'];
+  const options = ['<option value="">Select a saved Withdraw session…</option>'];
   for (const s of listed) {
     const selected = s.name === current ? ' selected' : '';
     options.push(`<option value="${escapeAttr(s.name)}"${selected}>${escapeHtml(s.name)}</option>`);
@@ -61,17 +61,17 @@ async function renderVariableList() {
   if (!host) return;
   const config = getLabConfig();
   if (!config.scenarioRef?.name) {
-    host.innerHTML = '<p class="text-xs text-theme-muted">Pick a Plan session to see sweep variables.</p>';
+    host.innerHTML = '<p class="text-xs text-theme-muted">Pick a Withdraw session to see sweep variables.</p>';
     return;
   }
   let loaded;
   try {
-    loaded = await sessions.load(FEATURE_SOR_PLAN, config.scenarioRef.name);
+    loaded = await sessions.load(FEATURE_WITHDRAW, config.scenarioRef.name);
   } catch {
     loaded = null;
   }
   if (!loaded?.payload) {
-    host.innerHTML = '<p class="text-xs text-theme-muted">Could not load that Plan session.</p>';
+    host.innerHTML = '<p class="text-xs text-theme-muted">Could not load that Withdraw session.</p>';
     return;
   }
 
@@ -141,7 +141,7 @@ async function refreshCostEstimate() {
   }
   let loaded;
   try {
-    loaded = await sessions.load(FEATURE_SOR_PLAN, config.scenarioRef.name);
+    loaded = await sessions.load(FEATURE_WITHDRAW, config.scenarioRef.name);
   } catch {
     el.textContent = '';
     return;
@@ -199,7 +199,7 @@ export function bindLabConfig() {
   document.getElementById('sor-lab-scenario')?.addEventListener('change', async (e) => {
     const name = e.target.value;
     patchLabConfig({
-      scenarioRef: name ? { feature: FEATURE_SOR_PLAN, name } : null,
+      scenarioRef: name ? { feature: FEATURE_WITHDRAW, name } : null,
     });
     markStaleAndRefresh();
     await renderVariableList();

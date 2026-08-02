@@ -20,7 +20,7 @@ import { toDollars } from '../src/state/scenario.js';
 import {
   buildMarketAdjPreviewSeries,
   buildMarketAdjAnchorPoints,
-} from '../src/features/sor-plan/ui/charts/withdrawalAdjPreview.js';
+} from '../src/features/withdraw/ui/charts/withdrawalAdjPreview.js';
 
 const defaultDynConfig = {
   low: { ret: -15, adj: -50_000 },

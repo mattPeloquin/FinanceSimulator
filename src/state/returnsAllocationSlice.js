@@ -169,7 +169,7 @@ export function pickReturnsAllocationSlice(state) {
 /**
  * Project a flat Plan-style scenario onto the shared slice shape.
  */
-export function sliceFromPlanScenario(scenario) {
+export function sliceFromWithdrawScenario(scenario) {
   const allocation = normalizeAllocationPct(scenario);
   return normalizeReturnsAllocationSlice({
     startYear: scenario?.startYear,

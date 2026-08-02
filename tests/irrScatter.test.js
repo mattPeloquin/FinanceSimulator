@@ -5,7 +5,7 @@ import {
   chooseIrrScatterTooltipPosition,
   irrScatterVisibleCount,
   irrScatterZoomScale,
-} from '../src/features/sor-plan/ui/charts/irrScatter.js';
+} from '../src/features/withdraw/ui/charts/irrScatter.js';
 
 function scatterFromPoints(points, requiredIrr = null) {
   const n = points.length;

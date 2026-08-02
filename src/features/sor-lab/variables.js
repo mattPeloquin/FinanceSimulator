@@ -1,6 +1,6 @@
 // SOR Lab sweep variable registry.
 //
-// Each entry declares how to read a baseline value from a SOR Plan scenario,
+// Each entry declares how to read a baseline value from a Withdraw scenario,
 // the wide default envelope to sweep, and how to apply a swept value back onto
 // a scenario clone. Envelopes are deliberately wide because widening later
 // costs a re-run; the UI lets users narrow ranges for display or override
@@ -10,8 +10,8 @@
 //   CRN-hostile plumbing: blockSize, distMethod, startYear/endYear,
 //     scaledHistoricalSmoothing (crossing zero gates extra RNG draws/year)
 //   Run mechanics: randomSeed, numSimulations, smoothWindowPct, parallelCores
-//   Grading / search yardsticks: planRiskTolerancePct, withdrawalMetric,
-//     onPlanMeasure, onPlanYearly*, earlyWeight*, all goalSeek*, preset*
+//   Grading / search yardsticks: withdrawRiskTolerancePct, withdrawalMetric,
+//     onTargetMeasure, onTargetYearly*, earlyWeight*, all goalSeek*, preset*
 
 import {
   ALLOCATION_KEYS,
@@ -218,7 +218,7 @@ export const LAB_VARIABLES = [
     category: 'decision',
     unit: '$000s',
     isLive: (s) => num(s.startBalance) > 0,
-    gateReason: () => 'Enter a starting portfolio in the Plan scenario',
+    gateReason: () => 'Enter a starting portfolio in the Withdraw scenario',
     baselineValue: (s) => num(s.startBalance),
     defaultEnvelope: (s) => scaleAround(num(s.startBalance), 0.7, 1.3),
     apply: (s, v) => {
@@ -269,7 +269,7 @@ export const LAB_VARIABLES = [
     category: 'decision',
     unit: '%',
     isLive: (s) => !!s.enableFeesTaxes,
-    gateReason: () => 'Enable Fees & Taxes in the Plan scenario',
+    gateReason: () => 'Enable Fees & Taxes in the Withdraw scenario',
     baselineValue: (s) => num(s.advisorFeePct),
     defaultEnvelope: () => ({ low: 0, high: 1.5 }),
     apply: (s, v) => {
@@ -290,7 +290,7 @@ export const LAB_VARIABLES = [
     isLive: (s) => isBaseStrategy(s) && num(s.baseWithdrawal) > 0,
     gateReason: (s) => (isSpecificStrategy(s)
       ? 'Base strategy only (this Plan uses a Specific List)'
-      : 'Set a base withdrawal in the Plan scenario'),
+      : 'Set a base withdrawal in the Withdraw scenario'),
     baselineValue: (s) => num(s.baseWithdrawal),
     defaultEnvelope: (s) => scaleAround(num(s.baseWithdrawal), 0.7, 1.3, { minAbs: 1 }),
     apply: (s, v) => {
@@ -390,7 +390,7 @@ export const LAB_VARIABLES = [
       const floors = normalizeWithdrawalFloors(s.withdrawalFloors);
       return floors.length > 0 && floors.some((f) => num(f.amount) > 0);
     },
-    gateReason: () => 'Add a minimum-withdrawal floor in the Plan scenario',
+    gateReason: () => 'Add a minimum-withdrawal floor in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.5, high: 1.5 }),
     apply: (s, v) => {
@@ -565,7 +565,7 @@ export const LAB_VARIABLES = [
     unit: '$000s',
     isLive: (s) => !!s.enableDynamicAdjustments
       && s.dynNoCutBal != null && s.dynNoCutBal !== '',
-    gateReason: () => 'Set a no-cut balance in the Plan scenario',
+    gateReason: () => 'Set a no-cut balance in the Withdraw scenario',
     baselineValue: (s) => num(s.dynNoCutBal),
     defaultEnvelope: (s) => {
       const start = Math.max(num(s.startBalance), 1);
@@ -586,7 +586,7 @@ export const LAB_VARIABLES = [
     category: 'decision',
     unit: '$000s',
     isLive: (s) => hasGlideTarget(s),
-    gateReason: () => 'Set a glide-path target in the Plan scenario',
+    gateReason: () => 'Set a glide-path target in the Withdraw scenario',
     baselineValue: (s) => num(s.glideTarget),
     defaultEnvelope: (s) => {
       const start = Math.max(num(s.startBalance), 1);
@@ -708,7 +708,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: 'pp',
     isLive: (s) => EQUITY_MEAN_KEYS.some((k) => s[k] != null && s[k] !== ''),
-    gateReason: () => 'Fill return profiles in the Plan scenario',
+    gateReason: () => 'Fill return profiles in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -3, high: 3 }),
     apply: (s, v) => applyOffsetToKeys(s, EQUITY_MEAN_KEYS, v),
@@ -720,7 +720,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: 'pp',
     isLive: (s) => s.bondReturnMean != null && s.bondReturnMean !== '',
-    gateReason: () => 'Fill bond return profile in the Plan scenario',
+    gateReason: () => 'Fill bond return profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 2 }),
     apply: (s, v) => applyOffsetToKeys(s, ['bondReturnMean'], v),
@@ -732,7 +732,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: 'pp',
     isLive: (s) => s.cashReturnMean != null && s.cashReturnMean !== '',
-    gateReason: () => 'Fill cash return profile in the Plan scenario',
+    gateReason: () => 'Fill cash return profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 2 }),
     apply: (s, v) => applyOffsetToKeys(s, ['cashReturnMean'], v),
@@ -744,7 +744,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: '×',
     isLive: (s) => EQUITY_STD_KEYS.some((k) => s[k] != null && s[k] !== ''),
-    gateReason: () => 'Fill equity volatility profiles in the Plan scenario',
+    gateReason: () => 'Fill equity volatility profiles in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.7, high: 1.4 }),
     apply: (s, v) => applyScaleToKeys(s, EQUITY_STD_KEYS, v),
@@ -756,7 +756,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: '×',
     isLive: (s) => s.bondReturnStdDev != null && s.bondReturnStdDev !== '',
-    gateReason: () => 'Fill bond volatility profile in the Plan scenario',
+    gateReason: () => 'Fill bond volatility profile in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.7, high: 1.4 }),
     apply: (s, v) => applyScaleToKeys(s, ['bondReturnStdDev'], v),
@@ -768,7 +768,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: 'pp',
     isLive: (s) => s.inflationMean != null && s.inflationMean !== '',
-    gateReason: () => 'Fill inflation profile in the Plan scenario',
+    gateReason: () => 'Fill inflation profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 3 }),
     apply: (s, v) => applyOffsetToKeys(s, ['inflationMean'], v),
@@ -780,7 +780,7 @@ export const LAB_VARIABLES = [
     category: 'uncertainty',
     unit: '×',
     isLive: (s) => s.inflationStdDev != null && s.inflationStdDev !== '',
-    gateReason: () => 'Fill inflation volatility in the Plan scenario',
+    gateReason: () => 'Fill inflation volatility in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.7, high: 1.5 }),
     apply: (s, v) => applyScaleToKeys(s, ['inflationStdDev'], v),
@@ -815,7 +815,7 @@ export const LAB_VARIABLES = [
     category: 'decision',
     unit: '×',
     isLive: (s) => normalizeGiftingTiers(s.giftingTiers).length > 0,
-    gateReason: () => 'Add gifting tiers in the Plan scenario',
+    gateReason: () => 'Add gifting tiers in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0, high: 2 }),
     apply: (s, v) => {
@@ -834,7 +834,7 @@ export const LAB_VARIABLES = [
     category: 'decision',
     unit: '×',
     isLive: (s) => normalizeGiftingTiers(s.giftingTiers).length > 0,
-    gateReason: () => 'Add gifting tiers in the Plan scenario',
+    gateReason: () => 'Add gifting tiers in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.6, high: 1.4 }),
     apply: (s, v) => {

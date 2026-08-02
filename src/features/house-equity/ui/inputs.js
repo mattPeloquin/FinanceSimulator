@@ -1,7 +1,7 @@
 // House Equity config panel — DOM ↔ session + Easy Mode + Plan picker.
 
 import * as sessions from '../../../state/sessions.js';
-import { FEATURE_SOR_PLAN } from '../../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
 import { getHouseEquityPresets } from '../presets.js';
 import {
   getHouseEquityState,
@@ -68,7 +68,7 @@ export async function refreshHouseEquityScenarioPicker() {
   const current = getHouseEquityState().scenarioRef?.name || '';
   let names;
   try {
-    names = await sessions.list(FEATURE_SOR_PLAN);
+    names = await sessions.list(FEATURE_WITHDRAW);
   } catch {
     names = [];
   }
@@ -162,7 +162,7 @@ export function syncHouseEquityFormToState() {
     cashOutLtv: readNum('house-equity-cashout-ltv', 70),
     cashOutRate: readNum('house-equity-cashout-rate', 6.5),
     scenarioRef: scenarioName
-      ? { feature: FEATURE_SOR_PLAN, name: scenarioName }
+      ? { feature: FEATURE_WITHDRAW, name: scenarioName }
       : null,
   });
 }

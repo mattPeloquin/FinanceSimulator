@@ -1,5 +1,5 @@
 import { registerFeature } from '../../state/features.js';
-import { FEATURE_SOR_PLAN } from '../../state/storageKeys.js';
+import { FEATURE_WITHDRAW } from '../../state/storageKeys.js';
 import { loadAutosave } from '../../state/persistence.js';
 import {
   writeScenarioToDom,
@@ -20,7 +20,7 @@ import {
   toggleFeesTaxes,
   toggleGoalSeekMode,
   syncEarlyWeightPreview,
-  syncOnPlanYearlyPreview,
+  syncOnTargetYearlyPreview,
 } from './ui/inputs.js';
 import { setupRiskPresetControl, syncRiskPresetUi } from './ui/riskPreset.js';
 import { setupBalanceLogScaleControl } from './ui/charts/timeline.js';
@@ -43,7 +43,7 @@ import {
   scheduleHistoryUpdate,
   markProfilesEdited,
 } from './history.js';
-import { handleRunClick, cancelSimulation, flushPendingSorPlanResults } from './run.js';
+import { handleRunClick, cancelSimulation, flushPendingWithdrawResults } from './run.js';
 import {
   applyScenario,
   scheduleAutosave,
@@ -61,10 +61,10 @@ function getDefaultCoreUsage() {
   return 'low';
 }
 
-async function initPlanDom() {
+async function initWithdrawDom() {
   initHistory({ onAutosave: scheduleAutosave });
 
-  registerSessionAdapter(FEATURE_SOR_PLAN, {
+  registerSessionAdapter(FEATURE_WITHDRAW, {
     getState: () => readScenarioFromDom(),
     applyState: (state) => applyScenario(state),
     stateVersion: SCHEMA_VERSION,
@@ -97,7 +97,7 @@ async function initPlanDom() {
   });
   initReport();
   syncEarlyWeightPreview();
-  syncOnPlanYearlyPreview();
+  syncOnTargetYearlyPreview();
   setupBalanceLogScaleControl();
 
   setupRiskPresetControl({ onChange: scheduleAutosave });
@@ -149,19 +149,19 @@ async function initPlanDom() {
   flushAutosave();
 }
 
-export function registerSorPlan() {
+export function registerWithdraw() {
   registerFeature({
-    id: FEATURE_SOR_PLAN,
-    title: 'SOR Plan',
-    rootId: 'feature-sor-plan',
+    id: FEATURE_WITHDRAW,
+    title: 'Withdraw',
+    rootId: 'feature-withdraw',
     placement: 'primary',
-    init: initPlanDom,
+    init: initWithdrawDom,
     onActivate() {
-      flushPendingSorPlanResults();
-      void restoreSessionUi(FEATURE_SOR_PLAN);
+      flushPendingWithdrawResults();
+      void restoreSessionUi(FEATURE_WITHDRAW);
     },
     onDeactivate() {
-      snapshotSessionUi(FEATURE_SOR_PLAN);
+      snapshotSessionUi(FEATURE_WITHDRAW);
     },
   });
 }

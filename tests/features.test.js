@@ -21,7 +21,7 @@ describe('feature registry', () => {
     _resetFeaturesForTests();
     document.body.innerHTML = `
       <nav id="feature-tabs"></nav>
-      <div id="feature-sor-plan"></div>
+      <div id="feature-withdraw"></div>
       <div id="feature-accumulation" class="hidden"></div>
       <div id="feature-other" class="hidden"></div>
     `;
@@ -34,15 +34,15 @@ describe('feature registry', () => {
 
   function registerPlanAccumAndMore() {
     registerFeature({
-      id: 'sor-plan',
-      title: 'SOR Plan',
-      rootId: 'feature-sor-plan',
-      placement: 'primary',
-    });
-    registerFeature({
       id: 'accumulation',
       title: 'Accumulation',
       rootId: 'feature-accumulation',
+      placement: 'primary',
+    });
+    registerFeature({
+      id: 'withdraw',
+      title: 'Withdraw',
+      rootId: 'feature-withdraw',
       placement: 'primary',
     });
     registerFeature({
@@ -55,30 +55,30 @@ describe('feature registry', () => {
 
   it('registers features and lists them in order', () => {
     registerPlanAccumAndMore();
-    expect(listFeatures().map((f) => f.id)).toEqual(['sor-plan', 'accumulation', 'other']);
-    expect(getFeature('sor-plan').title).toBe('SOR Plan');
+    expect(listFeatures().map((f) => f.id)).toEqual(['accumulation', 'withdraw', 'other']);
+    expect(getFeature('withdraw').title).toBe('Withdraw');
     expect(getFeature('missing')).toBeNull();
   });
 
   it('defaults placement to primary and accepts more', () => {
-    registerFeature({ id: 'sor-plan', title: 'SOR Plan', rootId: 'feature-sor-plan' });
+    registerFeature({ id: 'withdraw', title: 'Withdraw', rootId: 'feature-withdraw' });
     registerFeature({
       id: 'other',
       title: 'Other',
       rootId: 'feature-other',
       placement: 'more',
     });
-    expect(getFeature('sor-plan').placement).toBe('primary');
+    expect(getFeature('withdraw').placement).toBe('primary');
     expect(getFeature('other').placement).toBe('more');
-    expect(listFeaturesByPlacement('primary').map((f) => f.id)).toEqual(['sor-plan']);
+    expect(listFeaturesByPlacement('primary').map((f) => f.id)).toEqual(['withdraw']);
     expect(listFeaturesByPlacement('more').map((f) => f.id)).toEqual(['other']);
   });
 
   it('rejects invalid or duplicate ids', () => {
     expect(() => registerFeature({ id: 'Bad_Id', title: 'X', rootId: 'r' })).toThrow();
-    registerFeature({ id: 'sor-plan', title: 'SOR Plan', rootId: 'feature-sor-plan' });
+    registerFeature({ id: 'withdraw', title: 'Withdraw', rootId: 'feature-withdraw' });
     expect(() =>
-      registerFeature({ id: 'sor-plan', title: 'Again', rootId: 'feature-sor-plan' }),
+      registerFeature({ id: 'withdraw', title: 'Again', rootId: 'feature-withdraw' }),
     ).toThrow(/duplicate/);
   });
 
@@ -91,24 +91,25 @@ describe('feature registry', () => {
     const bar = document.getElementById('feature-tabs');
     expect(bar.classList.contains('feature-tab-bar')).toBe(true);
     const tabs = document.querySelectorAll('#feature-tabs [role="tab"]');
-    // Plan, Accumulation, More button
+    // Accumulation, Withdraw, More button
     expect(tabs).toHaveLength(3);
-    expect(tabs[0].textContent).toContain('SOR Plan');
+    expect(tabs[0].textContent).toContain('Accumulation');
     expect(tabs[0].classList.contains('feature-tab')).toBe(true);
-    expect(tabs[0].dataset.featureId).toBe('sor-plan');
-    expect(tabs[1].dataset.featureId).toBe('accumulation');
+    expect(tabs[0].dataset.featureId).toBe('accumulation');
+    expect(tabs[1].dataset.featureId).toBe('withdraw');
+    expect(tabs[1].textContent).toContain('Withdraw');
     expect(document.getElementById('feature-more-button')).toBeTruthy();
     expect(document.getElementById('feature-more-button').getAttribute('aria-selected')).toBe(
       'true',
     );
     expect(document.getElementById('feature-more-button').textContent).toContain('Other');
     expect(getActiveFeature().id).toBe('other');
-    expect(document.getElementById('feature-sor-plan').classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('feature-withdraw').classList.contains('hidden')).toBe(true);
     expect(document.getElementById('feature-other').classList.contains('hidden')).toBe(false);
   });
 
   it('always renders More even when no more features are registered', () => {
-    registerFeature({ id: 'sor-plan', title: 'SOR Plan', rootId: 'feature-sor-plan' });
+    registerFeature({ id: 'withdraw', title: 'Withdraw', rootId: 'feature-withdraw' });
     mountFeatureTabs(document.getElementById('feature-tabs'));
     expect(document.getElementById('feature-more-button')).toBeTruthy();
     expect(document.getElementById('feature-more-menu').textContent).toContain(
@@ -144,9 +145,9 @@ describe('feature registry', () => {
   it('setActiveFeature persists and toggles roots / hooks', () => {
     const calls = { planOn: 0, planOff: 0, otherOn: 0, otherOff: 0 };
     registerFeature({
-      id: 'sor-plan',
-      title: 'SOR Plan',
-      rootId: 'feature-sor-plan',
+      id: 'withdraw',
+      title: 'Withdraw',
+      rootId: 'feature-withdraw',
       onActivate: () => {
         calls.planOn += 1;
       },
@@ -168,7 +169,7 @@ describe('feature registry', () => {
     });
 
     mountFeatureTabs(document.getElementById('feature-tabs'));
-    expect(getActiveFeature().id).toBe('sor-plan');
+    expect(getActiveFeature().id).toBe('withdraw');
     expect(calls.planOn).toBe(1);
 
     setActiveFeature('other');
@@ -182,13 +183,13 @@ describe('feature registry', () => {
     registerPlanAccumAndMore();
     mountFeatureTabs(document.getElementById('feature-tabs'));
 
-    setFeatureBadge('sor-plan', { busy: true, progress: 42 });
-    expect(getFeatureBadge('sor-plan')).toEqual({ busy: true, progress: 42 });
-    const planBadge = document.querySelector('#tab-sor-plan .feature-tab-badge');
+    setFeatureBadge('withdraw', { busy: true, progress: 42 });
+    expect(getFeatureBadge('withdraw')).toEqual({ busy: true, progress: 42 });
+    const planBadge = document.querySelector('#tab-withdraw .feature-tab-badge');
     expect(planBadge.classList.contains('hidden')).toBe(false);
     expect(planBadge.textContent).toBe('42%');
 
-    setFeatureBadge('sor-plan', { busy: false });
+    setFeatureBadge('withdraw', { busy: false });
     expect(planBadge.classList.contains('hidden')).toBe(true);
 
     setFeatureBadge('other', { busy: true, progress: 17 });
@@ -206,10 +207,10 @@ describe('feature registry', () => {
   it('initFeatures calls each feature init once', async () => {
     const seen = [];
     registerFeature({
-      id: 'sor-plan',
-      title: 'SOR Plan',
-      rootId: 'feature-sor-plan',
-      init: (ctx) => seen.push(['sor-plan', ctx.ok]),
+      id: 'withdraw',
+      title: 'Withdraw',
+      rootId: 'feature-withdraw',
+      init: (ctx) => seen.push(['withdraw', ctx.ok]),
     });
     registerFeature({
       id: 'other',
@@ -220,7 +221,7 @@ describe('feature registry', () => {
     });
     await initFeatures({ ok: true });
     expect(seen).toEqual([
-      ['sor-plan', true],
+      ['withdraw', true],
       ['other', true],
     ]);
   });

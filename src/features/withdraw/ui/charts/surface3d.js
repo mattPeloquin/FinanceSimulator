@@ -14,7 +14,7 @@ import {
   ranksForPercentileWindow,
 } from '../../../../core/surfaceDrilldown.js';
 import {
-  meetsOnPlanBlend,
+  meetsOnTargetBlend,
   weightedYearHitRateFromSeries,
   median,
   isMedianYearlyMetric,
@@ -129,12 +129,12 @@ const surfaceState = {
   drilldownHi: null,
   lastContext: null,
   shortfallTolerance: 0.05,
-  onPlanMeasure: 'blend',
-  onPlanYearlyEmphasisPct: 100,
-  onPlanYearlyLateFloorPct: 100,
+  onTargetMeasure: 'blend',
+  onTargetYearlyEmphasisPct: 100,
+  onTargetYearlyLateFloorPct: 100,
   plannedWithdrawn: 0,
   plannedMedianYearly: 0,
-  onPlanBenchmark: 0,
+  onTargetBenchmark: 0,
   withdrawalMetric: 'total',
   horizonVariable: false,
   // View prefs (survive re-runs, like the heatmap controls)
@@ -219,23 +219,23 @@ function pathActualWithdrawal(path, withdrawalMetric) {
 
 function pathBelowPlan(path, actualWithdrawn, plannedBenchmark, shortfallTolerance) {
   if (plannedBenchmark <= 0) return false;
-  const measure = surfaceState.onPlanMeasure || 'blend';
+  const measure = surfaceState.onTargetMeasure || 'blend';
   const h = path.horizonYears ?? path.withdrawals?.length ?? 0;
   const portfolio = surfaceState.simParams?.portfolio;
   let yearHitRate = 1;
   if (measure !== 'lifetime' && portfolio && h > 0 && path.withdrawals) {
-    const planByYear = plannedYearlySchedule(portfolio, h);
+    const targetByYear = plannedYearlySchedule(portfolio, h);
     yearHitRate = weightedYearHitRateFromSeries(
       path.withdrawals,
-      planByYear,
+      targetByYear,
       shortfallTolerance,
       {
-        earlyEmphasisPct: surfaceState.onPlanYearlyEmphasisPct ?? 100,
-        lateFloorPct: surfaceState.onPlanYearlyLateFloorPct ?? 100,
+        earlyEmphasisPct: surfaceState.onTargetYearlyEmphasisPct ?? 100,
+        lateFloorPct: surfaceState.onTargetYearlyLateFloorPct ?? 100,
       },
     );
   }
-  return !meetsOnPlanBlend(actualWithdrawn ?? 0, plannedBenchmark, shortfallTolerance, {
+  return !meetsOnTargetBlend(actualWithdrawn ?? 0, plannedBenchmark, shortfallTolerance, {
     measure,
     yearHitRate,
   });
@@ -1701,12 +1701,12 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
     seed = 0,
     surfaceMeta = null,
     shortfallTolerance = 0.05,
-    onPlanMeasure = 'blend',
-    onPlanYearlyEmphasisPct = 100,
-    onPlanYearlyLateFloorPct = 100,
+    onTargetMeasure = 'blend',
+    onTargetYearlyEmphasisPct = 100,
+    onTargetYearlyLateFloorPct = 100,
     plannedWithdrawn = 0,
     plannedMedianYearly = 0,
-    onPlanBenchmark = 0,
+    onTargetBenchmark = 0,
     withdrawalMetric = 'total',
     horizonVariable = false,
   } = context;
@@ -1717,12 +1717,12 @@ export async function drawSurfaceChart(surfacePaths, numYears, context = {}) {
   surfaceState.seed = seed;
   surfaceState.surfaceMeta = surfaceMeta;
   surfaceState.shortfallTolerance = shortfallTolerance;
-  surfaceState.onPlanMeasure = onPlanMeasure;
-  surfaceState.onPlanYearlyEmphasisPct = onPlanYearlyEmphasisPct;
-  surfaceState.onPlanYearlyLateFloorPct = onPlanYearlyLateFloorPct;
+  surfaceState.onTargetMeasure = onTargetMeasure;
+  surfaceState.onTargetYearlyEmphasisPct = onTargetYearlyEmphasisPct;
+  surfaceState.onTargetYearlyLateFloorPct = onTargetYearlyLateFloorPct;
   surfaceState.plannedWithdrawn = plannedWithdrawn;
   surfaceState.plannedMedianYearly = plannedMedianYearly;
-  surfaceState.onPlanBenchmark = onPlanBenchmark;
+  surfaceState.onTargetBenchmark = onTargetBenchmark;
   surfaceState.withdrawalMetric = withdrawalMetric;
   surfaceState.horizonVariable = horizonVariable;
   surfaceState.drilldownCenterRank = null;

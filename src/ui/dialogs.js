@@ -1,4 +1,4 @@
-// Small helpers around the shared <dialog> elements in partials/shared/dialogs.html.
+// Small helpers around the shared <dialog> elements in partials/dialogs.html.
 
 // Open a dialog with button/keyboard handlers that are automatically removed
 // when the dialog closes, so re-opening it never stacks duplicate listeners.

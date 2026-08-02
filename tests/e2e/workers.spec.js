@@ -20,7 +20,7 @@ test('High core-usage parallel workers complete a simulation in dev', async ({ p
   // cache and can hang after HMR until the browser process is killed.
   const workerImport = await page.evaluate(async () => {
     // Worker factory lives on the Plan run module (main.js is a thin bootstrap).
-    const text = await (await fetch('/src/features/sor-plan/run.js')).text();
+    const text = await (await fetch('/src/features/withdraw/run.js')).text();
     const match = text.match(/SimulationWorker from ["']([^"']+)["']/);
     return match ? match[1] : '';
   });
@@ -37,7 +37,7 @@ test('High core-usage parallel workers complete a simulation in dev', async ({ p
   await expect(page.locator('#loadingIndicator')).toBeHidden();
 });
 
-test('SOR Plan run survives switching to Lab and charts have size on return', async ({ page }) => {
+test('Withdraw run survives switching to Lab and charts have size on return', async ({ page }) => {
   test.slow();
   await page.goto('/');
   await disableGoalSeek(page);
@@ -51,11 +51,11 @@ test('SOR Plan run survives switching to Lab and charts have size on return', as
   await page.click('#feature-more-button');
   await page.click('#more-item-sor-lab');
   await expect(page.locator('#feature-sor-lab')).toBeVisible();
-  await expect(page.locator('#feature-sor-plan')).toBeHidden();
-  await expect(page.locator('#tab-sor-plan .feature-tab-badge')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#feature-withdraw')).toBeHidden();
+  await expect(page.locator('#tab-withdraw .feature-tab-badge')).toBeVisible({ timeout: 5_000 });
 
-  await page.click('#tab-sor-plan');
-  await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await page.click('#tab-withdraw');
+  await expect(page.locator('#feature-withdraw')).toBeVisible();
   await expect(page.locator('#resultsSection')).toBeVisible({ timeout: 60_000 });
 
   await page.evaluate(() => {

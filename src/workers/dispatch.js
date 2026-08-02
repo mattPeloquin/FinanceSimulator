@@ -4,8 +4,8 @@
 import { ParallelPool } from './parallelPool.js';
 import { handleConnect } from './handlers/connect.js';
 import { handleChunk } from './handlers/chunk.js';
-import { handlePlanRun } from './handlers/planRun.js';
-import { handlePlanGoalSeek } from './handlers/planGoalSeek.js';
+import { handleWithdrawRun } from './handlers/withdrawRun.js';
+import { handleWithdrawGoalSeek } from './handlers/withdrawGoalSeek.js';
 import { handleSensitivity } from './handlers/sensitivity.js';
 import { handleAccumulation } from './handlers/accumulation.js';
 import { handleSsTiming } from './handlers/ssTiming.js';
@@ -18,8 +18,8 @@ const NO_POOL_TYPES = new Set(['connect', 'chunk']);
 export const HANDLERS = {
   connect: handleConnect,
   chunk: handleChunk,
-  run: handlePlanRun,
-  goalSeek: handlePlanGoalSeek,
+  withdraw: handleWithdrawRun,
+  withdrawGoalSeek: handleWithdrawGoalSeek,
   sensitivity: handleSensitivity,
   accumulation: handleAccumulation,
   ssTiming: handleSsTiming,

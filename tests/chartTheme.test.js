@@ -10,7 +10,7 @@ import {
   largeWithdrawalLegendOptions,
   withdrawalAmountRows,
   withdrawalComparisonDatasets,
-} from '../src/features/sor-plan/ui/charts/surface3d.js';
+} from '../src/features/withdraw/ui/charts/surface3d.js';
 
 describe('sampleRunTooltipXAlign', () => {
   const area = { left: 10, right: 110 };

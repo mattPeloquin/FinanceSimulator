@@ -24,13 +24,18 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#appAboutPopover')).toContainText('maximizing utility while alive');
   await page.keyboard.press('Escape');
   await expect(page.locator('#appAboutPopover')).toBeHidden();
-  // Primary Plan + Accumulation + More control (Lab + SS + Roth + House Equity under More).
+  // Primary Accumulation | Withdraw | More (Lab + SS + Roth + House Equity under More).
   await expect(page.locator('#feature-tabs [role="tab"]')).toHaveCount(3);
-  await expect(page.locator('#tab-sor-plan')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#tab-sor-plan')).toContainText('SOR Plan');
   await expect(page.locator('#tab-accumulation')).toContainText('Accumulation');
+  await expect(page.locator('#tab-withdraw')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#tab-withdraw')).toContainText('Withdraw');
+  // Tab order: Accumulation, then Withdraw (middle), then More.
+  const tabOrder = await page.locator('#feature-tabs [role="tab"]').evaluateAll(
+    (els) => els.map((el) => el.id),
+  );
+  expect(tabOrder).toEqual(['tab-accumulation', 'tab-withdraw', 'feature-more-button']);
   await expect(page.locator('#feature-more-button')).toContainText('More');
-  await expect(page.locator('#feature-sor-plan')).toBeVisible();
+  await expect(page.locator('#feature-withdraw')).toBeVisible();
   await expect(page.locator('#feature-accumulation')).toBeHidden();
   await expect(page.locator('#feature-sor-lab')).toBeHidden();
   await expect(page.locator('#feature-ss-timing')).toBeHidden();
@@ -131,7 +136,7 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#details-simulation-outcomes > summary')).toContainText(
     'Spending, returns, and ending balances',
   );
-  await expect(page.locator('#details-plan-report > summary')).toContainText(
+  await expect(page.locator('#details-withdraw-report > summary')).toContainText(
     'Printable one-page summary',
   );
   await expect(page.locator('#details-withdrawal-heatmap > summary')).toContainText(

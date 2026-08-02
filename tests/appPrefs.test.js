@@ -21,7 +21,7 @@ describe('appPrefs', () => {
   it('normalizeAppPrefs returns defaults for garbage', () => {
     expect(normalizeAppPrefs(null)).toEqual({
       theme: null,
-      activeFeature: 'sor-plan',
+      activeFeature: 'withdraw',
     });
     expect(normalizeAppPrefs('nope').theme).toBeNull();
   });
@@ -42,7 +42,7 @@ describe('appPrefs', () => {
 
   it('replaceAppPrefs overwrites the whole collection', () => {
     saveAppPrefs({ theme: 'dark', activeFeature: 'sor-lab' });
-    replaceAppPrefs({ theme: 'light', activeFeature: 'sor-plan' });
-    expect(loadAppPrefs()).toEqual({ theme: 'light', activeFeature: 'sor-plan' });
+    replaceAppPrefs({ theme: 'light', activeFeature: 'withdraw' });
+    expect(loadAppPrefs()).toEqual({ theme: 'light', activeFeature: 'withdraw' });
   });
 });

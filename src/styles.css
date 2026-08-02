@@ -167,11 +167,11 @@
 
   /* Custom bullet for "Your plan" list items: a small accent-colored diamond
      instead of the default round disc. */
-  #planReport .report-bullet {
+  #withdrawReport .report-bullet {
     position: relative;
     padding-left: 0.85rem;
   }
-  #planReport .report-bullet::before {
+  #withdrawReport .report-bullet::before {
     content: '';
     position: absolute;
     left: 0;
@@ -183,7 +183,7 @@
     transform: rotate(45deg);
   }
   @media print {
-    #planReport .report-bullet::before {
+    #withdrawReport .report-bullet::before {
       background-color: #1e293b;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -267,26 +267,26 @@
     @apply px-3 py-2 text-sm text-theme-faint;
   }
 
-  /* SOR Plan — teal */
-  .feature-tab[data-feature-id='sor-plan'] {
+  /* Withdraw — teal */
+  .feature-tab[data-feature-id='withdraw'] {
     background-color: rgb(13 148 136 / 0.14);
     color: rgb(15 118 110);
   }
-  .feature-tab[data-feature-id='sor-plan']:hover {
+  .feature-tab[data-feature-id='withdraw']:hover {
     background-color: rgb(13 148 136 / 0.24);
   }
-  .feature-tab[data-feature-id='sor-plan'][aria-selected='true'] {
+  .feature-tab[data-feature-id='withdraw'][aria-selected='true'] {
     background-color: rgb(13 148 136);
     color: rgb(255 255 255);
   }
-  .dark .feature-tab[data-feature-id='sor-plan'] {
+  .dark .feature-tab[data-feature-id='withdraw'] {
     background-color: rgb(45 212 191 / 0.12);
     color: rgb(94 234 212);
   }
-  .dark .feature-tab[data-feature-id='sor-plan']:hover {
+  .dark .feature-tab[data-feature-id='withdraw']:hover {
     background-color: rgb(45 212 191 / 0.2);
   }
-  .dark .feature-tab[data-feature-id='sor-plan'][aria-selected='true'] {
+  .dark .feature-tab[data-feature-id='withdraw'][aria-selected='true'] {
     background-color: rgb(20 184 166);
     color: rgb(15 23 42);
   }
@@ -341,16 +341,16 @@
 
   /* More (idle) + fallback for other features — slate */
   .feature-more-button:not([data-feature-id]),
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']) {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']) {
     background-color: rgb(var(--theme-bg-muted));
     color: rgb(var(--theme-text-muted));
   }
   .feature-more-button:not([data-feature-id]):hover,
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']):hover {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']):hover {
     background-color: rgb(var(--theme-bg-subtle));
   }
   .feature-more-button:not([data-feature-id])[aria-selected='true'],
-  .feature-tab:not([data-feature-id='sor-plan']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
     background-color: rgb(var(--theme-bg-control));
     color: rgb(var(--theme-on-accent));
   }
@@ -361,11 +361,11 @@
   body * {
     visibility: hidden;
   }
-  #planReport,
-  #planReport * {
+  #withdrawReport,
+  #withdrawReport * {
     visibility: visible;
   }
-  #planReport {
+  #withdrawReport {
     position: absolute;
     inset: 0 auto auto 0;
     width: 100%;
@@ -373,11 +373,11 @@
     margin: 0;
     max-width: none;
   }
-  #planReport * {
+  #withdrawReport * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  #planReport .report-card {
+  #withdrawReport .report-card {
     break-inside: avoid;
   }
   @page {

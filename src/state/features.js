@@ -3,7 +3,7 @@
 // Primary features are top-level tabs; `more` features live under a More control
 // (button + listbox). Busy badges roll up onto More when a menu feature is running.
 
-import { loadAppPrefs, saveAppPrefs } from './appPrefs.js';
+import { loadAppPrefs, saveAppPrefs, DEFAULT_APP_PREFS } from './appPrefs.js';
 
 /** @typedef {'primary' | 'more'} FeaturePlacement */
 /** @typedef {{ busy?: boolean, progress?: number|null }} FeatureBadge */
@@ -204,10 +204,13 @@ export function mountFeatureTabs(container) {
   tabsContainer.appendChild(createMoreControl(listFeaturesByPlacement('more')));
 
   const prefs = loadAppPrefs();
+  // Prefer persisted tab, then the app default (Withdraw), then first registered.
   const preferred =
     prefs.activeFeature && registry.has(prefs.activeFeature)
       ? prefs.activeFeature
-      : registry.keys().next().value;
+      : registry.has(DEFAULT_APP_PREFS.activeFeature)
+        ? DEFAULT_APP_PREFS.activeFeature
+        : registry.keys().next().value;
   if (preferred) {
     // First paint: do not re-persist (already loaded from storage).
     activeFeatureId = null;

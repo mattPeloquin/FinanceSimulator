@@ -5,20 +5,20 @@ import * as sessions from './state/sessions.js';
 import { mountFeatureTabs, initFeatures } from './state/features.js';
 import { loadAutosave, loadUnsavedStash } from './state/persistence.js';
 import {
-  FEATURE_SOR_PLAN,
+  FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
   FEATURE_ACCUMULATION,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
 } from './state/storageKeys.js';
-import { registerSorPlan } from './features/sor-plan/index.js';
+import { registerWithdraw } from './features/withdraw/index.js';
 import { registerAccumulation } from './features/accumulation/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
 import { registerSsTiming } from './features/ss-timing/index.js';
 import { registerRothConvert } from './features/roth-convert/index.js';
 import { registerHouseEquity } from './features/house-equity/index.js';
-import { restoreUnsavedScenario } from './features/sor-plan/session.js';
+import { restoreUnsavedScenario } from './features/withdraw/session.js';
 import { initAppAbout } from './ui/appAbout.js';
 import {
   seedSessionUi,
@@ -29,9 +29,10 @@ import {
   restoreSessionUi,
 } from './ui/sessionChrome.js';
 
-// Registration order: primary Plan + Accumulation, then More features.
-registerSorPlan();
+// Registration order sets primary tab order: Accumulation | Withdraw | More.
+// Default active tab stays Withdraw (fs:app:prefs / DEFAULT_APP_PREFS).
 registerAccumulation();
+registerWithdraw();
 registerSorLab();
 registerSsTiming();
 registerRothConvert();
@@ -47,7 +48,7 @@ async function init() {
 
     const autosaved = loadAutosave() || {};
     seedSessionUi({
-      [FEATURE_SOR_PLAN]: {
+      [FEATURE_WITHDRAW]: {
         name: autosaved.name || '',
         description: autosaved.description || '',
         lastSelect: autosaved.name || '',
@@ -66,7 +67,7 @@ async function init() {
 
     mountFeatureTabs(document.getElementById('feature-tabs'));
     await initFeatures({});
-    if (getActiveFeatureId() !== FEATURE_SOR_PLAN) {
+    if (getActiveFeatureId() !== FEATURE_WITHDRAW) {
       await restoreSessionUi(getActiveFeatureId());
     }
     initAppAbout();

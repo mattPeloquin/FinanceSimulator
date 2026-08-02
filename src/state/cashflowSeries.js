@@ -2,7 +2,7 @@
 //
 // Yearly signed real-dollar amounts plus metadata. Feature producers attach a
 // series on export/share (envelope field). Consumers (Plan preview / household
-// orchestrator) are reserved for a future plan — not wired into SOR Plan here.
+// orchestrator) are reserved for a future Plan feature — not wired into Withdraw here.
 
 export const CASHFLOW_SERIES_VERSION = 1;
 

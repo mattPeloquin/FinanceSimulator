@@ -11,7 +11,7 @@ const CHART_THUMB_IDS = {
   'details-irr-scatter': 'irrScatterThumb',
   'details-average-timelines': 'averageTimelinesThumb',
   'details-return-distribution': 'returnDistributionThumb',
-  'details-plan-report': 'planReportThumb',
+  'details-withdraw-report': 'withdrawReportThumb',
   // Parent of nested timeline charts — must open for layout when capturing thumbs.
   'details-simulation-outcomes': null,
 };
@@ -169,7 +169,7 @@ export function captureDistributionThumb() {
 export function captureReportThumb() {
   captureCanvasThumb(
     document.getElementById('reportBandCanvas'),
-    'planReportThumb',
+    'withdrawReportThumb',
     { fit: 0.72 },
   );
 }
