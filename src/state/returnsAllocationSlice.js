@@ -1,4 +1,4 @@
-// Shared returns + allocation state slice for Plan, Accumulation, and SS Timing.
+// Shared returns + allocation state slice for Plan, Accumulate, and SS Timing.
 // Pure (no DOM). Features embed this slice or project flat Plan scenario fields
 // into / out of it.
 
@@ -31,7 +31,7 @@ export const DIST_METHODS = [
 
 /**
  * Map legacy / UI aliases onto the canonical distMethod.
- * Accumulation historically used `historical` for bootstrap resampling.
+ * Accumulate historically used `historical` for bootstrap resampling.
  */
 export function canonicalizeDistMethod(raw, fallback = 'lognormal') {
   if (raw === 'historical') return 'resampling';

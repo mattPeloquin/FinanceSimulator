@@ -8,7 +8,7 @@ function destroyChart(canvas) {
 }
 
 /** Draw P10 / P50 / P90 uncertainty cone for Med (and optional Low/High P50 overlays). */
-export function drawAccumulationCone(canvas, result) {
+export function drawAccumulateCone(canvas, result) {
   if (!canvas || !result?.med?.cone) return;
   destroyChart(canvas);
   const theme = getChartTheme();

@@ -1,13 +1,13 @@
-// Accumulation config panel — DOM ↔ session state + Easy Mode presets.
+// Accumulate config panel — DOM ↔ session state + Easy Mode presets.
 
 import {
-  getAccumulationState,
-  patchAccumulationState,
-  applyAccumulationPreset,
-  detachAccumulationPreset,
+  getAccumulateState,
+  patchAccumulateState,
+  applyAccumulatePreset,
+  detachAccumulatePreset,
   ALLOCATION_KEYS,
 } from '../session.js';
-import { getAccumulationPresets } from '../presets.js';
+import { getAccumulatePresets } from '../presets.js';
 import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
 import { createReturnsAllocationUi } from '../../../ui/returnsAllocation/controller.js';
 import { buildAllocationOverTimeSeries, allocationFromConfig } from '../../../core/accumulation.js';
@@ -34,18 +34,18 @@ function readNumber(id, fallback = 0) {
 }
 
 function isPresetAttached() {
-  return !!el('accumulation-preset-active')?.checked;
+  return !!el('accumulate-preset-active')?.checked;
 }
 
 function currentPresetLevel() {
-  const n = parseInt(el('accumulation-preset-level')?.value, 10);
+  const n = parseInt(el('accumulate-preset-level')?.value, 10);
   return [0, 1, 2].includes(n) ? n : 0;
 }
 
 function updatePresetName() {
-  const presets = getAccumulationPresets();
+  const presets = getAccumulatePresets();
   const preset = presets[currentPresetLevel()] || presets[0];
-  const nameEl = el('accumulation-preset-name');
+  const nameEl = el('accumulate-preset-name');
   if (nameEl && preset) {
     nameEl.textContent = `${preset.name} — ${preset.description}`;
   }
@@ -53,31 +53,31 @@ function updatePresetName() {
 
 function updatePresetControlState() {
   const attached = isPresetAttached();
-  const slider = el('accumulation-preset-level');
+  const slider = el('accumulate-preset-level');
   if (slider) slider.disabled = !attached;
-  const control = el('accumulation-preset-control');
+  const control = el('accumulate-preset-control');
   if (control) control.classList.toggle('opacity-50', !attached);
 }
 
 function applyLevelFromSlider() {
-  const presets = getAccumulationPresets();
+  const presets = getAccumulatePresets();
   const preset = presets[currentPresetLevel()];
   if (!preset) return;
   isApplyingPreset = true;
   try {
-    applyAccumulationPreset(preset.id, { keepAttached: true });
-    renderAccumulationForm();
+    applyAccumulatePreset(preset.id, { keepAttached: true });
+    renderAccumulateForm();
   } finally {
     isApplyingPreset = false;
   }
 }
 
 /** Pull the current form into session state. */
-export function syncAccumulationFormToState() {
-  const state = getAccumulationState();
+export function syncAccumulateFormToState() {
+  const state = getAccumulateState();
   const sleeves = {};
   for (const { id } of SLEEVE_META) {
-    const startBalance = readNumber(`accumulation-${id}-start`, 0);
+    const startBalance = readNumber(`accumulate-${id}-start`, 0);
     const tiers = [];
     const rows = document.querySelectorAll(`[data-accum-sleeve="${id}"] [data-accum-tier-row]`);
     rows.forEach((row, index, arr) => {
@@ -93,7 +93,7 @@ export function syncAccumulationFormToState() {
     sleeves[id] = {
       startBalance,
       basis: id === 'afterTax'
-        ? readNumber(`accumulation-${id}-basis`, startBalance)
+        ? readNumber(`accumulate-${id}-basis`, startBalance)
         : startBalance,
       contributionTiers: tiers.length ? tiers : [{ amount: 0, growthPct: 0 }],
     };
@@ -102,7 +102,7 @@ export function syncAccumulationFormToState() {
   const returnsPartial = returnsUi?.readFromDom() || pickReturnsAllocationSlice(state);
 
   const events = [];
-  document.querySelectorAll('#accumulation-events [data-accum-event-row]').forEach((row) => {
+  document.querySelectorAll('#accumulate-events [data-accum-event-row]').forEach((row) => {
     events.push({
       amount: Number(row.querySelector('[data-event-amount]')?.value) || 0,
       startYear: Math.max(1, parseInt(row.querySelector('[data-event-start]')?.value, 10) || 1),
@@ -112,12 +112,12 @@ export function syncAccumulationFormToState() {
     });
   });
 
-  patchAccumulationState({
-    numYears: Math.max(1, readNumber('accumulation-num-years', state.numYears)),
-    afterTaxDragRate: Math.max(0, Math.min(1, readNumber('accumulation-drag', state.afterTaxDragRate))),
-    numSimulations: Number(el('accumulation-paths')?.value) || state.numSimulations,
-    sweepPaths: Number(el('accumulation-sweep-paths')?.value) || state.sweepPaths,
-    exploreWeights: !!el('accumulation-explore-weights')?.checked,
+  patchAccumulateState({
+    numYears: Math.max(1, readNumber('accumulate-num-years', state.numYears)),
+    afterTaxDragRate: Math.max(0, Math.min(1, readNumber('accumulate-drag', state.afterTaxDragRate))),
+    numSimulations: Number(el('accumulate-paths')?.value) || state.numSimulations,
+    sweepPaths: Number(el('accumulate-sweep-paths')?.value) || state.sweepPaths,
+    exploreWeights: !!el('accumulate-explore-weights')?.checked,
     ...returnsPartial,
     allocationOverTimeTiers: state.allocationOverTimeTiers?.length > 1
       ? state.allocationOverTimeTiers
@@ -151,7 +151,7 @@ function tierRowHtml(tier, isLast) {
 }
 
 function renderSleeves(state) {
-  const host = el('accumulation-sleeves');
+  const host = el('accumulate-sleeves');
   if (!host) return;
   host.innerHTML = SLEEVE_META.map(({ id, label }) => {
     const sleeve = state.sleeves[id];
@@ -159,7 +159,7 @@ function renderSleeves(state) {
     const basisField = id === 'afterTax'
       ? `<label class="block space-y-1">
           <span class="text-xs text-theme-muted">Basis ($000s)</span>
-          <input type="number" id="accumulation-${id}-basis" value="${sleeve.basis ?? sleeve.startBalance}"
+          <input type="number" id="accumulate-${id}-basis" value="${sleeve.basis ?? sleeve.startBalance}"
             class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
         </label>`
       : '';
@@ -171,7 +171,7 @@ function renderSleeves(state) {
         </div>
         <label class="block space-y-1">
           <span class="text-xs text-theme-muted">Start balance ($000s)</span>
-          <input type="number" id="accumulation-${id}-start" value="${sleeve.startBalance ?? 0}"
+          <input type="number" id="accumulate-${id}-start" value="${sleeve.startBalance ?? 0}"
             class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
         </label>
         ${basisField}
@@ -183,31 +183,31 @@ function renderSleeves(state) {
 
   host.querySelectorAll('[data-add-tier]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      syncAccumulationFormToState();
-      detachAccumulationPreset();
+      syncAccumulateFormToState();
+      detachAccumulatePreset();
       updatePresetControlState();
       const id = btn.getAttribute('data-add-tier');
-      const current = getAccumulationState();
+      const current = getAccumulateState();
       const tiers = [...(current.sleeves[id].contributionTiers || [])];
       if (tiers.length) {
         const last = tiers[tiers.length - 1];
         tiers[tiers.length - 1] = { ...last, years: last.years || 5 };
       }
       tiers.push({ amount: 0, growthPct: 0 });
-      patchAccumulationState({
+      patchAccumulateState({
         sleeves: {
           ...current.sleeves,
           [id]: { ...current.sleeves[id], contributionTiers: tiers },
         },
         presetActive: false,
       });
-      renderAccumulationForm();
+      renderAccumulateForm();
     });
   });
 }
 
 function renderEvents(state) {
-  const host = el('accumulation-events');
+  const host = el('accumulate-events');
   if (!host) return;
   const events = state.events?.length ? state.events : [];
   host.innerHTML = events.map((e, i) => `
@@ -230,37 +230,37 @@ function renderEvents(state) {
 
   host.querySelectorAll('[data-remove-event]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      syncAccumulationFormToState();
+      syncAccumulateFormToState();
       const idx = Number(btn.getAttribute('data-remove-event'));
-      const eventsNext = [...getAccumulationState().events];
+      const eventsNext = [...getAccumulateState().events];
       eventsNext.splice(idx, 1);
-      patchAccumulationState({ events: eventsNext, presetActive: false });
-      if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
+      patchAccumulateState({ events: eventsNext, presetActive: false });
+      if (el('accumulate-preset-active')) el('accumulate-preset-active').checked = false;
       updatePresetControlState();
-      renderAccumulationForm();
+      renderAccumulateForm();
     });
   });
 }
 
 function renderEasyMode(state) {
-  if (el('accumulation-preset-active')) {
-    el('accumulation-preset-active').checked = state.presetActive !== false;
+  if (el('accumulate-preset-active')) {
+    el('accumulate-preset-active').checked = state.presetActive !== false;
   }
-  if (el('accumulation-preset-level')) {
-    el('accumulation-preset-level').value = String(state.presetLevel ?? 0);
+  if (el('accumulate-preset-level')) {
+    el('accumulate-preset-level').value = String(state.presetLevel ?? 0);
   }
   updatePresetName();
   updatePresetControlState();
 }
 
 /** Paint the form from session state. */
-export function renderAccumulationForm() {
-  const state = getAccumulationState();
-  if (el('accumulation-num-years')) el('accumulation-num-years').value = state.numYears;
-  if (el('accumulation-drag')) el('accumulation-drag').value = state.afterTaxDragRate;
-  if (el('accumulation-paths')) el('accumulation-paths').value = String(state.numSimulations);
-  if (el('accumulation-sweep-paths')) el('accumulation-sweep-paths').value = String(state.sweepPaths);
-  if (el('accumulation-explore-weights')) el('accumulation-explore-weights').checked = state.exploreWeights !== false;
+export function renderAccumulateForm() {
+  const state = getAccumulateState();
+  if (el('accumulate-num-years')) el('accumulate-num-years').value = state.numYears;
+  if (el('accumulate-drag')) el('accumulate-drag').value = state.afterTaxDragRate;
+  if (el('accumulate-paths')) el('accumulate-paths').value = String(state.numSimulations);
+  if (el('accumulate-sweep-paths')) el('accumulate-sweep-paths').value = String(state.sweepPaths);
+  if (el('accumulate-explore-weights')) el('accumulate-explore-weights').checked = state.exploreWeights !== false;
   renderEasyMode(state);
   renderSleeves(state);
   renderEvents(state);
@@ -269,7 +269,7 @@ export function renderAccumulationForm() {
 
 /** Deterministic glidepath series for the preview chart (engine decimals). */
 export function getGlidePreviewSeries() {
-  const state = getAccumulationState();
+  const state = getAccumulateState();
   const start = allocationFromConfig(state.allocation, ALLOCATION_KEYS);
   return buildAllocationOverTimeSeries(
     state.allocationOverTimeTiers,
@@ -279,43 +279,43 @@ export function getGlidePreviewSeries() {
   );
 }
 
-export function bindAccumulationInputs() {
-  const host = el('accumulation-returns-host');
+export function bindAccumulateInputs() {
+  const host = el('accumulate-returns-host');
   if (host && !returnsUi) {
     returnsUi = createReturnsAllocationUi(host, {
-      idPrefix: 'accumulation-',
+      idPrefix: 'accumulate-',
       mountMarkup: true,
-      getSlice: () => pickReturnsAllocationSlice(getAccumulationState()),
+      getSlice: () => pickReturnsAllocationSlice(getAccumulateState()),
       setSlice: (partial) => {
-        patchAccumulationState(partial);
+        patchAccumulateState(partial);
       },
       onChange: () => {
         if (isApplyingPreset) return;
-        if (getAccumulationState().presetActive) {
-          detachAccumulationPreset();
-          if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
+        if (getAccumulateState().presetActive) {
+          detachAccumulatePreset();
+          if (el('accumulate-preset-active')) el('accumulate-preset-active').checked = false;
           updatePresetControlState();
         }
       },
     });
   }
 
-  renderAccumulationForm();
+  renderAccumulateForm();
 
-  const root = el('feature-accumulation');
+  const root = el('feature-accumulate');
   if (!root) return;
 
-  el('accumulation-preset-active')?.addEventListener('change', () => {
+  el('accumulate-preset-active')?.addEventListener('change', () => {
     if (isApplyingPreset) return;
     if (isPresetAttached()) {
       applyLevelFromSlider();
     } else {
-      detachAccumulationPreset();
+      detachAccumulatePreset();
       updatePresetControlState();
     }
   });
 
-  el('accumulation-preset-level')?.addEventListener('input', () => {
+  el('accumulate-preset-level')?.addEventListener('input', () => {
     updatePresetName();
     if (isApplyingPreset || !isPresetAttached()) return;
     applyLevelFromSlider();
@@ -324,34 +324,34 @@ export function bindAccumulationInputs() {
   root.addEventListener('change', (e) => {
     if (isApplyingPreset) return;
     if (!(e.target instanceof HTMLElement)) return;
-    if (e.target.id === 'accumulation-preset-active'
-      || e.target.id === 'accumulation-preset-level'
-      || e.target.closest('#accumulation-preset-control')) {
+    if (e.target.id === 'accumulate-preset-active'
+      || e.target.id === 'accumulate-preset-level'
+      || e.target.closest('#accumulate-preset-control')) {
       return;
     }
-    if (e.target.closest('#accumulation-returns-host')) {
+    if (e.target.closest('#accumulate-returns-host')) {
       // Shared controller already patched state via setSlice.
       return;
     }
-    if (e.target.closest('#accumulation-sleeves')
-      || e.target.closest('#accumulation-events')
-      || e.target.id?.startsWith('accumulation-')) {
-      const wasAttached = getAccumulationState().presetActive;
-      syncAccumulationFormToState();
+    if (e.target.closest('#accumulate-sleeves')
+      || e.target.closest('#accumulate-events')
+      || e.target.id?.startsWith('accumulate-')) {
+      const wasAttached = getAccumulateState().presetActive;
+      syncAccumulateFormToState();
       if (wasAttached) {
-        detachAccumulationPreset();
-        if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
+        detachAccumulatePreset();
+        if (el('accumulate-preset-active')) el('accumulate-preset-active').checked = false;
         updatePresetControlState();
       }
     }
   });
 
-  el('accumulation-add-event')?.addEventListener('click', () => {
-    syncAccumulationFormToState();
-    const events = [...getAccumulationState().events, { amount: -25, startYear: 5, years: 1 }];
-    patchAccumulationState({ events, presetActive: false });
-    if (el('accumulation-preset-active')) el('accumulation-preset-active').checked = false;
+  el('accumulate-add-event')?.addEventListener('click', () => {
+    syncAccumulateFormToState();
+    const events = [...getAccumulateState().events, { amount: -25, startYear: 5, years: 1 }];
+    patchAccumulateState({ events, presetActive: false });
+    if (el('accumulate-preset-active')) el('accumulate-preset-active').checked = false;
     updatePresetControlState();
-    renderAccumulationForm();
+    renderAccumulateForm();
   });
 }

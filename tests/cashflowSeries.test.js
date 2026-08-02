@@ -85,7 +85,7 @@ describe('cashflowSeries', () => {
     expect(parsed.cashflowSeries.seriesByStrategy.simplifiedRm.annual).toEqual([1000, 500]);
   });
 
-  it('builds Accumulation series from config (contrib outflows + events)', () => {
+  it('builds Accumulate series from config (contrib outflows + events)', () => {
     const series = buildAccumulationCashflowSeries({
       numYears: 3,
       sleeves: {
@@ -95,7 +95,7 @@ describe('cashflowSeries', () => {
       },
       events: [{ amount: -50, startYear: 2, years: 1 }],
     });
-    expect(series.sourceFeature).toBe('accumulation');
+    expect(series.sourceFeature).toBe('accumulate');
     // Med scale: −$10k/yr contrib; year 1 (index 1) also −$50k event.
     expect(series.seriesByStrategy.med.annual[0]).toBeCloseTo(-10_000, 0);
     expect(series.seriesByStrategy.med.annual[1]).toBeCloseTo(-60_000, 0);

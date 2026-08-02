@@ -7,7 +7,7 @@ import { handleChunk } from './handlers/chunk.js';
 import { handleWithdrawRun } from './handlers/withdrawRun.js';
 import { handleWithdrawGoalSeek } from './handlers/withdrawGoalSeek.js';
 import { handleSensitivity } from './handlers/sensitivity.js';
-import { handleAccumulation } from './handlers/accumulation.js';
+import { handleAccumulate } from './handlers/accumulate.js';
 import { handleSsTiming } from './handlers/ssTiming.js';
 import { handleRothConvert } from './handlers/rothConvert.js';
 import { handleHouseEquity } from './handlers/houseEquity.js';
@@ -21,7 +21,7 @@ export const HANDLERS = {
   withdraw: handleWithdrawRun,
   withdrawGoalSeek: handleWithdrawGoalSeek,
   sensitivity: handleSensitivity,
-  accumulation: handleAccumulation,
+  accumulate: handleAccumulate,
   ssTiming: handleSsTiming,
   rothConvert: handleRothConvert,
   houseEquity: handleHouseEquity,

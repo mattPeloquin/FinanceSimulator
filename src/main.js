@@ -7,13 +7,13 @@ import { loadAutosave, loadUnsavedStash } from './state/persistence.js';
 import {
   FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
-  FEATURE_ACCUMULATION,
+  FEATURE_ACCUMULATE,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
 } from './state/storageKeys.js';
 import { registerWithdraw } from './features/withdraw/index.js';
-import { registerAccumulation } from './features/accumulation/index.js';
+import { registerAccumulate } from './features/accumulate/index.js';
 import { registerSorLab } from './features/sor-lab/index.js';
 import { registerSsTiming } from './features/ss-timing/index.js';
 import { registerRothConvert } from './features/roth-convert/index.js';
@@ -29,9 +29,9 @@ import {
   restoreSessionUi,
 } from './ui/sessionChrome.js';
 
-// Registration order sets primary tab order: Accumulation | Withdraw | More.
+// Registration order sets primary tab order: Accumulate | Withdraw | More.
 // Default active tab stays Withdraw (fs:app:prefs / DEFAULT_APP_PREFS).
-registerAccumulation();
+registerAccumulate();
 registerWithdraw();
 registerSorLab();
 registerSsTiming();
@@ -53,7 +53,7 @@ async function init() {
         description: autosaved.description || '',
         lastSelect: autosaved.name || '',
       },
-      [FEATURE_ACCUMULATION]: { name: '', description: '', lastSelect: '' },
+      [FEATURE_ACCUMULATE]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SOR_LAB]: { name: '', description: '', lastSelect: '' },
       [FEATURE_SS_TIMING]: { name: '', description: '', lastSelect: '' },
       [FEATURE_ROTH_CONVERT]: { name: '', description: '', lastSelect: '' },

@@ -13,7 +13,7 @@ Background jobs keep running across tab switches.
 
 - **App**: "Finance Simulator"; app-wide prefix is **`fs`**.
 - **Feature ids** (kebab-case): `withdraw` → "Withdraw"; `sor-lab` → "SOR Lab";
-  `accumulation` → "Accumulation"; etc.
+  `accumulate` → "Accumulate"; etc.
 - Folders: `src/features/<feature-id>/` for feature-owned logic, UI, and partials.
 - DOM: feature roots `id="feature-<feature-id>"`; new element ids prefixed
   `<feature-id>-...`.
@@ -54,7 +54,7 @@ fork `src/data/historicalData.js`, `src/core/history.js`, or
   [`src/ui/returnsAllocation/controller.js`](../../src/ui/returnsAllocation/controller.js)
   (mountable year range / distribution / allocation panel). Withdraw keeps legacy
   DOM ids through a thin wrapper in `src/features/withdraw/history.js`;
-  Accumulation and Social Security mount the shared controller. Do not fork
+  Accumulate and Social Security mount the shared controller. Do not fork
   per-feature history/allocation panels.
 
 ### Worker dispatcher
@@ -90,7 +90,7 @@ Withdraw worker message types: `withdraw`, `withdrawGoalSeek`.
 - Versioned contract in [`src/state/cashflowSeries.js`](../../src/state/cashflowSeries.js):
   signed real-$ annual amounts by strategy, plus metadata (`sourceFeature`,
   `sessionName`, `startAge`, `units: 'real-dollars'`).
-- Producers: Accumulation, Social Security, Roth Convert, House Equity attach
+- Producers: Accumulate, Social Security, Roth Convert, House Equity attach
   via session-adapter **`getCashflowSeries`** on export/share. Import accepts
   and preserves the field but **does not** feed it into Withdraw math or UI.
 - **Reserved for a future Plan feature:** Plan (or a household orchestrator)
@@ -123,7 +123,7 @@ from the registry. Active tab persists in `fs:app:prefs`.
 
 - `registerFeature({ …, placement })` — omit or `'primary'` for top-level tabs;
   `'more'` puts the feature under the More control (button + listbox).
-- **Primary today:** `accumulation`, `withdraw` (tab order; default active is
+- **Primary today:** `accumulate`, `withdraw` (tab order; default active is
   still `withdraw`). **More today:** `sor-lab`,
   `ss-timing`, `roth-convert`, `house-equity` (plus future features). More is always rendered, even if empty.
 - When a More feature is active, the More control’s label becomes that feature’s
@@ -148,12 +148,14 @@ from the registry. Active tab persists in `fs:app:prefs`.
 
 ## New-feature scaffold checklist
 
-Reuse for each new feature (`accumulation`, `ss-timing`, `roth-convert`,
+Reuse for each new feature (`accumulate`, `ss-timing`, `roth-convert`,
 `house-equity`, …):
 
 - `src/features/<id>/` with `index.js`, `session.js`, `run.js`, `partials/`, `ui/`
 - `FEATURE_*` constant in [`src/state/storageKeys.js`](../../src/state/storageKeys.js)
-- Register in [`src/main.js`](../../src/main.js); `#feature-<id>` root in
+- Register in [`src/main.js`](../../src/main.js); top-level feature partial
+  (`src/features/<id>/partials/<id>.html` or equivalent) owns the
+  `#feature-<id>` root and feature header copy; include it from
   `index.html`; partial dir added to `partialDirectory` in
   [`vite.config.js`](../../vite.config.js)
 - Session adapter (`getState`, `applyState`, `stateVersion`, `migrate`,

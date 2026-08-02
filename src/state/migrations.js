@@ -9,7 +9,7 @@ import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from './scenario.js';
 import {
   FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
-  FEATURE_ACCUMULATION,
+  FEATURE_ACCUMULATE,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
@@ -19,9 +19,9 @@ import {
 export const LAB_STATE_VERSION = 1;
 export const LAB_STATE_VERSION_MIN = 1;
 
-/** Accumulation session / envelope state version. */
-export const ACCUMULATION_STATE_VERSION = 1;
-export const ACCUMULATION_STATE_VERSION_MIN = 1;
+/** Accumulate session / envelope state version. */
+export const ACCUMULATE_STATE_VERSION = 1;
+export const ACCUMULATE_STATE_VERSION_MIN = 1;
 
 /** Social Security timing session / envelope state version. */
 export const SS_TIMING_STATE_VERSION = 1;
@@ -156,30 +156,30 @@ export function migrateLabState(state, fromVersion) {
 }
 
 /**
- * Upgrade Accumulation session state within supported versions.
- * Field shaping still runs in the feature's normalizeAccumulationState.
+ * Upgrade Accumulate session state within supported versions.
+ * Field shaping still runs in the feature's normalizeAccumulateState.
  */
-export function migrateAccumulationState(state, fromVersion) {
+export function migrateAccumulateState(state, fromVersion) {
   if (state == null || typeof state !== 'object' || Array.isArray(state)) {
-    throw new Error('Accumulation state is missing or invalid.');
+    throw new Error('Accumulate state is missing or invalid.');
   }
   if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
-    throw new Error('Accumulation state version is missing or invalid.');
+    throw new Error('Accumulate state version is missing or invalid.');
   }
-  if (fromVersion < ACCUMULATION_STATE_VERSION_MIN) {
+  if (fromVersion < ACCUMULATE_STATE_VERSION_MIN) {
     throw new Error(
-      `This Accumulation session uses state version ${fromVersion}, which is older than this app supports (${ACCUMULATION_STATE_VERSION_MIN}).`,
+      `This Accumulate session uses state version ${fromVersion}, which is older than this app supports (${ACCUMULATE_STATE_VERSION_MIN}).`,
     );
   }
-  if (fromVersion > ACCUMULATION_STATE_VERSION) {
+  if (fromVersion > ACCUMULATE_STATE_VERSION) {
     throw new Error(
-      `This Accumulation session uses state version ${fromVersion}, which is newer than this app supports (${ACCUMULATION_STATE_VERSION}).`,
+      `This Accumulate session uses state version ${fromVersion}, which is newer than this app supports (${ACCUMULATE_STATE_VERSION}).`,
     );
   }
 
   const migrated = { ...state };
 
-  // Forward migrations go here when ACCUMULATION_STATE_VERSION increases:
+  // Forward migrations go here when ACCUMULATE_STATE_VERSION increases:
   // if (fromVersion < 2) { ... }
 
   return migrated;
@@ -198,9 +198,9 @@ registerFeatureMigrator({
   migrate: migrateLabState,
 });
 registerFeatureMigrator({
-  id: FEATURE_ACCUMULATION,
-  stateVersion: ACCUMULATION_STATE_VERSION,
-  migrate: migrateAccumulationState,
+  id: FEATURE_ACCUMULATE,
+  stateVersion: ACCUMULATE_STATE_VERSION,
+  migrate: migrateAccumulateState,
 });
 
 /**

@@ -1,6 +1,6 @@
-// Named Accumulation presets (feature-local; never write back to Plan risk presets).
+// Named Accumulate presets (feature-local; never write back to Plan risk presets).
 
-/** @typedef {import('./session.js').AccumulationState} AccumulationState */
+/** @typedef {import('./session.js').AccumulateState} AccumulateState */
 
 const BALANCED_MIX = {
   usLgGrowthAllocation: 25,
@@ -21,9 +21,9 @@ const AGGRESSIVE_MIX = {
 };
 
 /**
- * @returns {{ id: string, name: string, description: string, patch: Partial<AccumulationState> }[]}
+ * @returns {{ id: string, name: string, description: string, patch: Partial<AccumulateState> }[]}
  */
-export function getAccumulationPresets() {
+export function getAccumulatePresets() {
   return [
     {
       id: 'steady-saver',

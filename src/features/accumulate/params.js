@@ -1,4 +1,4 @@
-// Build worker params from Accumulation session state + history samples.
+// Build worker params from Accumulate session state + history samples.
 
 import { ALLOCATION_KEYS } from './session.js';
 import {
@@ -28,9 +28,9 @@ export function ensureProfiles(state) {
 }
 
 /**
- * Build the pure params object posted to the accumulation worker.
+ * Build the pure params object posted to the accumulate worker.
  */
-export function buildAccumulationParams(state, { seed } = {}) {
+export function buildAccumulateParams(state, { seed } = {}) {
   const slice = pickReturnsAllocationSlice(state);
   const { samples, profiles: derived } = buildSamplesAndProfiles(slice);
   const profiles = ensureProfiles({ ...state, profiles: state.profiles || derived }) || {};

@@ -1,0 +1,44 @@
+{{!-- Withdraw feature root (inputs + results). Shared chrome stays outside. --}}
+<div id="feature-withdraw" role="tabpanel" aria-labelledby="tab-withdraw" class="space-y-8">
+    <div class="space-y-2">
+        <h2 class="text-2xl font-bold text-theme-body">Sequence of Returns Withdrawal Planning</h2>
+        <p class="text-sm text-theme-faint max-w-3xl">Maximize realistic withdrawals within your risk tolerance. The focus is investment drawdown tradeoffs - accounts, budgets, RMDs, pensions, Social Security, real estate, etc. are out of scope. Everything — portfolio balances, withdrawals, and market returns — uses real (today&rsquo;s) dollars, so you don&rsquo;t need to factor in inflation. Market returns and inflation are based on historical data options.</p>
+    </div>
+
+    <!-- Input Parameters Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
+        <!-- Left Column: Primary Inputs -->
+        <div class="space-y-6">
+        {{> general }}
+        {{> goalSeek }}
+        {{> investment }}
+        {{> feesTaxes }}
+        </div>
+
+        <!-- Right Column: Dynamic Parameters & Portfolio Setup -->
+        <div class="space-y-6 lg:pl-12 lg:border-l border-theme-border">
+        {{> withdrawal }}
+        </div>
+    </div>
+
+    <!-- Action Button -->
+    <div class="text-center">
+        <button id="runButton" class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg"
+        >Run Simulation</button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden space-y-8">
+        <div id="goalSeekWarning" class="hidden rounded-lg border border-theme-p20/40 bg-theme-muted px-4 py-3" role="status">
+            <p class="text-sm text-theme-body">
+                <span class="font-semibold text-theme-p20">Goal not reached — </span>
+                <span id="goalSeekWarningMessage"></span>
+            </p>
+        </div>
+        {{> metrics }}
+        {{> report }}
+        {{> charts }}
+    </div>
+    {{> loading }}
+    {{> advanced }}
+</div>

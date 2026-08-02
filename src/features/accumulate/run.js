@@ -1,22 +1,22 @@
-// Accumulation run orchestration via shared jobs + worker dispatcher.
+// Accumulate run orchestration via shared jobs + worker dispatcher.
 
 import SimulationWorker from '../../workers/simulation.worker.js?worker&inline';
 import { resolveNumCores } from '../../workers/parallelConfig.js';
 import * as jobs from '../../state/jobs.js';
 import { getActiveFeature } from '../../state/features.js';
-import { FEATURE_ACCUMULATION } from '../../state/storageKeys.js';
+import { FEATURE_ACCUMULATE } from '../../state/storageKeys.js';
 import { showAlert } from '../../ui/dialogs.js';
 import {
-  getAccumulationState,
-  setAccumulationResultStale,
+  getAccumulateState,
+  setAccumulateResultStale,
 } from './session.js';
-import { syncAccumulationFormToState } from './ui/inputs.js';
-import { applyAccumulationHistoryProfiles } from './history.js';
-import { buildAccumulationParams, ensureProfiles } from './params.js';
+import { syncAccumulateFormToState } from './ui/inputs.js';
+import { applyAccumulateHistoryProfiles } from './history.js';
+import { buildAccumulateParams, ensureProfiles } from './params.js';
 import {
-  paintAccumulationResults,
-  setAccumulationLoading,
-  updateAccumulationProgress,
+  paintAccumulateResults,
+  setAccumulateLoading,
+  updateAccumulateProgress,
 } from './ui/results.js';
 
 let pendingResults = null;
@@ -36,40 +36,40 @@ function spawnSubWorkerPorts(numCores, bucket) {
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    jobs.cancelAll(FEATURE_ACCUMULATION);
+    jobs.cancelAll(FEATURE_ACCUMULATE);
   });
 }
 
-export function deliverAccumulationResults(payload) {
-  if (getActiveFeature()?.id === FEATURE_ACCUMULATION) {
+export function deliverAccumulateResults(payload) {
+  if (getActiveFeature()?.id === FEATURE_ACCUMULATE) {
     pendingResults = null;
-    paintAccumulationResults(payload);
+    paintAccumulateResults(payload);
   } else {
     pendingResults = payload;
   }
 }
 
-export function flushPendingAccumulationResults() {
+export function flushPendingAccumulateResults() {
   if (!pendingResults) return;
   const payload = pendingResults;
   pendingResults = null;
-  setAccumulationLoading(false);
-  paintAccumulationResults(payload);
+  setAccumulateLoading(false);
+  paintAccumulateResults(payload);
 }
 
-export function cancelAccumulationRun() {
-  jobs.cancelAll(FEATURE_ACCUMULATION);
+export function cancelAccumulateRun() {
+  jobs.cancelAll(FEATURE_ACCUMULATE);
   pendingResults = null;
-  setAccumulationLoading(false);
+  setAccumulateLoading(false);
 }
 
-export async function handleAccumulationRunClick() {
-  syncAccumulationFormToState();
-  applyAccumulationHistoryProfiles({ force: false });
-  const state = getAccumulationState();
+export async function handleAccumulateRunClick() {
+  syncAccumulateFormToState();
+  applyAccumulateHistoryProfiles({ force: false });
+  const state = getAccumulateState();
   const profiles = ensureProfiles(state);
   if (!profiles) {
-    showAlert('Could not build return profiles from the selected year range.', 'Accumulation');
+    showAlert('Could not build return profiles from the selected year range.', 'Accumulate');
     return;
   }
 
@@ -79,51 +79,51 @@ export async function handleAccumulationRunClick() {
 
   let params;
   try {
-    params = buildAccumulationParams({ ...state, profiles }, { seed });
+    params = buildAccumulateParams({ ...state, profiles }, { seed });
   } catch (err) {
-    showAlert(err?.message || String(err), 'Accumulation');
+    showAlert(err?.message || String(err), 'Accumulate');
     return;
   }
 
   if (!params.samples?.years?.length && state.distMethod !== 'lognormal') {
-    showAlert('Historical sample is empty for this year range.', 'Accumulation');
+    showAlert('Historical sample is empty for this year range.', 'Accumulate');
     return;
   }
 
   const numCores = resolveNumCores(state.parallelCores || 'high', navigator.hardwareConcurrency);
   pendingResults = null;
-  setAccumulationResultStale(false);
-  setAccumulationLoading(true);
-  updateAccumulationProgress(0, 'Starting accumulation run');
+  setAccumulateResultStale(false);
+  setAccumulateLoading(true);
+  updateAccumulateProgress(0, 'Starting accumulate run');
 
   try {
     const subWorkers = [];
-    const job = jobs.start(FEATURE_ACCUMULATION, {
+    const job = jobs.start(FEATURE_ACCUMULATE, {
       createWorker: () => new SimulationWorker(),
       onCleanup: () => {
         for (const w of subWorkers) w.terminate();
         subWorkers.length = 0;
       },
       onProgress(fraction, stage) {
-        updateAccumulationProgress(fraction, stage);
+        updateAccumulateProgress(fraction, stage);
       },
       onDone(msg) {
-        setAccumulationLoading(false);
+        setAccumulateLoading(false);
         try {
-          deliverAccumulationResults({ result: msg.result });
+          deliverAccumulateResults({ result: msg.result });
         } catch (err) {
-          showAlert(err?.message || String(err), 'Accumulation');
+          showAlert(err?.message || String(err), 'Accumulate');
         }
       },
       onError(err) {
-        setAccumulationLoading(false);
-        showAlert(err?.message || String(err), 'Accumulation');
+        setAccumulateLoading(false);
+        showAlert(err?.message || String(err), 'Accumulate');
       },
     });
 
     const ports = spawnSubWorkerPorts(numCores, subWorkers);
     job.post({
-      type: 'accumulation',
+      type: 'accumulate',
       params,
       sweepPaths: state.sweepPaths,
       includeWeightExplore: state.exploreWeights !== false,
@@ -131,7 +131,7 @@ export async function handleAccumulationRunClick() {
       subWorkerPorts: ports,
     }, ports);
   } catch (err) {
-    setAccumulationLoading(false);
-    showAlert(err?.message || String(err), 'Accumulation');
+    setAccumulateLoading(false);
+    showAlert(err?.message || String(err), 'Accumulate');
   }
 }

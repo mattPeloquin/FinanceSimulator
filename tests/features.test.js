@@ -22,7 +22,7 @@ describe('feature registry', () => {
     document.body.innerHTML = `
       <nav id="feature-tabs"></nav>
       <div id="feature-withdraw"></div>
-      <div id="feature-accumulation" class="hidden"></div>
+      <div id="feature-accumulate" class="hidden"></div>
       <div id="feature-other" class="hidden"></div>
     `;
   });
@@ -34,9 +34,9 @@ describe('feature registry', () => {
 
   function registerPlanAccumAndMore() {
     registerFeature({
-      id: 'accumulation',
-      title: 'Accumulation',
-      rootId: 'feature-accumulation',
+      id: 'accumulate',
+      title: 'Accumulate',
+      rootId: 'feature-accumulate',
       placement: 'primary',
     });
     registerFeature({
@@ -55,7 +55,7 @@ describe('feature registry', () => {
 
   it('registers features and lists them in order', () => {
     registerPlanAccumAndMore();
-    expect(listFeatures().map((f) => f.id)).toEqual(['accumulation', 'withdraw', 'other']);
+    expect(listFeatures().map((f) => f.id)).toEqual(['accumulate', 'withdraw', 'other']);
     expect(getFeature('withdraw').title).toBe('Withdraw');
     expect(getFeature('missing')).toBeNull();
   });
@@ -91,11 +91,11 @@ describe('feature registry', () => {
     const bar = document.getElementById('feature-tabs');
     expect(bar.classList.contains('feature-tab-bar')).toBe(true);
     const tabs = document.querySelectorAll('#feature-tabs [role="tab"]');
-    // Accumulation, Withdraw, More button
+    // Accumulate, Withdraw, More button
     expect(tabs).toHaveLength(3);
-    expect(tabs[0].textContent).toContain('Accumulation');
+    expect(tabs[0].textContent).toContain('Accumulate');
     expect(tabs[0].classList.contains('feature-tab')).toBe(true);
-    expect(tabs[0].dataset.featureId).toBe('accumulation');
+    expect(tabs[0].dataset.featureId).toBe('accumulate');
     expect(tabs[1].dataset.featureId).toBe('withdraw');
     expect(tabs[1].textContent).toContain('Withdraw');
     expect(document.getElementById('feature-more-button')).toBeTruthy();

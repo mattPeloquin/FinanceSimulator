@@ -291,26 +291,26 @@
     color: rgb(15 23 42);
   }
 
-  /* Accumulation — sky (primary slot formerly held by Lab) */
-  .feature-tab[data-feature-id='accumulation'] {
+  /* Accumulate — sky (primary slot formerly held by Lab) */
+  .feature-tab[data-feature-id='accumulate'] {
     background-color: rgb(2 132 199 / 0.14);
     color: rgb(3 105 161);
   }
-  .feature-tab[data-feature-id='accumulation']:hover {
+  .feature-tab[data-feature-id='accumulate']:hover {
     background-color: rgb(2 132 199 / 0.24);
   }
-  .feature-tab[data-feature-id='accumulation'][aria-selected='true'] {
+  .feature-tab[data-feature-id='accumulate'][aria-selected='true'] {
     background-color: rgb(2 132 199);
     color: rgb(255 255 255);
   }
-  .dark .feature-tab[data-feature-id='accumulation'] {
+  .dark .feature-tab[data-feature-id='accumulate'] {
     background-color: rgb(56 189 248 / 0.12);
     color: rgb(125 211 252);
   }
-  .dark .feature-tab[data-feature-id='accumulation']:hover {
+  .dark .feature-tab[data-feature-id='accumulate']:hover {
     background-color: rgb(56 189 248 / 0.2);
   }
-  .dark .feature-tab[data-feature-id='accumulation'][aria-selected='true'] {
+  .dark .feature-tab[data-feature-id='accumulate'][aria-selected='true'] {
     background-color: rgb(14 165 233);
     color: rgb(15 23 42);
   }
@@ -341,16 +341,16 @@
 
   /* More (idle) + fallback for other features — slate */
   .feature-more-button:not([data-feature-id]),
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']) {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']) {
     background-color: rgb(var(--theme-bg-muted));
     color: rgb(var(--theme-text-muted));
   }
   .feature-more-button:not([data-feature-id]):hover,
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab']):hover {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']):hover {
     background-color: rgb(var(--theme-bg-subtle));
   }
   .feature-more-button:not([data-feature-id])[aria-selected='true'],
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulation']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
+  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
     background-color: rgb(var(--theme-bg-control));
     color: rgb(var(--theme-on-accent));
   }

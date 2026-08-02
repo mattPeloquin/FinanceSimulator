@@ -1,4 +1,4 @@
-// Accumulation feature worker handler.
+// Accumulate feature worker handler.
 //
 // Runs on the master worker thread (Plan's ParallelPool chunk shape is
 // withdrawal-oriented). Market paths use CRN via deriveSeed inside
@@ -33,7 +33,7 @@ function runScale(params, factor, onProgress) {
  * @param {{ pool: object, post: Function, postProgress: Function }} ctx
  * @param {object} data
  */
-export async function handleAccumulation(ctx, data) {
+export async function handleAccumulate(ctx, data) {
   const { post, postProgress } = ctx;
   const {
     params,
@@ -44,7 +44,7 @@ export async function handleAccumulation(ctx, data) {
   } = data || {};
 
   if (!params || typeof params !== 'object') {
-    post({ type: 'error', message: 'Accumulation run is missing params.' });
+    post({ type: 'error', message: 'Accumulate run is missing params.' });
     return;
   }
 

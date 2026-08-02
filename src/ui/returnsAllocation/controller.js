@@ -32,7 +32,7 @@ const DIST_OPTIONS = [
 
 /**
  * @typedef {object} ReturnsAllocationUiOptions
- * @property {string} [idPrefix] - e.g. 'accumulation-' or 'ss-timing-'; empty for Plan legacy ids
+ * @property {string} [idPrefix] - e.g. 'accumulate-' or 'ss-timing-'; empty for Plan legacy ids
  * @property {boolean} [mountMarkup] - when true, write year/dist/alloc markup into root
  * @property {boolean} [showAllocation] - render allocation grid (default true when mounting)
  * @property {boolean} [showRefreshProfiles] - show "Refresh profiles" button
@@ -45,7 +45,7 @@ const DIST_OPTIONS = [
 function id(prefix, name) {
   // Plan legacy: startYear / endYear (camelCase, no prefix).
   if (!prefix) return name;
-  // Prefixed features use kebab ids: accumulation-start-year
+  // Prefixed features use kebab ids: accumulate-start-year
   const kebab = name
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .replace(/_/g, '-')
@@ -55,7 +55,7 @@ function id(prefix, name) {
 
 /**
  * Create a returns/allocation UI bound to a feature's slice getters.
- * @param {HTMLElement} root - host element (feature panel or #accumulation-returns-host)
+ * @param {HTMLElement} root - host element (feature panel or #accumulate-returns-host)
  * @param {ReturnsAllocationUiOptions} options
  */
 export function createReturnsAllocationUi(root, options) {

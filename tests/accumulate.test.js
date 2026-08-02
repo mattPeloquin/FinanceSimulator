@@ -12,8 +12,8 @@ import {
   allocationFromConfig,
 } from '../src/core/accumulation.js';
 import { createRng } from '../src/core/rng.js';
-import { ALLOCATION_KEYS } from '../src/features/accumulation/session.js';
-import { migrateAccumulationState, ACCUMULATION_STATE_VERSION } from '../src/state/migrations.js';
+import { ALLOCATION_KEYS } from '../src/features/accumulate/session.js';
+import { migrateAccumulateState, ACCUMULATE_STATE_VERSION } from '../src/state/migrations.js';
 import { HANDLERS } from '../src/workers/dispatch.js';
 
 const FLAT_ALLOC = {
@@ -191,15 +191,15 @@ describe('buildAllContributionSeries', () => {
   });
 });
 
-describe('migrateAccumulationState', () => {
+describe('migrateAccumulateState', () => {
   it('accepts current version', () => {
-    const out = migrateAccumulationState({ numYears: 10 }, ACCUMULATION_STATE_VERSION);
+    const out = migrateAccumulateState({ numYears: 10 }, ACCUMULATE_STATE_VERSION);
     expect(out.numYears).toBe(10);
   });
 });
 
 describe('worker HANDLERS', () => {
-  it('registers accumulation', () => {
-    expect(typeof HANDLERS.accumulation).toBe('function');
+  it('registers accumulate', () => {
+    expect(typeof HANDLERS.accumulate).toBe('function');
   });
 });

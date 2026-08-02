@@ -38,70 +38,12 @@
 
             {{> header }}
 
-            <!-- Feature root: Withdraw (inputs + results). Shared chrome stays outside. -->
-            <div id="feature-withdraw" role="tabpanel" aria-labelledby="tab-withdraw" class="space-y-8">
-            <!-- Input Parameters Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
-                <!-- Left Column: Primary Inputs -->
-                <div class="space-y-6">
-                {{> general }}
-                {{> goalSeek }}
-                {{> investment }}
-                {{> feesTaxes }}
-                </div>
-
-                <!-- Right Column: Dynamic Parameters & Portfolio Setup -->
-                <div class="space-y-6 lg:pl-12 lg:border-l border-theme-border">
-                {{> withdrawal }}
-                </div>
-            </div>
-
-            <!-- Action Button -->
-            <div class="text-center">
-                <button id="runButton" class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg"
-                >Run Simulation</button>
-            </div>
-
-            <!-- Results Section -->
-            <div id="resultsSection" class="hidden space-y-8">
-                <div id="goalSeekWarning" class="hidden rounded-lg border border-theme-p20/40 bg-theme-muted px-4 py-3" role="status">
-                    <p class="text-sm text-theme-body">
-                        <span class="font-semibold text-theme-p20">Goal not reached — </span>
-                        <span id="goalSeekWarningMessage"></span>
-                    </p>
-                </div>
-                {{> metrics }}
-                {{> report }}
-                {{> charts }}
-            </div>
-            {{> loading }}
-            {{> advanced }}
-            </div>
-
-            <!-- Feature root: Accumulation (primary) -->
-            <div id="feature-accumulation" role="tabpanel" aria-labelledby="tab-accumulation" class="hidden space-y-6" aria-hidden="true">
-                {{> accumulation }}
-            </div>
-
-            <!-- Feature root: SOR Lab (under More) -->
-            <div id="feature-sor-lab" role="tabpanel" aria-labelledby="more-item-sor-lab" class="hidden space-y-6" aria-hidden="true">
-                {{> lab }}
-            </div>
-
-            <!-- Feature root: Social Security (under More) -->
-            <div id="feature-ss-timing" role="tabpanel" aria-labelledby="more-item-ss-timing" class="hidden space-y-6" aria-hidden="true">
-                {{> ss-timing }}
-            </div>
-
-            <!-- Feature root: Roth Convert (under More) -->
-            <div id="feature-roth-convert" role="tabpanel" aria-labelledby="more-item-roth-convert" class="hidden space-y-6" aria-hidden="true">
-                {{> roth-convert }}
-            </div>
-
-            <!-- Feature root: House Equity (under More) -->
-            <div id="feature-house-equity" role="tabpanel" aria-labelledby="more-item-house-equity" class="hidden space-y-6" aria-hidden="true">
-                {{> house-equity }}
-            </div>
+            {{> withdraw }}
+            {{> accumulate }}
+            {{> lab }}
+            {{> ss-timing }}
+            {{> roth-convert }}
+            {{> house-equity }}
         </div>
 
         <p class="text-left text-xs text-theme-faint">
@@ -114,29 +56,3 @@
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
-<!--
-  Finance Simulator — MIT License
-  SPDX-License-Identifier: MIT
-
-  MIT License
-
-  Copyright (c) 2026 Matt Peloquin
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
--->

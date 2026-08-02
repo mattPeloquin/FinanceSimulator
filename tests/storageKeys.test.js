@@ -8,7 +8,7 @@ import {
   WITHDRAW_UNSAVED_STASH_KEY,
   SOR_LAB_UI_KEY,
   FEATURE_WITHDRAW,
-  FEATURE_ACCUMULATION,
+  FEATURE_ACCUMULATE,
   FEATURE_SOR_LAB,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
@@ -21,13 +21,13 @@ describe('storageKeys', () => {
   it('builds fs:app:* and fs:<feature>:* keys', () => {
     expect(appStorageKey('prefs')).toBe('fs:app:prefs');
     expect(featureStorageKey('withdraw', 'autosave')).toBe('fs:withdraw:autosave');
-    expect(featureStorageKey('accumulation', 'ui')).toBe('fs:accumulation:ui');
+    expect(featureStorageKey('accumulate', 'ui')).toBe('fs:accumulate:ui');
     expect(featureStorageKey('sor-lab', 'ui')).toBe('fs:sor-lab:ui');
   });
 
   it('exports the canonical feature keys', () => {
     expect(FEATURE_WITHDRAW).toBe('withdraw');
-    expect(FEATURE_ACCUMULATION).toBe('accumulation');
+    expect(FEATURE_ACCUMULATE).toBe('accumulate');
     expect(FEATURE_SOR_LAB).toBe('sor-lab');
     expect(FEATURE_SS_TIMING).toBe('ss-timing');
     expect(FEATURE_ROTH_CONVERT).toBe('roth-convert');

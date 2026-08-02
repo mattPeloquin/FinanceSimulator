@@ -652,7 +652,7 @@ export function buildAccumulationCashflowSeries(state, opts = {}) {
     annualByStrategy[scale.id] = annual;
   }
   return buildCashflowSeries({
-    sourceFeature: 'accumulation',
+    sourceFeature: 'accumulate',
     startAge: 0,
     sessionName: opts.sessionName ?? null,
     numYears,

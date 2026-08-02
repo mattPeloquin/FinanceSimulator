@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   migrateScenario,
   migrateLabState,
-  migrateAccumulationState,
+  migrateAccumulateState,
   migrateSsTimingState,
   migrateRothConvertState,
   migrateHouseEquityState,
@@ -10,7 +10,7 @@ import {
   getFeatureStateVersion,
   LAB_STATE_VERSION,
   LAB_STATE_VERSION_MIN,
-  ACCUMULATION_STATE_VERSION,
+  ACCUMULATE_STATE_VERSION,
   SS_TIMING_STATE_VERSION,
   ROTH_CONVERT_STATE_VERSION,
   HOUSE_EQUITY_STATE_VERSION,
@@ -19,17 +19,17 @@ import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
 import {
   FEATURE_WITHDRAW,
   FEATURE_SOR_LAB,
-  FEATURE_ACCUMULATION,
+  FEATURE_ACCUMULATE,
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
 } from '../src/state/storageKeys.js';
 
 describe('migrateFeatureState registry', () => {
-  it('exposes Plan, Lab, Accumulation, SS Timing, Roth Convert, and House Equity current versions', () => {
+  it('exposes Plan, Lab, Accumulate, SS Timing, Roth Convert, and House Equity current versions', () => {
     expect(getFeatureStateVersion(FEATURE_WITHDRAW)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
-    expect(getFeatureStateVersion(FEATURE_ACCUMULATION)).toBe(ACCUMULATION_STATE_VERSION);
+    expect(getFeatureStateVersion(FEATURE_ACCUMULATE)).toBe(ACCUMULATE_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_SS_TIMING)).toBe(SS_TIMING_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ROTH_CONVERT)).toBe(ROTH_CONVERT_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_HOUSE_EQUITY)).toBe(HOUSE_EQUITY_STATE_VERSION);
@@ -49,11 +49,11 @@ describe('migrateFeatureState registry', () => {
     expect(out).not.toBe(state);
   });
 
-  it('delegates Accumulation migration to migrateAccumulationState', () => {
+  it('delegates Accumulate migration to migrateAccumulateState', () => {
     const state = { numYears: 15 };
-    const out = migrateFeatureState(FEATURE_ACCUMULATION, state, ACCUMULATION_STATE_VERSION);
+    const out = migrateFeatureState(FEATURE_ACCUMULATE, state, ACCUMULATE_STATE_VERSION);
     expect(out).toEqual(state);
-    expect(migrateAccumulationState(state, ACCUMULATION_STATE_VERSION)).toEqual(state);
+    expect(migrateAccumulateState(state, ACCUMULATE_STATE_VERSION)).toEqual(state);
   });
 
   it('delegates SS Timing migration to migrateSsTimingState', () => {

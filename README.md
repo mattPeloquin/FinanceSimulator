@@ -6,7 +6,7 @@ Welcome to the Personal Finance Simulator! This interactive tool helps you visua
 
 The entire simulator is a **single, self-contained HTML file**. One app hosts several features (tabs under the title); Easy Mode and built-in help will get you started.
 
-- **Accumulation** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title, left of Withdraw).
+- **Accumulate** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title, left of Withdraw).
 - **Withdraw** — Build a retirement spending plan and run Monte Carlo simulations (the main planner; opens by default).
 
 - **SOR Lab** — Sensitivity analysis on a saved Withdraw session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.

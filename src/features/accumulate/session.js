@@ -1,7 +1,7 @@
-// Accumulation session state — config is persisted; run results stay in memory.
+// Accumulate session state — config is persisted; run results stay in memory.
 
-import { ACCUMULATION_STATE_VERSION } from '../../state/migrations.js';
-import { FEATURE_ACCUMULATION } from '../../state/storageKeys.js';
+import { ACCUMULATE_STATE_VERSION } from '../../state/migrations.js';
+import { FEATURE_ACCUMULATE } from '../../state/storageKeys.js';
 import {
   setSessionMeta,
   refreshSessionList,
@@ -9,7 +9,7 @@ import {
   updateSessionActionButtons,
   snapshotSessionUi,
 } from '../../ui/sessionChrome.js';
-import { getAccumulationPresets } from './presets.js';
+import { getAccumulatePresets } from './presets.js';
 import {
   ALLOCATION_PCT_KEYS,
   defaultReturnsAllocationSlice,
@@ -18,7 +18,7 @@ import {
 } from '../../state/returnsAllocationSlice.js';
 import { buildAccumulationCashflowSeries } from '../../core/accumulation.js';
 
-export { ACCUMULATION_STATE_VERSION };
+export { ACCUMULATE_STATE_VERSION };
 
 export const ALLOCATION_KEYS = ALLOCATION_PCT_KEYS;
 
@@ -27,7 +27,7 @@ let onStateApplied = null;
 /** @type {(() => void) | null} */
 let onResultsCleared = null;
 
-export function registerAccumulationUiHooks(hooks = {}) {
+export function registerAccumulateUiHooks(hooks = {}) {
   if (hooks.onStateApplied) onStateApplied = hooks.onStateApplied;
   if (hooks.onResultsCleared) onResultsCleared = hooks.onResultsCleared;
 }
@@ -40,10 +40,10 @@ function defaultSleeve(startBalance, amount) {
   };
 }
 
-export function defaultAccumulationState() {
+export function defaultAccumulateState() {
   const returns = defaultReturnsAllocationSlice();
   return {
-    version: ACCUMULATION_STATE_VERSION,
+    version: ACCUMULATE_STATE_VERSION,
     // Easy Mode: attached by default on Steady Saver (level 0).
     presetActive: true,
     presetLevel: 0,
@@ -68,39 +68,39 @@ export function defaultAccumulationState() {
 }
 
 /** @type {object} */
-let accumState = defaultAccumulationState();
+let accumState = defaultAccumulateState();
 
 /** In-memory run result (not persisted). */
 let accumResult = null;
 let accumResultStale = false;
 
-export function getAccumulationState() {
+export function getAccumulateState() {
   return accumState;
 }
 
-export function getAccumulationResult() {
+export function getAccumulateResult() {
   return accumResult;
 }
 
-export function setAccumulationResult(result) {
+export function setAccumulateResult(result) {
   accumResult = result;
   accumResultStale = false;
 }
 
-export function isAccumulationResultStale() {
+export function isAccumulateResultStale() {
   return accumResultStale;
 }
 
-export function setAccumulationResultStale(stale) {
+export function setAccumulateResultStale(stale) {
   accumResultStale = !!stale;
 }
 
 /**
- * Accumulation cashflow from current config (events + contribution outflows).
+ * Accumulate cashflow from current config (events + contribution outflows).
  * Available even without a Monte Carlo run.
  * @param {{ sessionName?: string|null }} [opts]
  */
-export function getAccumulationCashflowSeries(opts = {}) {
+export function getAccumulateCashflowSeries(opts = {}) {
   return buildAccumulationCashflowSeries(accumState, {
     sessionName: opts.sessionName ?? null,
   });
@@ -132,8 +132,8 @@ function normalizeEvents(raw) {
   }));
 }
 
-export function normalizeAccumulationState(raw) {
-  const base = defaultAccumulationState();
+export function normalizeAccumulateState(raw) {
+  const base = defaultAccumulateState();
   if (!raw || typeof raw !== 'object') return base;
 
   const sleevesIn = raw.sleeves && typeof raw.sleeves === 'object' ? raw.sleeves : {};
@@ -156,7 +156,7 @@ export function normalizeAccumulationState(raw) {
     : base.presetLevel;
 
   return {
-    version: ACCUMULATION_STATE_VERSION,
+    version: ACCUMULATE_STATE_VERSION,
     presetActive: raw.presetActive !== false,
     presetLevel,
     numYears: Math.max(1, Math.min(80, parseInt(raw.numYears, 10) || base.numYears)),
@@ -179,30 +179,30 @@ export function normalizeAccumulationState(raw) {
   };
 }
 
-export function readAccumulationState() {
+export function readAccumulateState() {
   return structuredClone(accumState);
 }
 
-export function applyAccumulationState(state) {
-  accumState = normalizeAccumulationState(state);
+export function applyAccumulateState(state) {
+  accumState = normalizeAccumulateState(state);
   accumResult = null;
   accumResultStale = false;
   onResultsCleared?.();
   onStateApplied?.();
 }
 
-export function patchAccumulationState(partial) {
-  accumState = normalizeAccumulationState({ ...accumState, ...partial });
+export function patchAccumulateState(partial) {
+  accumState = normalizeAccumulateState({ ...accumState, ...partial });
   accumResultStale = !!accumResult;
   onStateApplied?.();
 }
 
-export function applyAccumulationPreset(presetId, { keepAttached = true } = {}) {
-  const presets = getAccumulationPresets();
+export function applyAccumulatePreset(presetId, { keepAttached = true } = {}) {
+  const presets = getAccumulatePresets();
   const index = presets.findIndex((p) => p.id === presetId);
   const preset = index >= 0 ? presets[index] : null;
   if (!preset) return;
-  applyAccumulationState({
+  applyAccumulateState({
     ...accumState,
     ...preset.patch,
     profiles: accumState.profiles,
@@ -212,20 +212,20 @@ export function applyAccumulationPreset(presetId, { keepAttached = true } = {}) 
 }
 
 /** Detach Easy Mode after a manual edit (keeps current field values). */
-export function detachAccumulationPreset() {
+export function detachAccumulatePreset() {
   if (!accumState.presetActive) return;
-  patchAccumulationState({ presetActive: false });
+  patchAccumulateState({ presetActive: false });
 }
 
-export async function applyImportedAccumulation(loaded) {
-  applyAccumulationState(loaded?.payload ?? loaded);
+export async function applyImportedAccumulate(loaded) {
+  applyAccumulateState(loaded?.payload ?? loaded);
 }
 
-export async function resetAccumulationToDefaults() {
-  applyAccumulationState(defaultAccumulationState());
+export async function resetAccumulateToDefaults() {
+  applyAccumulateState(defaultAccumulateState());
   setSessionMeta({ name: '', description: '', lastSelect: '' });
   updateSessionNoteDisplay();
   updateSessionActionButtons();
   await refreshSessionList('');
-  snapshotSessionUi(FEATURE_ACCUMULATION);
+  snapshotSessionUi(FEATURE_ACCUMULATE);
 }

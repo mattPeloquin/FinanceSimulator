@@ -29,7 +29,16 @@ function inlinePartials(source, partials) {
 
 const root = join(__dirname, '..', 'src');
 const partials = loadPartials(join(root, 'partials'));
-loadPartials(join(root, 'features', 'withdraw', 'partials'), partials);
+for (const feature of [
+  'withdraw',
+  'accumulate',
+  'sor-lab',
+  'ss-timing',
+  'roth-convert',
+  'house-equity',
+]) {
+  loadPartials(join(root, 'features', feature, 'partials'), partials);
+}
 const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials);
 
 // Required non-field element ids the app wires up at runtime.
