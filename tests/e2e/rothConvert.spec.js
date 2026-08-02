@@ -14,6 +14,11 @@ test('Roth Convert smoke: More → run → response chart', async ({ page }) => 
   await openRothConvert(page);
 
   await expect(page.locator('#roth-convert-run')).toBeVisible();
+  // Soft-link radios + local Investment Planning accordion (default = local).
+  await expect(page.locator('#roth-convert-source-link')).toBeVisible();
+  await expect(page.locator('#roth-convert-source-local')).toBeChecked();
+  await expect(page.locator('#roth-convert-section-investment')).toBeAttached();
+  await expect(page.locator('#roth-convert-returns-host [data-portfolio-panel]')).toBeAttached();
   await page.selectOption('#roth-convert-paths', '200');
   await page.fill('#roth-convert-years', '8');
 

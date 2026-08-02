@@ -9,15 +9,16 @@ test('asset allocation shows real avg for the year range', async ({ page }) => {
   }
   await expect(page.locator('#section-investment')).toHaveAttribute('open', '');
 
-  const growthAvg = page.locator('#usLgGrowthAvgReturn');
-  await expect(growthAvg).toBeVisible();
-  await expect(growthAvg).toHaveText(/^-?\d+(\.\d)?$/);
-  const initialAvg = await growthAvg.textContent();
+  // First registry sleeve’s avg readout (ids are `${domId}AvgReturn` from the panel).
+  const sleeveAvg = page.locator('#section-investment [id$="AvgReturn"]').first();
+  await expect(sleeveAvg).toBeVisible();
+  await expect(sleeveAvg).toHaveText(/^-?\d+(\.\d)?$/);
+  const initialAvg = await sleeveAvg.textContent();
 
   await page.fill('#startYear', '2000');
   await page.fill('#endYear', '2010');
   await page.press('#endYear', 'Tab');
 
-  await expect(growthAvg).not.toHaveText(initialAvg, { timeout: 5000 });
-  await expect(growthAvg).toHaveText(/^-?\d+(\.\d)?$/);
+  await expect(sleeveAvg).not.toHaveText(initialAvg, { timeout: 5000 });
+  await expect(sleeveAvg).toHaveText(/^-?\d+(\.\d)?$/);
 });

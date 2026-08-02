@@ -17,9 +17,11 @@ import {
   renormalizeAllocation,
   tierMixToDecimal,
 } from './allocation.js';
-import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
+import { createRng, deriveSeed } from './rng.js';
 import { mean, median, percentileValue, stdDev } from './statistics.js';
 import { buildCashflowSeries } from '../state/cashflowSeries.js';
+import { sampleYearReturn } from '../portfolio/api.js';
+import { engineKeys } from '../portfolio/registry.js';
 
 /** Sleeve ids used throughout Accumulation state and results. */
 export const SLEEVE_IDS = Object.freeze(['ira', 'roth', 'afterTax']);
@@ -34,16 +36,6 @@ export const SAVINGS_SCALES = Object.freeze([
 /** Coarse simplex step (20%). Ceiling keeps interactive runs from implying a fine optimum. */
 export const DEFAULT_WEIGHT_GRID_STEP = 0.2;
 export const DEFAULT_WEIGHT_GRID_CEILING = 48;
-
-const LOGNORMAL_ASSET_ORDER = [
-  'usLgGrowth',
-  'usLgValue',
-  'usSmMid',
-  'exUs',
-  'bond',
-  'cash',
-  'inflation',
-];
 
 const THOUSANDS_TO_DOLLARS = 1000;
 
@@ -127,119 +119,18 @@ export function buildEventSeries(events, numYears) {
   return series;
 }
 
-// ---- Return sampling (mirrors simulation.js modes, deposit-only consumer) ---
-
-function nextBootstrapIndex(rng, currentIndex, poolLen, blockSize) {
-  const restartProb = blockSize > 1 ? 1 / blockSize : 1;
-  if (currentIndex < 0 || rng.uniform() < restartProb) {
-    return Math.floor(rng.uniform() * poolLen);
-  }
-  return (currentIndex + 1) % poolLen;
-}
-
-function matVec(L, v) {
-  const N = v.length;
-  const out = new Array(N);
-  for (let i = 0; i < N; i++) {
-    let sum = 0;
-    for (let k = 0; k <= i; k++) sum += L[i][k] * v[k];
-    out[i] = sum;
-  }
-  return out;
-}
+// ---- Return sampling (shared portfolio MC SOR) --------------------------------
 
 /**
  * Stateful year-by-year real portfolio return sampler.
- * Mutates `state` (bootstrap cursor / AR(1) z) across years on one path.
- * Exported for Roth Convert and other real-dollar path engines that share
- * the same market sampling contract.
+ * Delegates to the portfolio module so all features share one SOR implementation.
  */
 export function sampleRealPortfolioReturn(params, rng, yearAlloc, yearIndex, state) {
-  const {
-    distMethod,
-    logNormal,
-    samples,
-    scaledHistoricalShocks,
-    scaledHistoricalSmoothing,
-    blockSize,
-    sequenceStart,
-  } = params;
-
-  const weights = [
-    yearAlloc.usLgGrowth,
-    yearAlloc.usLgValue,
-    yearAlloc.usSmMid,
-    yearAlloc.exUs,
-    yearAlloc.bond,
-    yearAlloc.cash,
-  ];
-
-  let portfolioReturn = 0;
-  let inflation;
-
-  if (distMethod === 'lognormal') {
-    const eps = new Array(7);
-    for (let k = 0; k < 7; k++) eps[k] = rng.normal();
-    const c = logNormal?.chol ? matVec(logNormal.chol, eps) : eps;
-    const phi = blockSize > 1 ? 1 - 1 / blockSize : 0;
-    let z;
-    if (!state.lnPrevZ || phi === 0) {
-      z = c;
-    } else {
-      const a = Math.sqrt(1 - phi * phi);
-      z = new Array(7);
-      for (let k = 0; k < 7; k++) z[k] = phi * state.lnPrevZ[k] + a * c[k];
-    }
-    state.lnPrevZ = z;
-    for (let k = 0; k < 6; k++) {
-      const key = LOGNORMAL_ASSET_ORDER[k];
-      const { mu, sigma } = logNormalMuSigma(logNormal[key].mean, logNormal[key].stdDev);
-      portfolioReturn += applyLogNormalMuSigma(mu, sigma, z[k]) * weights[k];
-    }
-    const inf = logNormalMuSigma(logNormal.inflation.mean, logNormal.inflation.stdDev);
-    inflation = applyLogNormalMuSigma(inf.mu, inf.sigma, z[6]);
-  } else if (distMethod === 'scaledHistorical') {
-    const shockPool = scaledHistoricalShocks;
-    const shockLen = shockPool ? shockPool.length : 0;
-    state.bootIndex = nextBootstrapIndex(rng, state.bootIndex, shockLen, blockSize || 1);
-    const z = shockPool[state.bootIndex];
-    const smoothing = scaledHistoricalSmoothing ?? 0;
-    const targets = LOGNORMAL_ASSET_ORDER.map((key) => logNormal[key]);
-    for (let k = 0; k < 6; k++) {
-      const { mean: m, stdDev: s } = targets[k];
-      const jitter = smoothing > 0 ? rng.normal() * smoothing * s : 0;
-      portfolioReturn += (m + z[k] * s + jitter) * weights[k];
-    }
-    const inf = targets[6];
-    const infJitter = smoothing > 0 ? rng.normal() * smoothing * inf.stdDev : 0;
-    inflation = inf.mean + z[6] * inf.stdDev + infJitter;
-  } else {
-    const sampleYears = samples?.years || [];
-    const sampleLen = sampleYears.length;
-    if (sampleLen === 0) {
-      return { realReturn: 0, portfolioReturn: 0, inflation: 0 };
-    }
-    state.bootIndex =
-      distMethod === 'historicalSequence'
-        ? ((sequenceStart ?? 0) + yearIndex) % sampleLen
-        : nextBootstrapIndex(rng, state.bootIndex, sampleLen, blockSize || 1);
-    const yearData = sampleYears[state.bootIndex];
-    const assetReturns = [
-      yearData.us_lg_growth / 100,
-      yearData.us_lg_value / 100,
-      yearData.us_sm_mid / 100,
-      yearData.ex_us / 100,
-      yearData.bond / 100,
-      yearData.cash / 100,
-    ];
-    inflation = yearData.inflation / 100;
-    for (let k = 0; k < 6; k++) portfolioReturn += assetReturns[k] * weights[k];
-  }
-
-  // Convert nominal portfolio growth + inflation into a real (purchasing-power) return.
-  const realReturn = (1 + portfolioReturn) / (1 + inflation) - 1;
-  return { realReturn, portfolioReturn, inflation };
+  return sampleYearReturn(params, rng, yearAlloc, yearIndex, state);
 }
+
+/** @deprecated Prefer engineKeys() from portfolio; kept for existing imports. */
+export { engineKeys as allocationEngineKeys };
 
 // ---- Path simulation --------------------------------------------------------
 

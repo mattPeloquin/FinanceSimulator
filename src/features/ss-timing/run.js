@@ -54,9 +54,14 @@ export async function handleSsTimingRunClick() {
     return;
   }
 
+  if (state.portfolioSource === 'link' && !state.scenarioRef?.name) {
+    showAlert('Select a saved Withdraw session, or switch to a local portfolio.', 'Social Security');
+    return;
+  }
+
   let payload;
   try {
-    payload = buildSsTimingWorkerPayload(state);
+    payload = await buildSsTimingWorkerPayload(state);
   } catch (err) {
     showAlert(err?.message || String(err), 'Social Security');
     return;

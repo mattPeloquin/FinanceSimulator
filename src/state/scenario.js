@@ -5,13 +5,13 @@
 // getElementById calls of the original app and makes persistence, export/import,
 // and validation trivial.
 
-import { correlationCholesky, computeStandardizedYears } from '../core/history.js';
 import { formatPct1, roundPct1 } from '../core/precision.js';
 import { buildWithdrawalFloorSeries, buildSpecificWithdrawalFloorSeries, buildGiftingSeries, buildSpendingOverTimeSeries, buildMajorEventsSeries } from '../core/withdrawal.js';
 import { buildWithdrawalTaxSeries } from '../core/feesTaxes.js';
-import { buildAllocationOverTimeSeries } from '../core/allocation.js';
 import { SCENARIO_DEFAULTS } from './defaults.js';
 import { resolveEarlyWeighting } from '../core/statistics.js';
+import { pctKeys, listSleeves, INFLATION, profileFieldKeys } from '../portfolio/registry.js';
+import { buildWithdrawMarketBlock } from '../portfolio/adapters.js';
 
 export { SCENARIO_DEFAULTS } from './defaults.js';
 
@@ -60,12 +60,8 @@ const FIELDS = [
   field('blockSize', 'blockSize', 'int'),
   field('scaledHistoricalSmoothing', 'scaledHistoricalSmoothing', 'float'),
 
-  field('usLgGrowthAllocation', 'usLgGrowthAllocation', 'float'),
-  field('usLgValueAllocation', 'usLgValueAllocation', 'float'),
-  field('usSmMidAllocation', 'usSmMidAllocation', 'float'),
-  field('exUsAllocation', 'exUsAllocation', 'float'),
-  field('bondAllocation', 'bondAllocation', 'float'),
-  field('cashAllocation', 'cashAllocation', 'float'),
+  // Allocation % inputs — one field per registry sleeve (count is not fixed).
+  ...listSleeves().map((s) => field(s.pctKey, s.pctKey, 'float')),
 
   field('enableFeesTaxes', 'enableFeesTaxes', 'boolean'),
   field('advisorFeePct', 'advisorFeePct', 'float'),
@@ -101,20 +97,13 @@ const FIELDS = [
   // Signed %; blank = off (0% is a real floor: end ≥ start).
   field('dynMaxBoostDrawdownPct', 'dynMaxBoostDrawdownPct', 'optionalPct'),
 
-  field('usLgGrowthMean', 'usLgGrowthMean', 'pct1'),
-  field('usLgGrowthStdDev', 'usLgGrowthStdDev', 'pct1'),
-  field('usLgValueMean', 'usLgValueMean', 'pct1'),
-  field('usLgValueStdDev', 'usLgValueStdDev', 'pct1'),
-  field('usSmMidMean', 'usSmMidMean', 'pct1'),
-  field('usSmMidStdDev', 'usSmMidStdDev', 'pct1'),
-  field('exUsMean', 'exUsMean', 'pct1'),
-  field('exUsStdDev', 'exUsStdDev', 'pct1'),
-  field('bondReturnMean', 'bondReturnMean', 'pct1'),
-  field('bondReturnStdDev', 'bondReturnStdDev', 'pct1'),
-  field('cashReturnMean', 'cashReturnMean', 'pct1'),
-  field('cashReturnStdDev', 'cashReturnStdDev', 'pct1'),
-  field('inflationMean', 'inflationMean', 'pct1'),
-  field('inflationStdDev', 'inflationStdDev', 'pct1'),
+  // Log-normal profile fields — mean/std per sleeve + inflation from registry.
+  ...listSleeves().flatMap((s) => [
+    field(s.meanKey, s.meanKey, 'pct1'),
+    field(s.stdKey, s.stdKey, 'pct1'),
+  ]),
+  field(INFLATION.meanKey, INFLATION.meanKey, 'pct1'),
+  field(INFLATION.stdKey, INFLATION.stdKey, 'pct1'),
 
   field('goalSeekMode', 'goalSeekMode', 'boolean'),
   field('goalSeekTargetEndingBalance', 'goalSeekTargetEndingBalance', 'currency'),
@@ -131,34 +120,18 @@ const FIELDS = [
 
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
 
-export const ALLOCATION_KEYS = [
-  'usLgGrowthAllocation',
-  'usLgValueAllocation',
-  'usSmMidAllocation',
-  'exUsAllocation',
-  'bondAllocation',
-  'cashAllocation',
-];
+/** Allocation % field names — derived from the portfolio registry (no fixed count). */
+export const ALLOCATION_KEYS = pctKeys();
 
 /** Short UI labels for each allocation category (tier rows + preview legend). */
-export const ALLOCATION_LABELS = {
-  usLgGrowthAllocation: 'US Lg Growth',
-  usLgValueAllocation: 'US Lg Value',
-  usSmMidAllocation: 'US Sm/Mid',
-  exUsAllocation: 'ex-US',
-  bondAllocation: 'Bonds',
-  cashAllocation: 'Cash',
-};
+export const ALLOCATION_LABELS = Object.fromEntries(
+  listSleeves().map((s) => [s.pctKey, s.label]),
+);
 
 /** History / chart color key for each scenario allocation field. */
-export const ALLOCATION_CHART_KEYS = {
-  usLgGrowthAllocation: 'us_lg_growth',
-  usLgValueAllocation: 'us_lg_value',
-  usSmMidAllocation: 'us_sm_mid',
-  exUsAllocation: 'ex_us',
-  bondAllocation: 'bond',
-  cashAllocation: 'cash',
-};
+export const ALLOCATION_CHART_KEYS = Object.fromEntries(
+  listSleeves().map((s) => [s.pctKey, s.historyKey]),
+);
 
 export function parseCurrency(val) {
   if (typeof val === 'number') return val;
@@ -1352,8 +1325,6 @@ export function buildSimParams(scenario, samples) {
     horizonRange,
     numSimulations: scenario.numSimulations,
     seed,
-    distMethod: scenario.distMethod,
-    blockSize: scenario.blockSize || 1,
     // Fraction of runs on each side of a percentile rank to average together
     // (clamped to a sane range). Consumed by the worker's path smoothing.
     smoothFraction: Math.min(Math.max(num(scenario.smoothWindowPct) / 100, 0), 0.1),
@@ -1363,34 +1334,22 @@ export function buildSimParams(scenario, samples) {
     earlyWeightStrengthPct: earlyWeighting.strengthPct,
     earlyWeightEmphasisPct: earlyWeighting.earlyEmphasisPct,
     earlyWeightLateFloorPct: earlyWeighting.lateFloorPct,
-    allocation: {
-      usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
-      usLgValue: (scenario.usLgValueAllocation || 0) / 100,
-      usSmMid: (scenario.usSmMidAllocation || 0) / 100,
-      exUs: (scenario.exUsAllocation || 0) / 100,
-      bond: (scenario.bondAllocation || 0) / 100,
-      cash: (scenario.cashAllocation || 0) / 100,
-    },
-    // Per-year mixes: glide from the static Asset Allocation (year 0) toward
-    // each allocation-over-time tier. A single tier matching the static mix
-    // stays flat for the whole horizon.
-    allocationSeries: (() => {
-      const startAllocation = {
-        usLgGrowth: (scenario.usLgGrowthAllocation || 0) / 100,
-        usLgValue: (scenario.usLgValueAllocation || 0) / 100,
-        usSmMid: (scenario.usSmMidAllocation || 0) / 100,
-        exUs: (scenario.exUsAllocation || 0) / 100,
-        bond: (scenario.bondAllocation || 0) / 100,
-        cash: (scenario.cashAllocation || 0) / 100,
-      };
+    // Market / allocation block from the portfolio module (no hard-coded sleeves).
+    ...(() => {
       const fallbackMix = {};
       for (const key of ALLOCATION_KEYS) fallbackMix[key] = scenario[key] || 0;
-      return buildAllocationOverTimeSeries(
-        normalizeAllocationOverTimeTiers(scenario.allocationOverTimeTiers, fallbackMix),
+      const market = buildWithdrawMarketBlock(
+        {
+          ...scenario,
+          allocationOverTimeTiers: normalizeAllocationOverTimeTiers(
+            scenario.allocationOverTimeTiers,
+            fallbackMix,
+          ),
+        },
+        samples,
         maxYears,
-        startAllocation,
-        ALLOCATION_KEYS,
       );
+      return market;
     })(),
     portfolio: {
       strategy: scenario.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy,
@@ -1464,28 +1423,9 @@ export function buildSimParams(scenario, samples) {
         : buildWithdrawalTaxSeries([], maxYears, toDollars),
     },
     dynConfig: readDynConfigFromScenario(scenario),
-    logNormal: {
-      usLgGrowth: { mean: num(scenario.usLgGrowthMean) / 100, stdDev: num(scenario.usLgGrowthStdDev) / 100 },
-      usLgValue: { mean: num(scenario.usLgValueMean) / 100, stdDev: num(scenario.usLgValueStdDev) / 100 },
-      usSmMid: { mean: num(scenario.usSmMidMean) / 100, stdDev: num(scenario.usSmMidStdDev) / 100 },
-      exUs: { mean: num(scenario.exUsMean) / 100, stdDev: num(scenario.exUsStdDev) / 100 },
-      bond: { mean: num(scenario.bondReturnMean) / 100, stdDev: num(scenario.bondReturnStdDev) / 100 },
-      cash: { mean: num(scenario.cashReturnMean) / 100, stdDev: num(scenario.cashReturnStdDev) / 100 },
-      inflation: { mean: num(scenario.inflationMean) / 100, stdDev: num(scenario.inflationStdDev) / 100 },
-      // Cholesky factor of the historical correlation matrix (same year range as
-      // the profiles). Lets log-normal draws preserve cross-asset correlations.
-      chol: samples && samples.years ? correlationCholesky(samples.years) : null,
-    },
-    scaledHistoricalShocks:
-      samples && samples.years ? computeStandardizedYears(samples.years) : null,
-    scaledHistoricalSmoothing: Math.min(
-      Math.max(num(scenario.scaledHistoricalSmoothing) / 100, 0),
-      1,
-    ),
     // Max allowed spending shortfall vs. plan when packaging / grading on-plan.
     shortfallTolerance: withdrawShortfallTolerance(scenario),
     onTargetScoring: resolveOnTargetScoring(scenario),
-    samples,
   };
 }
 
@@ -1735,10 +1675,7 @@ export function validateScenario(scenario, { minYear, maxYear }) {
 
   if (scenario.distMethod === 'lognormal' || scenario.distMethod === 'scaledHistorical') {
     const missing = [
-      'usLgGrowthMean', 'usLgGrowthStdDev', 'usLgValueMean', 'usLgValueStdDev',
-      'usSmMidMean', 'usSmMidStdDev', 'exUsMean', 'exUsStdDev',
-      'bondReturnMean', 'bondReturnStdDev', 'cashReturnMean', 'cashReturnStdDev',
-      'inflationMean', 'inflationStdDev',
+      ...profileFieldKeys(),
     ].some((k) => scenario[k] == null || scenario[k] === '');
     if (missing) {
       errors.push('Return assumptions are incomplete. Adjust the year range or edit the Mean / Std Dev fields.');

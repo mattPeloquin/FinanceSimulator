@@ -229,18 +229,15 @@ export function simulateRothPath(params, strategy, pathIndex = 0) {
   const rmdEnabled = params.rmdEnabled !== false;
   const spouseSole = !!params.spouseSoleBeneficiary && !!params.couple;
 
-  const constantReturn = params.returnMode === 'constant';
-  const constR = Number(params.constantRealReturn) || 0;
+  // Portfolio growth is always MC SOR via marketParams (no constant-return mode).
 
   const allocation = params.allocation
     || allocationFromConfig(params.allocationPct, null);
-  const allocationSeries = constantReturn
-    ? null
-    : (params.allocationSeries || buildAllocationOverTimeSeries(
-      params.allocationOverTimeTiers || [],
-      numYears,
-      allocation,
-    ));
+  const allocationSeries = params.allocationSeries || buildAllocationOverTimeSeries(
+    params.allocationOverTimeTiers || [],
+    numYears,
+    allocation,
+  );
 
   const marketState = {};
   let lifetimeTax = 0;
@@ -349,21 +346,16 @@ export function simulateRothPath(params, strategy, pathIndex = 0) {
 
     lifetimeTax += taxDue;
 
-    // --- Market growth (real) ---
-    let realReturn;
-    if (constantReturn) {
-      realReturn = constR;
-    } else {
-      const yearAlloc = allocationSeries[y] || allocation;
-      const sampled = sampleRealPortfolioReturn(
-        params.marketParams || params,
-        rng,
-        yearAlloc,
-        y,
-        marketState,
-      );
-      realReturn = sampled.realReturn;
-    }
+    // --- Market growth (real) — shared portfolio MC SOR ---
+    const yearAlloc = allocationSeries[y] || allocation;
+    const sampled = sampleRealPortfolioReturn(
+      params.marketParams || params,
+      rng,
+      yearAlloc,
+      y,
+      marketState,
+    );
+    const realReturn = sampled.realReturn;
     sumReturns += realReturn;
 
     // Grow tax-advantaged sleeves tax-free (real).
@@ -704,7 +696,8 @@ export function runRothConversionAnalysis(input, hooks = {}) {
       seed,
       numSimulations,
       numYears,
-      returnMode: input.returnMode || 'constant',
+      returnMode: 'market',
+      portfolioSource: input.portfolioSource || 'local',
       taxPayment: input.taxPayment === 'withhold' ? 'withhold' : 'fromTaxable',
       ratePremium: Number(input.ratePremium) || 0,
       taxNoiseStd: Number(input.taxNoiseStd) || 0,

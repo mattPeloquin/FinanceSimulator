@@ -53,6 +53,9 @@ import {
   resetUnsavedToDefaults,
   applyImportedScenario,
 } from './session.js';
+import { mountPortfolioPanel } from '../../portfolio/ui/panel.js';
+import { fromWithdrawScenario } from '../../portfolio/adapters.js';
+import { listSleeves } from '../../portfolio/registry.js';
 
 function getDefaultCoreUsage() {
   const cores = navigator.hardwareConcurrency || 4;
@@ -63,6 +66,26 @@ function getDefaultCoreUsage() {
 
 async function initWithdrawDom() {
   initHistory({ onAutosave: scheduleAutosave });
+
+  // Mount shared portfolio panel (registry-generated sleeve rows) before scenario DOM write.
+  const autosavedEarly = loadAutosave() || {};
+  const initialForMount = {
+    ...defaultScenario(),
+    parallelCores: getDefaultCoreUsage(),
+    ...(autosavedEarly.scenario || {}),
+  };
+  let portfolioDomReady = false;
+  mountPortfolioPanel(document.getElementById('withdraw-portfolio-host'), {
+    idPrefix: '',
+    wrapAccordion: true,
+    showOverTime: true,
+    syncSparklines: false,
+    getPortfolio: () => fromWithdrawScenario(
+      portfolioDomReady ? readScenarioFromDom() : initialForMount,
+    ),
+    setPortfolio: () => { scheduleAutosave(); },
+    onChange: () => { scheduleAutosave(); },
+  });
 
   registerSessionAdapter(FEATURE_WITHDRAW, {
     getState: () => readScenarioFromDom(),
@@ -81,10 +104,10 @@ async function initWithdrawDom() {
   // smoothWindowPct) still get their default instead of rendering blank.
   // Unsupported / malformed autosave returns null → defaults. Missing Easy Mode
   // on a non-empty load is detached in applyScenario.
-  const autosaved = loadAutosave() || {};
-  const initial = { ...defaultScenario(), parallelCores: getDefaultCoreUsage(), ...(autosaved.scenario || {}) };
+  const initial = initialForMount;
 
   writeScenarioToDom(initial);
+  portfolioDomReady = true;
   toggleDistMethod(initial.distMethod);
   toggleWithdrawalStrategy(initial.withdrawalStrategy || SCENARIO_DEFAULTS.withdrawalStrategy);
   toggleDynamicAdjustments(initial.enableDynamicAdjustments ?? true);
@@ -128,7 +151,9 @@ async function initWithdrawDom() {
   updateAllocationTotal();
 
   // Populate profiles + mini charts on first paint (mirrors original behaviour).
-  const hasProfiles = initial.usLgGrowthMean != null && initial.usLgGrowthMean !== '';
+  const hasProfiles = listSleeves().some(
+    (s) => initial[s.meanKey] != null && initial[s.meanKey] !== '',
+  );
   if (hasProfiles) {
     refreshHistoryView(initial.startYear, initial.endYear);
   } else {

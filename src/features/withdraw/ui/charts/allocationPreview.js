@@ -4,8 +4,6 @@
 import { Chart } from '../../../../ui/charts/chartSetup.js';
 import {
   ALLOCATION_KEYS,
-  ALLOCATION_LABELS,
-  ALLOCATION_CHART_KEYS,
   normalizeAllocationOverTimeTiers,
   readAllocationOverTimeTiersFromDom,
   readStaticAllocationFromDom,
@@ -15,7 +13,8 @@ import {
   allocationKeyToEngine,
 } from '../../../../core/allocation.js';
 import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
-import { onThemeChange, themeTokens } from '../../../../ui/theme.js';
+import { onThemeChange } from '../../../../ui/theme.js';
+import { listSleeves } from '../../../../portfolio/registry.js';
 
 let previewChart = null;
 let pendingFrame = null;
@@ -42,15 +41,13 @@ function buildChart(canvas, series) {
   // Chart.js stacks the first dataset at the bottom. Reverse so the UI's
   // first category (US Lg Growth) sits at the top of each bar, matching the
   // Asset Allocation list order top → bottom.
-  const stackOrder = [...ALLOCATION_KEYS].reverse();
-  const datasets = stackOrder.map((scenarioKey) => {
-    const engineKey = allocationKeyToEngine(scenarioKey);
-    const chartKey = ALLOCATION_CHART_KEYS[scenarioKey];
-    const color = themeTokens.chartAssets[chartKey];
+  const stackOrder = [...listSleeves()].reverse();
+  const datasets = stackOrder.map((sleeve) => {
+    const engineKey = sleeve.engineKey;
     return {
-      label: ALLOCATION_LABELS[scenarioKey] || scenarioKey,
+      label: sleeve.label,
       data: series.map((mix) => (mix[engineKey] || 0) * 100),
-      backgroundColor: color,
+      backgroundColor: sleeve.color,
       borderWidth: 0,
       stack: 'alloc',
     };

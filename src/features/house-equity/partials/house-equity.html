@@ -168,21 +168,28 @@
 
     <div class="space-y-4">
       <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
-        <h3 class="text-sm font-semibold text-theme-heading">Returns (invest paths)</h3>
-        <label class="block space-y-0.5">
-          <span class="text-xs text-theme-muted">Link Withdraw session (optional)</span>
-          <select id="house-equity-scenario" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
-            <option value="">— Constant return —</option>
-          </select>
-        </label>
-        <label class="block space-y-0.5">
-          <span class="text-xs text-theme-muted">Constant real return</span>
-          <div class="input-adorned has-suffix">
-            <input type="number" id="house-equity-const-return" step="0.1" min="-20" max="30"
-              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
-            <span class="input-adorn-suffix">%</span>
-          </div>
-        </label>
+        <h3 class="text-sm font-semibold text-theme-heading">Returns (MC SOR)</h3>
+        <fieldset class="space-y-2">
+          <legend class="text-xs text-theme-muted">Portfolio source</legend>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="house-equity-portfolio-source" id="house-equity-source-link" value="link" class="border-theme-border" />
+            Use linked Withdraw / Plan scenario
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="house-equity-portfolio-source" id="house-equity-source-local" value="local" class="border-theme-border" checked />
+            Define portfolio here
+          </label>
+        </fieldset>
+        <div id="house-equity-link-wrap" class="space-y-2 hidden">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Withdraw session</span>
+            <select id="house-equity-scenario" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+              <option value="">Select a saved Withdraw session…</option>
+            </select>
+          </label>
+          <div id="house-equity-portfolio-preview"></div>
+        </div>
+        <div id="house-equity-returns-host" class="space-y-2"></div>
         <label class="block space-y-0.5">
           <span class="text-xs text-theme-muted">Monte Carlo paths</span>
           <select id="house-equity-paths" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">

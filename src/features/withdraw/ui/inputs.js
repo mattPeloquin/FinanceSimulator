@@ -257,9 +257,17 @@ export function formatAllCurrencyInputs() {
   });
 }
 
+/** Main Withdraw sleeve % inputs only (exclude other features’ portfolio panels). */
+function withdrawAllocationInputs(root = document) {
+  const host = root.getElementById?.('allocationSparklines') || root.querySelector?.('#allocationSparklines');
+  if (!host) return [];
+  return host.querySelectorAll('[data-alloc-row] .allocation-input');
+}
+
 export function updateAllocationTotal() {
   const display = document.getElementById('totalAllocation');
-  const inputs = document.querySelectorAll('.allocation-input');
+  if (!display) return 0;
+  const inputs = withdrawAllocationInputs();
   const total = Array.from(inputs).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0);
   display.textContent = total.toFixed(1).replace(/\.0$/, '');
   if (Math.abs(total - 100) > 0.01) {
@@ -867,7 +875,7 @@ export function setupInputBehaviors({ onChange, onDistMethodChange }) {
     });
   });
 
-  document.querySelectorAll('.allocation-input').forEach((input) => {
+  withdrawAllocationInputs().forEach((input) => {
     input.addEventListener('input', () => {
       updateAllocationTotal();
       syncAllocationPreview();

@@ -22,27 +22,14 @@ import {
   normalizeWithdrawalTaxTiers,
   normalizeAllocationOverTimeTiers,
 } from '../../state/scenario.js';
+import { listSleeves, INFLATION } from '../../portfolio/registry.js';
 
-const EQUITY_KEYS = [
-  'usLgGrowthAllocation',
-  'usLgValueAllocation',
-  'usSmMidAllocation',
-  'exUsAllocation',
-];
-
-const EQUITY_MEAN_KEYS = [
-  'usLgGrowthMean',
-  'usLgValueMean',
-  'usSmMidMean',
-  'exUsMean',
-];
-
-const EQUITY_STD_KEYS = [
-  'usLgGrowthStdDev',
-  'usLgValueStdDev',
-  'usSmMidStdDev',
-  'exUsStdDev',
-];
+const EQUITY_KEYS = listSleeves().filter((s) => s.bucket === 'stock').map((s) => s.pctKey);
+const EQUITY_MEAN_KEYS = listSleeves().filter((s) => s.bucket === 'stock').map((s) => s.meanKey);
+const EQUITY_STD_KEYS = listSleeves().filter((s) => s.bucket === 'stock').map((s) => s.stdKey);
+const BOND_CASH_SLEEVES = listSleeves().filter((s) => s.bucket === 'bondCash');
+const BOND_SLEEVE = BOND_CASH_SLEEVES[0] || null;
+const CASH_SLEEVE = BOND_CASH_SLEEVES[1] || BOND_CASH_SLEEVES[0] || null;
 
 function num(value, fallback = 0) {
   const n = Number(value);
@@ -100,9 +87,9 @@ export function applyEquitySharePct(scenario, equitySharePct) {
   const out = cloneScenario(scenario);
   const targetEquity = clamp(num(equitySharePct), 0, 100);
   const currentEquity = readEquityShare(out);
-  const bond = num(out.bondAllocation);
-  const cash = num(out.cashAllocation);
-  const defensive = bond + cash;
+  const defensiveKeys = BOND_CASH_SLEEVES.map((s) => s.pctKey);
+  const defensiveAmounts = defensiveKeys.map((k) => num(out[k]));
+  const defensive = defensiveAmounts.reduce((a, b) => a + b, 0);
 
   if (currentEquity > 1e-9) {
     const scale = targetEquity / currentEquity;
@@ -119,11 +106,12 @@ export function applyEquitySharePct(scenario, equitySharePct) {
 
   const remaining = 100 - targetEquity;
   if (defensive > 1e-9) {
-    out.bondAllocation = remaining * (bond / defensive);
-    out.cashAllocation = remaining * (cash / defensive);
-  } else {
-    out.bondAllocation = remaining;
-    out.cashAllocation = 0;
+    defensiveKeys.forEach((k, i) => {
+      out[k] = remaining * (defensiveAmounts[i] / defensive);
+    });
+  } else if (defensiveKeys.length) {
+    out[defensiveKeys[0]] = remaining;
+    for (let i = 1; i < defensiveKeys.length; i++) out[defensiveKeys[i]] = 0;
   }
   renormalizeAllocations(out);
   return out;
@@ -135,8 +123,10 @@ export function applyBondVsCashSplit(scenario, bondPctOfDefensive) {
   const equity = readEquityShare(out);
   const defensive = Math.max(0, 100 - equity);
   const bondShare = clamp(num(bondPctOfDefensive), 0, 100) / 100;
-  out.bondAllocation = defensive * bondShare;
-  out.cashAllocation = defensive * (1 - bondShare);
+  const bondKey = BOND_SLEEVE?.pctKey;
+  const cashKey = CASH_SLEEVE?.pctKey;
+  if (bondKey) out[bondKey] = defensive * bondShare;
+  if (cashKey) out[cashKey] = defensive * (1 - bondShare);
   renormalizeAllocations(out);
   return out;
 }
@@ -145,7 +135,8 @@ function renormalizeAllocations(scenario) {
   let total = 0;
   for (const key of ALLOCATION_KEYS) total += num(scenario[key]);
   if (total <= 1e-12) {
-    scenario.cashAllocation = 100;
+    const fallbackKey = CASH_SLEEVE?.pctKey || ALLOCATION_KEYS[ALLOCATION_KEYS.length - 1];
+    if (fallbackKey) scenario[fallbackKey] = 100;
     return;
   }
   for (const key of ALLOCATION_KEYS) {
@@ -652,11 +643,11 @@ export const LAB_VARIABLES = [
     group: 'Allocation',
     category: 'decision',
     unit: '%',
-    isLive: (s) => num(s.bondAllocation) + num(s.cashAllocation) > 0,
+    isLive: (s) => BOND_CASH_SLEEVES.some((sleeve) => num(s[sleeve.pctKey]) > 0),
     gateReason: () => 'Needs a non-zero bond + cash sleeve',
     baselineValue: (s) => {
-      const bond = num(s.bondAllocation);
-      const cash = num(s.cashAllocation);
+      const bond = BOND_SLEEVE ? num(s[BOND_SLEEVE.pctKey]) : 0;
+      const cash = CASH_SLEEVE ? num(s[CASH_SLEEVE.pctKey]) : 0;
       const def = bond + cash;
       return def > 0 ? (bond / def) * 100 : 50;
     },
@@ -715,27 +706,27 @@ export const LAB_VARIABLES = [
   },
   {
     id: 'bondReturnOffset',
-    label: 'Bond return',
+    label: `${BOND_SLEEVE?.label || 'Bond'} return`,
     group: 'Returns & inflation',
     category: 'uncertainty',
     unit: 'pp',
-    isLive: (s) => s.bondReturnMean != null && s.bondReturnMean !== '',
+    isLive: (s) => BOND_SLEEVE && s[BOND_SLEEVE.meanKey] != null && s[BOND_SLEEVE.meanKey] !== '',
     gateReason: () => 'Fill bond return profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 2 }),
-    apply: (s, v) => applyOffsetToKeys(s, ['bondReturnMean'], v),
+    apply: (s, v) => (BOND_SLEEVE ? applyOffsetToKeys(s, [BOND_SLEEVE.meanKey], v) : s),
   },
   {
     id: 'cashReturnOffset',
-    label: 'Cash return',
+    label: `${CASH_SLEEVE?.label || 'Cash'} return`,
     group: 'Returns & inflation',
     category: 'uncertainty',
     unit: 'pp',
-    isLive: (s) => s.cashReturnMean != null && s.cashReturnMean !== '',
+    isLive: (s) => CASH_SLEEVE && s[CASH_SLEEVE.meanKey] != null && s[CASH_SLEEVE.meanKey] !== '',
     gateReason: () => 'Fill cash return profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 2 }),
-    apply: (s, v) => applyOffsetToKeys(s, ['cashReturnMean'], v),
+    apply: (s, v) => (CASH_SLEEVE ? applyOffsetToKeys(s, [CASH_SLEEVE.meanKey], v) : s),
   },
   {
     id: 'equityVolScale',
@@ -751,15 +742,15 @@ export const LAB_VARIABLES = [
   },
   {
     id: 'bondVolScale',
-    label: 'Bond volatility',
+    label: `${BOND_SLEEVE?.label || 'Bond'} volatility`,
     group: 'Returns & inflation',
     category: 'uncertainty',
     unit: '×',
-    isLive: (s) => s.bondReturnStdDev != null && s.bondReturnStdDev !== '',
+    isLive: (s) => BOND_SLEEVE && s[BOND_SLEEVE.stdKey] != null && s[BOND_SLEEVE.stdKey] !== '',
     gateReason: () => 'Fill bond volatility profile in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.7, high: 1.4 }),
-    apply: (s, v) => applyScaleToKeys(s, ['bondReturnStdDev'], v),
+    apply: (s, v) => (BOND_SLEEVE ? applyScaleToKeys(s, [BOND_SLEEVE.stdKey], v) : s),
   },
   {
     id: 'inflationOffset',
@@ -767,11 +758,11 @@ export const LAB_VARIABLES = [
     group: 'Returns & inflation',
     category: 'uncertainty',
     unit: 'pp',
-    isLive: (s) => s.inflationMean != null && s.inflationMean !== '',
+    isLive: (s) => s[INFLATION.meanKey] != null && s[INFLATION.meanKey] !== '',
     gateReason: () => 'Fill inflation profile in the Withdraw scenario',
     baselineValue: () => 0,
     defaultEnvelope: () => ({ low: -2, high: 3 }),
-    apply: (s, v) => applyOffsetToKeys(s, ['inflationMean'], v),
+    apply: (s, v) => applyOffsetToKeys(s, [INFLATION.meanKey], v),
   },
   {
     id: 'inflationVolScale',
@@ -779,11 +770,11 @@ export const LAB_VARIABLES = [
     group: 'Returns & inflation',
     category: 'uncertainty',
     unit: '×',
-    isLive: (s) => s.inflationStdDev != null && s.inflationStdDev !== '',
+    isLive: (s) => s[INFLATION.stdKey] != null && s[INFLATION.stdKey] !== '',
     gateReason: () => 'Fill inflation volatility in the Withdraw scenario',
     baselineValue: () => 1,
     defaultEnvelope: () => ({ low: 0.7, high: 1.5 }),
-    apply: (s, v) => applyScaleToKeys(s, ['inflationStdDev'], v),
+    apply: (s, v) => applyScaleToKeys(s, [INFLATION.stdKey], v),
   },
 
   // ---- Taxes and transfers --------------------------------------------------

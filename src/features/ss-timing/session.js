@@ -1,7 +1,9 @@
 // Social Security session state — config persisted; results in memory only.
 
 import { SS_TIMING_STATE_VERSION } from '../../state/migrations.js';
-import { FEATURE_SS_TIMING } from '../../state/storageKeys.js';
+import { SCHEMA_VERSION } from '../../state/scenario.js';
+import { FEATURE_SS_TIMING, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
+import * as sessions from '../../state/sessions.js';
 import {
   setSessionMeta,
   refreshSessionList,
@@ -15,11 +17,21 @@ import {
   normalizeReturnsAllocationSlice,
   canonicalizeDistMethod,
 } from '../../state/returnsAllocationSlice.js';
+import { listSleeves } from '../../portfolio/registry.js';
+import { remapWithdrawScenarioRef } from '../../portfolio/ui/sourceControls.js';
 import {
   fraFromBirthYear,
   DEFAULT_END_AGES,
   buildSsCashflowSeries,
 } from '../../core/socialSecurity.js';
+
+function allocationFromOrdered(pcts) {
+  const allocation = {};
+  listSleeves().forEach((s, i) => {
+    allocation[s.pctKey] = pcts[i] ?? s.defaultPct;
+  });
+  return allocation;
+}
 
 export { SS_TIMING_STATE_VERSION };
 
@@ -47,14 +59,7 @@ function defaultPerson(label, birthYear, pia, claimAge) {
 
 export function defaultSsTimingState() {
   const returns = defaultReturnsAllocationSlice({
-    allocation: {
-      usLgGrowthAllocation: 20,
-      usLgValueAllocation: 20,
-      usSmMidAllocation: 10,
-      exUsAllocation: 15,
-      bondAllocation: 25,
-      cashAllocation: 10,
-    },
+    allocation: allocationFromOrdered([20, 20, 10, 15, 25, 10]),
   });
   return {
     version: SS_TIMING_STATE_VERSION,
@@ -83,6 +88,8 @@ export function defaultSsTimingState() {
         jitterYears: 2,
       },
     },
+    portfolioSource: 'local',
+    scenarioRef: null,
   };
 }
 
@@ -166,6 +173,17 @@ export function normalizeSsTimingState(raw) {
     ? Number(raw.presetLevel)
     : base.presetLevel;
 
+  let scenarioRef = null;
+  if (raw.scenarioRef && typeof raw.scenarioRef === 'object' && raw.scenarioRef.name) {
+    scenarioRef = {
+      feature: raw.scenarioRef.feature || FEATURE_WITHDRAW,
+      name: String(raw.scenarioRef.name),
+    };
+  }
+  const portfolioSource = scenarioRef
+    ? 'link'
+    : (raw.portfolioSource === 'link' ? 'link' : 'local');
+
   return {
     version: SS_TIMING_STATE_VERSION,
     presetActive: raw.presetActive !== false,
@@ -197,6 +215,8 @@ export function normalizeSsTimingState(raw) {
         jitterYears: Math.max(0, parseInt(raw.policy?.benefitCut?.jitterYears, 10) || 0),
       },
     },
+    portfolioSource,
+    scenarioRef: portfolioSource === 'link' ? scenarioRef : null,
   };
 }
 
@@ -246,8 +266,28 @@ export function resetSsTimingToDefaults() {
   if (presets[0]) applySsTimingPreset(presets[0].id, { keepAttached: true });
 }
 
-export async function applyImportedSsTiming(loaded, { statusMessage } = {}) {
-  applySsTimingState(loaded.state || {});
+export async function getSsTimingDependencies() {
+  const ref = ssState.scenarioRef;
+  if (!ref?.name) return [];
+  try {
+    const loaded = await sessions.load(ref.feature || FEATURE_WITHDRAW, ref.name);
+    if (!loaded?.payload) return [];
+    return [{
+      feature: ref.feature || FEATURE_WITHDRAW,
+      name: ref.name,
+      state: loaded.payload,
+      stateVersion: SCHEMA_VERSION,
+      description: loaded.description || '',
+    }];
+  } catch {
+    return [];
+  }
+}
+
+export async function applyImportedSsTiming(loaded, { statusMessage, renames } = {}) {
+  let state = normalizeSsTimingState(loaded.state || {});
+  state = remapWithdrawScenarioRef(state, renames);
+  applySsTimingState(state);
   setSessionMeta({
     name: '',
     description: loaded.description || '',

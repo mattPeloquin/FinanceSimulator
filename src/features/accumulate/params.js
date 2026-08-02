@@ -1,22 +1,12 @@
-// Build worker params from Accumulate session state + history samples.
+// Build worker params from Accumulate session state + resolved portfolio market.
 
 import { ALLOCATION_KEYS } from './session.js';
-import {
-  allocationFromConfig,
-  ALLOCATION_ENGINE_KEYS,
-} from '../../core/accumulation.js';
-import {
-  correlationCholesky,
-  computeStandardizedYears,
-  profilesToLogNormal,
-} from '../../core/history.js';
+import { allocationFromConfig } from '../../core/accumulation.js';
+import { resolveFeatureMarket } from '../../portfolio/resolve.js';
 import {
   buildSamplesAndProfiles,
   pickReturnsAllocationSlice,
-  canonicalizeDistMethod,
 } from '../../state/returnsAllocationSlice.js';
-
-export { profilesToLogNormal };
 
 /** Ensure profiles exist; derive from the selected year range when missing. */
 export function ensureProfiles(state) {
@@ -29,37 +19,36 @@ export function ensureProfiles(state) {
 
 /**
  * Build the pure params object posted to the accumulate worker.
+ * Resolves linked Withdraw portfolio or local returns fields via the portfolio API.
  */
-export function buildAccumulateParams(state, { seed } = {}) {
-  const slice = pickReturnsAllocationSlice(state);
-  const { samples, profiles: derived } = buildSamplesAndProfiles(slice);
-  const profiles = ensureProfiles({ ...state, profiles: state.profiles || derived }) || {};
-  const logNormal = profilesToLogNormal(profiles);
-  logNormal.chol = samples.years.length >= 2
-    ? correlationCholesky(samples.years)
-    : null;
+export async function buildAccumulateParams(state, { seed } = {}) {
+  const runSeed = (seed ?? state.seed ?? (Math.random() * 0xffffffff)) >>> 0;
+  const { marketParams, portfolio } = await resolveFeatureMarket(state, {
+    horizonYears: state.numYears,
+    seed: runSeed,
+  });
 
-  const allocation = allocationFromConfig(state.allocation, ALLOCATION_KEYS);
+  // Engine allocation weights come from the resolved portfolio; sleeve balances stay local.
+  const allocation = marketParams.allocation
+    || allocationFromConfig(portfolio.allocation || state.allocation, ALLOCATION_KEYS);
 
   return {
     numYears: state.numYears,
     numSimulations: state.numSimulations,
-    seed: seed >>> 0,
-    distMethod: canonicalizeDistMethod(state.distMethod),
-    blockSize: state.blockSize,
+    seed: runSeed,
+    distMethod: marketParams.distMethod,
+    blockSize: marketParams.blockSize,
     allocation,
-    allocationKeys: ALLOCATION_KEYS,
-    allocationOverTimeTiers: state.allocationOverTimeTiers,
+    allocationKeys: marketParams.allocationKeys || marketParams.engineKeys || ALLOCATION_KEYS,
+    allocationOverTimeTiers: portfolio.allocationOverTimeTiers,
     sleeves: state.sleeves,
     events: state.events,
     afterTaxDragRate: state.afterTaxDragRate,
     balancesInThousands: true,
-    samples,
-    logNormal,
-    scaledHistoricalShocks: samples.years.length
-      ? computeStandardizedYears(samples.years)
-      : null,
-    scaledHistoricalSmoothing: 0,
-    engineKeys: ALLOCATION_ENGINE_KEYS,
+    samples: marketParams.samples,
+    logNormal: marketParams.logNormal,
+    scaledHistoricalShocks: marketParams.scaledHistoricalShocks,
+    scaledHistoricalSmoothing: marketParams.scaledHistoricalSmoothing || 0,
+    engineKeys: marketParams.engineKeys,
   };
 }

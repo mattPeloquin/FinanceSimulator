@@ -20,6 +20,7 @@ import cautious from './cautious.json';
 import balanced from './balanced.json';
 import growth from './growth.json';
 import aggressive from './aggressive.json';
+import { pctKeys } from '../../portfolio/registry.js';
 
 /** Slider positions 0–4, ordered least to most aggressive. */
 export const PRESETS = [conservative, cautious, balanced, growth, aggressive];
@@ -39,12 +40,8 @@ export const PRESET_SCENARIO_KEYS = [
   'goalSeekIncludeBalanceOverrides',
   'goalSeekIncludeGlidePath',
   'withdrawRiskTolerancePct',
-  'usLgGrowthAllocation',
-  'usLgValueAllocation',
-  'usSmMidAllocation',
-  'exUsAllocation',
-  'bondAllocation',
-  'cashAllocation',
+  // Allocation % keys — derived from portfolio registry (variable count).
+  ...pctKeys(),
   'dynLowRet',
   'dynMedRet',
   'dynHighRet',

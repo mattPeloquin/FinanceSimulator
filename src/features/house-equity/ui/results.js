@@ -96,7 +96,7 @@ export function renderHouseEquityCharts() {
     el('house-equity-summary').textContent = best
       ? `Highest median cumulative real cash: “${best.label}” (${fmtMoney(best.score)}).${ttl}`
         + ` Access year ${meta.accessYear}. Returns: ${
-          meta.returnMode === 'market' ? 'linked Plan market MC' : 'constant real return'
+          meta.portfolioSource === 'link' ? 'linked Withdraw/Plan MC SOR' : 'local portfolio MC SOR'
         }. Residual equity is reported but not used for ranking.`
       : 'No ranking available.';
   }

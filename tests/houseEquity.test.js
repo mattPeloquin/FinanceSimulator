@@ -11,8 +11,12 @@ import {
 } from '../src/core/houseEquity.js';
 import { sizeHecmProceeds } from '../src/data/hecmPlf.js';
 import { HANDLERS } from '../src/workers/dispatch.js';
+import { buildMarketParams, defaultPortfolio } from '../src/portfolio/api.js';
 
 function baseInput(overrides = {}) {
+  const marketParams = buildMarketParams(defaultPortfolio({ distMethod: 'lognormal' }), {
+    horizonYears: overrides.numYears || 12,
+  });
   return {
     seed: 42,
     numSimulations: 40,
@@ -48,8 +52,9 @@ function baseInput(overrides = {}) {
     cashOutRate: 0.065,
     cashOutTermYears: 30,
     cashOutClosingPct: 0.02,
-    returnMode: 'constant',
-    constantRealReturn: 0.04,
+    returnMode: 'market',
+    marketParams,
+    allocation: marketParams.allocation,
     ...overrides,
   };
 }

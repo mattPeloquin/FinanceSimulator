@@ -1,24 +1,21 @@
 // Named Accumulate presets (feature-local; never write back to Plan risk presets).
 
+import { listSleeves } from '../../portfolio/registry.js';
+
 /** @typedef {import('./session.js').AccumulateState} AccumulateState */
 
-const BALANCED_MIX = {
-  usLgGrowthAllocation: 25,
-  usLgValueAllocation: 25,
-  usSmMidAllocation: 10,
-  exUsAllocation: 15,
-  bondAllocation: 20,
-  cashAllocation: 5,
-};
+/** Build an allocation % object from ordered percents matching registry sleeve order. */
+function mixFromOrdered(pcts) {
+  const out = {};
+  listSleeves().forEach((s, i) => {
+    out[s.pctKey] = pcts[i] ?? s.defaultPct;
+  });
+  return out;
+}
 
-const AGGRESSIVE_MIX = {
-  usLgGrowthAllocation: 30,
-  usLgValueAllocation: 25,
-  usSmMidAllocation: 15,
-  exUsAllocation: 20,
-  bondAllocation: 8,
-  cashAllocation: 2,
-};
+const BALANCED_MIX = mixFromOrdered([25, 25, 10, 15, 20, 5]);
+const AGGRESSIVE_MIX = mixFromOrdered([30, 25, 15, 20, 8, 2]);
+const LATER_CONSERVATIVE_MIX = mixFromOrdered([20, 20, 10, 15, 30, 5]);
 
 /**
  * @returns {{ id: string, name: string, description: string, patch: Partial<AccumulateState> }[]}
@@ -71,14 +68,7 @@ export function getAccumulatePresets() {
         allocation: { ...AGGRESSIVE_MIX },
         allocationOverTimeTiers: [
           { ...AGGRESSIVE_MIX, years: 15 },
-          {
-            usLgGrowthAllocation: 20,
-            usLgValueAllocation: 20,
-            usSmMidAllocation: 10,
-            exUsAllocation: 15,
-            bondAllocation: 30,
-            cashAllocation: 5,
-          },
+          { ...LATER_CONSERVATIVE_MIX },
         ],
         sleeves: {
           ira: {

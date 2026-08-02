@@ -1,35 +1,27 @@
 // Build worker payload from SS Timing session state.
 
-import {
-  buildSamplesAndProfiles,
-  pickReturnsAllocationSlice,
-  canonicalizeDistMethod,
-  ALLOCATION_PCT_KEYS,
-} from '../../state/returnsAllocationSlice.js';
-import {
-  profilesToLogNormal,
-  correlationCholesky,
-  computeStandardizedYears,
-} from '../../core/history.js';
-import { allocationFromConfig, ALLOCATION_ENGINE_KEYS } from '../../core/accumulation.js';
+import { resolveFeatureMarket } from '../../portfolio/resolve.js';
 import { fraFromBirthYear, estimatePiaFromEarnings } from '../../core/socialSecurity.js';
 
-export function buildSsTimingWorkerPayload(state, { seed } = {}) {
+/**
+ * Resolve linked Withdraw session or local returns into MC SOR market params.
+ * @param {object} state
+ * @returns {Promise<object>} worker message
+ */
+export async function buildSsTimingWorkerPayload(state, { seed } = {}) {
   const personA = resolvePerson(state.personA);
   const personB = state.couple ? resolvePerson(state.personB) : null;
-
-  const slice = pickReturnsAllocationSlice(state);
-  const { samples, profiles: derived } = buildSamplesAndProfiles(slice, {
-    forceProfiles: !state.profiles,
-  });
-  const profiles = state.profiles || derived || {};
-  const logNormal = profilesToLogNormal(profiles);
-  logNormal.chol = samples.years.length >= 2
-    ? correlationCholesky(samples.years)
-    : null;
-
-  const allocation = allocationFromConfig(state.allocation, ALLOCATION_PCT_KEYS);
   const runSeed = (seed ?? state.seed ?? (Math.random() * 0xffffffff)) >>> 0;
+
+  const horizonYears = Math.max(
+    1,
+    Math.max(...(state.endAges || [90]).map((a) => a - (personA.currentAge || 62))),
+  );
+
+  const { marketParams, portfolio } = await resolveFeatureMarket(state, {
+    horizonYears,
+    seed: runSeed,
+  });
 
   return {
     type: 'ssTiming',
@@ -40,19 +32,9 @@ export function buildSsTimingWorkerPayload(state, { seed } = {}) {
       endAges: state.endAges,
     },
     marketParams: {
+      ...marketParams,
       seed: runSeed,
-      distMethod: canonicalizeDistMethod(state.distMethod),
-      blockSize: state.blockSize,
-      allocation,
-      allocationKeys: ALLOCATION_PCT_KEYS,
-      allocationOverTimeTiers: state.allocationOverTimeTiers,
-      samples,
-      logNormal,
-      scaledHistoricalShocks: samples.years.length
-        ? computeStandardizedYears(samples.years)
-        : null,
-      scaledHistoricalSmoothing: state.scaledHistoricalSmoothing || 0,
-      engineKeys: ALLOCATION_ENGINE_KEYS,
+      allocationOverTimeTiers: portfolio.allocationOverTimeTiers,
     },
     bridge: {
       enabled: state.bridge?.enabled !== false,

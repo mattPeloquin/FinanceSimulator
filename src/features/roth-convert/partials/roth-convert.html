@@ -163,17 +163,28 @@
       </div>
 
       <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
-        <h3 class="text-sm font-semibold text-theme-heading">Returns</h3>
-        <label class="block space-y-1">
-          <span class="text-sm font-medium text-theme-body">Withdraw session (optional)</span>
-          <select id="roth-convert-scenario" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
-            <option value="">None — use constant real return</option>
-          </select>
-        </label>
-        <label class="block space-y-0.5" id="roth-convert-const-return-wrap">
-          <span class="text-xs text-theme-muted">Constant real return (decimal)</span>
-          <input type="number" id="roth-convert-const-return" step="0.005" class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
-        </label>
+        <h3 class="text-sm font-semibold text-theme-heading">Returns (MC SOR)</h3>
+        <fieldset class="space-y-2">
+          <legend class="text-xs text-theme-muted">Portfolio source</legend>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="roth-convert-portfolio-source" id="roth-convert-source-link" value="link" class="border-theme-border" />
+            Use linked Withdraw / Plan scenario
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="roth-convert-portfolio-source" id="roth-convert-source-local" value="local" class="border-theme-border" checked />
+            Define portfolio here
+          </label>
+        </fieldset>
+        <div id="roth-convert-link-wrap" class="space-y-2 hidden">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Withdraw session</span>
+            <select id="roth-convert-scenario" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="">Select a saved Withdraw session…</option>
+            </select>
+          </label>
+          <div id="roth-convert-portfolio-preview"></div>
+        </div>
+        <div id="roth-convert-returns-host" class="space-y-2"></div>
         <div class="grid grid-cols-2 gap-2">
           <label class="block space-y-0.5">
             <span class="text-xs text-theme-muted">Horizon (years)</span>

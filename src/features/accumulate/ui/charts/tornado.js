@@ -1,15 +1,7 @@
 import { Chart } from '../../../../ui/charts/chartSetup.js';
 import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
 import { formatK } from '../../../../ui/format.js';
-
-const LABELS = {
-  usLgGrowth: 'US Lg Growth',
-  usLgValue: 'US Lg Value',
-  usSmMid: 'US Sm/Mid',
-  exUs: 'Ex-US',
-  bond: 'Bond',
-  cash: 'Cash',
-};
+import { getSleeveMeta } from '../../../../portfolio/registry.js';
 
 function destroyChart(canvas) {
   const existing = Chart.getChart(canvas);
@@ -47,7 +39,7 @@ export function drawWeightTornado(canvas, result) {
     else entry.high = row.impact;
     byVar.set(row.variableId, entry);
   }
-  const labels = [...byVar.keys()].map((id) => LABELS[id] || id);
+  const labels = [...byVar.keys()].map((id) => getSleeveMeta(id)?.label || id);
   const lowData = [...byVar.values()].map((v) => v.low);
   const highData = [...byVar.values()].map((v) => v.high);
 

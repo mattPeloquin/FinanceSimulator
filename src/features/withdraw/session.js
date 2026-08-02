@@ -24,6 +24,7 @@ import {
 import { syncRiskPresetUi } from './ui/riskPreset.js';
 import { syncAllocationPreview } from './ui/charts/allocationPreview.js';
 import { syncSectionSummaries } from './ui/sectionSummaries.js';
+import { listSleeves } from '../../portfolio/registry.js';
 import {
   getSessionMeta,
   setSessionMeta,
@@ -124,7 +125,8 @@ export function applyScenario(scenario) {
   syncRiskPresetUi(merged);
   syncSectionSummaries(merged);
   // Refresh charts/samples for the range; keep the scenario's own profiles.
-  const hasProfiles = merged.usLgGrowthMean != null && merged.usLgGrowthMean !== '';
+  const firstMean = listSleeves()[0]?.meanKey;
+  const hasProfiles = firstMean != null && merged[firstMean] != null && merged[firstMean] !== '';
   if (hasProfiles) {
     refreshHistoryView(merged.startYear, merged.endYear);
   } else {

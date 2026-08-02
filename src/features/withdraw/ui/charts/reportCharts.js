@@ -770,12 +770,14 @@ export function drawAllocationDonut(canvas, allocation, { dark = false } = {}) {
   new Chart(canvas, {
     type: 'doughnut',
     data: {
-      labels: sleeves.map((s) => ALLOCATION_LABELS[s.key] || s.key),
+      labels: sleeves.map((s) => s.label || ALLOCATION_LABELS[s.key] || s.key),
       datasets: [{
         data: sleeves.map((s) => s.pct),
-        // Same asset colors as the allocation preview / sparklines.
+        // Prefer colors already resolved by allocationPresentation.
         backgroundColor: sleeves.map(
-          (s) => themeTokens.chartAssets[ALLOCATION_CHART_KEYS[s.key]] || pal.muted,
+          (s) => s.color
+            || themeTokens.chartAssets[ALLOCATION_CHART_KEYS[s.key]]
+            || pal.muted,
         ),
         borderWidth: 2,
         borderColor: pal.dark ? '#0f172a' : '#ffffff',
@@ -794,7 +796,7 @@ export function allocationLegendItems(allocation, dark) {
   const pal = paletteFor(dark);
   const sleeves = allocation?.sleeves?.filter((s) => s.pct > 0) || [];
   return sleeves.map((s) => ({
-    label: `${ALLOCATION_LABELS[s.key] || s.key} ${Math.round(s.pct)}%`,
-    color: themeTokens.chartAssets[ALLOCATION_CHART_KEYS[s.key]] || pal.muted,
+    label: `${s.label || ALLOCATION_LABELS[s.key] || s.key} ${Math.round(s.pct)}%`,
+    color: s.color || themeTokens.chartAssets[ALLOCATION_CHART_KEYS[s.key]] || pal.muted,
   }));
 }

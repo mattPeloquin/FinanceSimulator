@@ -11,6 +11,12 @@ test('Accumulate run paints growth cone', async ({ page }) => {
   await expect(page.locator('#accumulate-run')).toBeVisible();
   await expect(page.locator('#accumulate-run')).toHaveText('Run Simulation');
   await expect(page.locator('#accumulate-preset-control')).toBeVisible();
+  // Soft-link + Withdraw-parity Investment Planning accordion.
+  await expect(page.locator('#accumulate-source-local')).toBeChecked();
+  await expect(page.locator('#accumulate-source-link')).toBeVisible();
+  await expect(page.locator('#accumulate-section-investment')).toBeAttached();
+  await expect(page.locator('#accumulate-returns-host [data-portfolio-panel]')).toBeAttached();
+  await expect(page.locator('input[name="accumulate-distribution-method"]').first()).toBeAttached();
   // Easy Mode starts attached (Steady Saver); editing inputs below detaches it.
   await expect(page.locator('#accumulate-preset-active')).toBeChecked();
 

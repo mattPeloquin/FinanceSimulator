@@ -354,7 +354,7 @@ export function setupRiskPresetControl({ onChange } = {}) {
     input.addEventListener('change', maybeDetachPlanField);
   }
 
-  document.querySelectorAll('.allocation-input').forEach((input) => {
+  document.querySelectorAll('#allocationSparklines [data-alloc-row] .allocation-input').forEach((input) => {
     input.addEventListener('input', maybeDetach);
   });
 

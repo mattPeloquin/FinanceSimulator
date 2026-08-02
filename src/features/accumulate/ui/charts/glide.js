@@ -1,16 +1,7 @@
 import { Chart } from '../../../../ui/charts/chartSetup.js';
 import { getChartTheme, chartJsTooltip } from '../../../../ui/charts/chartTheme.js';
-import { ALLOCATION_ENGINE_KEYS } from '../../../../core/accumulation.js';
+import { listSleeves } from '../../../../portfolio/registry.js';
 import { getGlidePreviewSeries } from '../inputs.js';
-
-const LABELS = {
-  usLgGrowth: 'US Lg Growth',
-  usLgValue: 'US Lg Value',
-  usSmMid: 'US Sm/Mid',
-  exUs: 'Ex-US',
-  bond: 'Bond',
-  cash: 'Cash',
-};
 
 function destroyChart(canvas) {
   const existing = Chart.getChart(canvas);
@@ -31,11 +22,11 @@ export function drawGlidePreview(canvas) {
     type: 'line',
     data: {
       labels,
-      datasets: ALLOCATION_ENGINE_KEYS.map((key, i) => ({
-        label: LABELS[key] || key,
-        data: series.map((mix) => (mix[key] || 0) * 100),
-        borderColor: palette[i % palette.length] || theme.accent,
-        backgroundColor: palette[i % palette.length] || theme.accent,
+      datasets: listSleeves().map((s, i) => ({
+        label: s.label,
+        data: series.map((mix) => (mix[s.engineKey] || 0) * 100),
+        borderColor: s.color || palette[i % palette.length] || theme.accent,
+        backgroundColor: s.color || palette[i % palette.length] || theme.accent,
         fill: i === 0,
         pointRadius: 0,
         tension: 0.1,

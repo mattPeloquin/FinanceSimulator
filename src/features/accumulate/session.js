@@ -1,7 +1,9 @@
 // Accumulate session state — config is persisted; run results stay in memory.
 
 import { ACCUMULATE_STATE_VERSION } from '../../state/migrations.js';
-import { FEATURE_ACCUMULATE } from '../../state/storageKeys.js';
+import { SCHEMA_VERSION } from '../../state/scenario.js';
+import { FEATURE_ACCUMULATE, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
+import * as sessions from '../../state/sessions.js';
 import {
   setSessionMeta,
   refreshSessionList,
@@ -16,6 +18,7 @@ import {
   normalizeReturnsAllocationSlice,
   canonicalizeDistMethod,
 } from '../../state/returnsAllocationSlice.js';
+import { remapWithdrawScenarioRef } from '../../portfolio/ui/sourceControls.js';
 import { buildAccumulationCashflowSeries } from '../../core/accumulation.js';
 
 export { ACCUMULATE_STATE_VERSION };
@@ -64,6 +67,8 @@ export function defaultAccumulateState() {
     view: {
       showSavingsOverlay: true,
     },
+    portfolioSource: 'local',
+    scenarioRef: null,
   };
 }
 
@@ -155,6 +160,17 @@ export function normalizeAccumulateState(raw) {
     ? Number(raw.presetLevel)
     : base.presetLevel;
 
+  let scenarioRef = null;
+  if (raw.scenarioRef && typeof raw.scenarioRef === 'object' && raw.scenarioRef.name) {
+    scenarioRef = {
+      feature: raw.scenarioRef.feature || FEATURE_WITHDRAW,
+      name: String(raw.scenarioRef.name),
+    };
+  }
+  const portfolioSource = scenarioRef
+    ? 'link'
+    : (raw.portfolioSource === 'link' ? 'link' : 'local');
+
   return {
     version: ACCUMULATE_STATE_VERSION,
     presetActive: raw.presetActive !== false,
@@ -176,6 +192,8 @@ export function normalizeAccumulateState(raw) {
     view: {
       showSavingsOverlay: raw.view?.showSavingsOverlay !== false,
     },
+    portfolioSource,
+    scenarioRef: portfolioSource === 'link' ? scenarioRef : null,
   };
 }
 
@@ -217,8 +235,31 @@ export function detachAccumulatePreset() {
   patchAccumulateState({ presetActive: false });
 }
 
-export async function applyImportedAccumulate(loaded) {
-  applyAccumulateState(loaded?.payload ?? loaded);
+export async function getAccumulateDependencies() {
+  const ref = accumState.scenarioRef;
+  if (!ref?.name) return [];
+  try {
+    const loaded = await sessions.load(ref.feature || FEATURE_WITHDRAW, ref.name);
+    if (!loaded?.payload) return [];
+    return [{
+      feature: ref.feature || FEATURE_WITHDRAW,
+      name: ref.name,
+      state: loaded.payload,
+      stateVersion: SCHEMA_VERSION,
+      description: loaded.description || '',
+    }];
+  } catch {
+    return [];
+  }
+}
+
+export async function applyImportedAccumulate(loaded, { statusMessage, renames } = {}) {
+  let state = normalizeAccumulateState(loaded?.payload ?? loaded?.state ?? loaded);
+  state = remapWithdrawScenarioRef(state, renames);
+  applyAccumulateState(state);
+  if (statusMessage) {
+    // optional status surface
+  }
 }
 
 export async function resetAccumulateToDefaults() {

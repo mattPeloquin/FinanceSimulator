@@ -7,11 +7,17 @@ import {
   detachSsTimingPreset,
 } from '../session.js';
 import { getSsTimingPresets } from '../presets.js';
+import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
 import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
-import { createReturnsAllocationUi } from '../../../ui/returnsAllocation/controller.js';
+import { mountPortfolioPanel } from '../../../portfolio/ui/panel.js';
+import {
+  populateWithdrawScenarioSelect,
+  refreshLinkedPortfolioPreview,
+  syncPortfolioSourceVisibility,
+} from '../../../portfolio/ui/sourceControls.js';
 
 let isApplyingPreset = false;
-/** @type {ReturnType<typeof createReturnsAllocationUi> | null} */
+/** @type {ReturnType<typeof mountPortfolioPanel> | null} */
 let returnsUi = null;
 
 function el(id) {
@@ -72,6 +78,9 @@ export function syncSsTimingFormToState() {
   const state = getSsTimingState();
   const returnsPartial = returnsUi?.readFromDom() || pickReturnsAllocationSlice(state);
   const couple = !!el('ss-timing-couple')?.checked;
+  const source = document.querySelector('input[name="ss-timing-portfolio-source"]:checked')?.value
+    || 'local';
+  const scenarioName = el('ss-timing-scenario')?.value || '';
 
   patchSsTimingState({
     couple,
@@ -109,10 +118,39 @@ export function syncSsTimingFormToState() {
     },
     presetActive: isPresetAttached(),
     presetLevel: currentPresetLevel(),
+    portfolioSource: source,
+    scenarioRef: source === 'link' && scenarioName
+      ? { feature: FEATURE_WITHDRAW, name: scenarioName }
+      : null,
   });
 
   const bBlock = el('ss-timing-person-b');
   if (bBlock) bBlock.classList.toggle('opacity-50', !couple);
+}
+
+async function updateSsTimingPortfolioSourceUi() {
+  const source = document.querySelector('input[name="ss-timing-portfolio-source"]:checked')?.value
+    || getSsTimingState().portfolioSource
+    || 'local';
+  syncPortfolioSourceVisibility({
+    source,
+    linkWrapEl: el('ss-timing-link-wrap'),
+    localHostEl: el('ss-timing-returns-host'),
+  });
+  if (source === 'link') {
+    await refreshLinkedPortfolioPreview(
+      el('ss-timing-portfolio-preview'),
+      el('ss-timing-scenario')?.value,
+    );
+  } else {
+    returnsUi?.refreshFromState();
+  }
+}
+
+export async function refreshSsTimingScenarioPicker() {
+  const current = getSsTimingState().scenarioRef?.name || '';
+  await populateWithdrawScenarioSelect(el('ss-timing-scenario'), current);
+  await updateSsTimingPortfolioSourceUi();
 }
 
 export function renderSsTimingForm() {
@@ -139,17 +177,29 @@ export function renderSsTimingForm() {
   updatePresetName();
   updatePresetControlState();
   el('ss-timing-person-b')?.classList.toggle('opacity-50', !state.couple);
+
+  const source = state.scenarioRef?.name ? 'link' : (state.portfolioSource || 'local');
+  const linkRadio = el('ss-timing-source-link');
+  const localRadio = el('ss-timing-source-local');
+  if (linkRadio) linkRadio.checked = source === 'link';
+  if (localRadio) localRadio.checked = source !== 'link';
   returnsUi?.refreshFromState();
+  void refreshSsTimingScenarioPicker();
 }
 
 export function bindSsTimingInputs() {
   const host = el('ss-timing-returns-host');
   if (host && !returnsUi) {
-    returnsUi = createReturnsAllocationUi(host, {
+    returnsUi = mountPortfolioPanel(host, {
       idPrefix: 'ss-timing-',
       mountMarkup: true,
-      getSlice: () => pickReturnsAllocationSlice(getSsTimingState()),
-      setSlice: (partial) => patchSsTimingState(partial),
+      wrapAccordion: true,
+      showOverTime: false,
+      syncSparklines: true,
+      sectionTitle: 'Investment Planning',
+      sectionHelp: 'Historical years, distribution method, and allocation for the bridge portfolio.',
+      getPortfolio: () => pickReturnsAllocationSlice(getSsTimingState()),
+      setPortfolio: (partial) => patchSsTimingState({ ...partial, portfolioSource: 'local' }),
       onChange: () => {
         if (isApplyingPreset) return;
         if (getSsTimingState().presetActive) {
@@ -181,10 +231,22 @@ export function bindSsTimingInputs() {
     applyLevelFromSlider();
   });
 
+  document.querySelectorAll('input[name="ss-timing-portfolio-source"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      syncSsTimingFormToState();
+      void updateSsTimingPortfolioSourceUi();
+    });
+  });
+  el('ss-timing-scenario')?.addEventListener('change', () => {
+    syncSsTimingFormToState();
+    void updateSsTimingPortfolioSourceUi();
+  });
+
   root.addEventListener('change', (e) => {
     if (isApplyingPreset) return;
     if (!(e.target instanceof HTMLElement)) return;
     if (e.target.id?.startsWith('ss-timing-preset')) return;
+    if (e.target.name === 'ss-timing-portfolio-source' || e.target.id === 'ss-timing-scenario') return;
     if (e.target.closest('#ss-timing-returns-host')) return;
     if (e.target.id?.startsWith('ss-timing-')) {
       const wasAttached = getSsTimingState().presetActive;

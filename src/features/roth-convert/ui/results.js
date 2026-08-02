@@ -118,7 +118,7 @@ export function renderRothConvertCharts() {
       : '';
     el('roth-convert-summary').textContent = helpLine + beatLine
       + ` Tax payment: ${result.meta?.taxPayment === 'withhold' ? 'withhold from conversion' : 'from taxable'}.`
-      + ` Returns: ${result.meta?.returnMode === 'market' ? 'linked Plan market MC' : 'constant real return'}.`;
+      + ` Returns: MC SOR (${result.meta?.portfolioSource === 'link' ? 'linked Withdraw/Plan' : 'local portfolio'}).`;
   }
 
   // Response curve

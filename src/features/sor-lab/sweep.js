@@ -7,6 +7,7 @@ import {
   computeProfiles,
   profilesToScenarioFields,
 } from '../../core/history.js';
+import { listSleeves } from '../../portfolio/registry.js';
 import { resolveLabVariables } from './variables.js';
 
 export const DEFAULT_SWEEP_POINTS = 7;
@@ -21,7 +22,8 @@ export const SHARED_PARAM_KEYS = ['samples', 'scaledHistoricalShocks'];
  */
 export function ensureScenarioProfiles(scenario) {
   const out = structuredClone(scenario);
-  const needsProfiles = out.usLgGrowthMean == null || out.usLgGrowthMean === '';
+  const firstMean = listSleeves()[0]?.meanKey;
+  const needsProfiles = firstMean == null || out[firstMean] == null || out[firstMean] === '';
   if (!needsProfiles) return out;
   const startYear = Number(out.startYear);
   const endYear = Number(out.endYear);

@@ -13,6 +13,7 @@
 
 import balanced from './presets/balanced.json';
 import { computeDerivedPresetValues, DEFAULT_PRESET_LEVEL } from './presets/index.js';
+import { defaultAllocationPct, INFLATION, listSleeves } from '../portfolio/registry.js';
 
 // Non-preset starting values only. Slider-controlled keys (PRESET_SCENARIO_KEYS,
 // PRESET_DERIVED_SCALAR_KEYS) must not appear here — they come from balanced.json
@@ -155,15 +156,9 @@ export const BASE_DEFAULTS = {
   // Later target mixes for Adjust allocation over time. Always at least one
   // tier (the last covers remaining years). Seeded to match the Balanced
   // static mix so a fresh plan starts flat until the user edits a target.
+  // Seeded from registry defaults (flat until the user edits a target).
   allocationOverTimeTiers: [
-    {
-      usLgGrowthAllocation: 25,
-      usLgValueAllocation: 25,
-      usSmMidAllocation: 10,
-      exUsAllocation: 15,
-      bondAllocation: 5,
-      cashAllocation: 20,
-    },
+    { ...defaultAllocationPct() },
   ],
 
   // One-time or recurring major cash events (Base strategy only). Each entry:
@@ -197,24 +192,15 @@ export const BASE_DEFAULTS = {
   dynMedAdj: 0,
   dynHighAdj: 0,
 
-  // Log-normal profiles (% mean / std-dev)
-  // Used only when distMethod is 'lognormal'. null = auto-filled from the
-  // selected historical range on first load ("Update From History").
-
-  usLgGrowthMean: null,
-  usLgGrowthStdDev: null,
-  usLgValueMean: null,
-  usLgValueStdDev: null,
-  usSmMidMean: null,
-  usSmMidStdDev: null,
-  exUsMean: null,
-  exUsStdDev: null,
-  bondReturnMean: null,
-  bondReturnStdDev: null,
-  cashReturnMean: null,
-  cashReturnStdDev: null,
-  inflationMean: null,
-  inflationStdDev: null,
+  // Log-normal profiles (% mean / std-dev) — null until filled from history.
+  // Keys come from the portfolio registry via defaultWithdrawPortfolioFields().
+  ...Object.fromEntries(
+    [
+      ...listSleeves().flatMap((s) => [s.meanKey, s.stdKey]),
+      INFLATION.meanKey,
+      INFLATION.stdKey,
+    ].map((k) => [k, null]),
+  ),
 
   // Goal Seek mode — on by default for new users. Independent of Easy Mode:
   // toggling it does not detach the Risk Level slider. Search targets and

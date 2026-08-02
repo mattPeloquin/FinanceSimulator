@@ -20,19 +20,19 @@ export const LAB_STATE_VERSION = 1;
 export const LAB_STATE_VERSION_MIN = 1;
 
 /** Accumulate session / envelope state version. */
-export const ACCUMULATE_STATE_VERSION = 1;
+export const ACCUMULATE_STATE_VERSION = 2;
 export const ACCUMULATE_STATE_VERSION_MIN = 1;
 
 /** Social Security timing session / envelope state version. */
-export const SS_TIMING_STATE_VERSION = 1;
+export const SS_TIMING_STATE_VERSION = 2;
 export const SS_TIMING_STATE_VERSION_MIN = 1;
 
 /** Roth Convert session / envelope state version. */
-export const ROTH_CONVERT_STATE_VERSION = 1;
+export const ROTH_CONVERT_STATE_VERSION = 2;
 export const ROTH_CONVERT_STATE_VERSION_MIN = 1;
 
 /** House Equity session / envelope state version. */
-export const HOUSE_EQUITY_STATE_VERSION = 1;
+export const HOUSE_EQUITY_STATE_VERSION = 2;
 export const HOUSE_EQUITY_STATE_VERSION_MIN = 1;
 
 /**
@@ -179,8 +179,12 @@ export function migrateAccumulateState(state, fromVersion) {
 
   const migrated = { ...state };
 
-  // Forward migrations go here when ACCUMULATE_STATE_VERSION increases:
-  // if (fromVersion < 2) { ... }
+  // v2: optional soft-link to a Withdraw / Plan session (local portfolio remains default).
+  if (fromVersion < 2) {
+    if (!migrated.portfolioSource) {
+      migrated.portfolioSource = migrated.scenarioRef?.name ? 'link' : 'local';
+    }
+  }
 
   return migrated;
 }
@@ -223,7 +227,13 @@ export function migrateSsTimingState(state, fromVersion) {
       `This Social Security session uses state version ${fromVersion}, which is newer than this app supports (${SS_TIMING_STATE_VERSION}).`,
     );
   }
-  return { ...state };
+  const next = { ...state };
+  if (fromVersion < 2) {
+    if (!next.portfolioSource) {
+      next.portfolioSource = next.scenarioRef?.name ? 'link' : 'local';
+    }
+  }
+  return next;
 }
 
 registerFeatureMigrator({
@@ -252,7 +262,19 @@ export function migrateRothConvertState(state, fromVersion) {
       `This Roth Convert session uses state version ${fromVersion}, which is newer than this app supports (${ROTH_CONVERT_STATE_VERSION}).`,
     );
   }
-  return { ...state };
+  const next = { ...state };
+  // v2: nest a local portfolio; drop constant-return fields (MC SOR only).
+  if (fromVersion < 2) {
+    if (!next.portfolio) {
+      // Lazy import avoided — migrators stay sync; seed happens in session normalize.
+      next.portfolio = null;
+    }
+    delete next.constantRealReturn;
+    if (!next.scenarioRef?.name && !next.portfolioSource) {
+      next.portfolioSource = next.scenarioRef?.name ? 'link' : 'local';
+    }
+  }
+  return next;
 }
 
 registerFeatureMigrator({
@@ -281,7 +303,15 @@ export function migrateHouseEquityState(state, fromVersion) {
       `This House Equity session uses state version ${fromVersion}, which is newer than this app supports (${HOUSE_EQUITY_STATE_VERSION}).`,
     );
   }
-  return { ...state };
+  const next = { ...state };
+  if (fromVersion < 2) {
+    if (!next.portfolio) next.portfolio = null;
+    delete next.constantRealReturn;
+    if (!next.portfolioSource) {
+      next.portfolioSource = next.scenarioRef?.name ? 'link' : 'local';
+    }
+  }
+  return next;
 }
 
 registerFeatureMigrator({

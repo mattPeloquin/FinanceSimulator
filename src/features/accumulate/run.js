@@ -65,32 +65,40 @@ export function cancelAccumulateRun() {
 
 export async function handleAccumulateRunClick() {
   syncAccumulateFormToState();
-  applyAccumulateHistoryProfiles({ force: false });
   const state = getAccumulateState();
-  const profiles = ensureProfiles(state);
-  if (!profiles) {
-    showAlert('Could not build return profiles from the selected year range.', 'Accumulate');
+  if (state.portfolioSource === 'link' && !state.scenarioRef?.name) {
+    showAlert('Select a saved Withdraw session, or switch to a local portfolio.', 'Accumulate');
     return;
   }
 
-  const seed = Number.isFinite(state.seed)
-    ? (state.seed >>> 0)
+  if (!state.scenarioRef?.name) {
+    applyAccumulateHistoryProfiles({ force: false });
+    const profiles = ensureProfiles(getAccumulateState());
+    if (!profiles) {
+      showAlert('Could not build return profiles from the selected year range.', 'Accumulate');
+      return;
+    }
+  }
+
+  const latest = getAccumulateState();
+  const seed = Number.isFinite(latest.seed)
+    ? (latest.seed >>> 0)
     : (Math.random() * 0xffffffff) >>> 0;
 
   let params;
   try {
-    params = buildAccumulateParams({ ...state, profiles }, { seed });
+    params = await buildAccumulateParams(latest, { seed });
   } catch (err) {
     showAlert(err?.message || String(err), 'Accumulate');
     return;
   }
 
-  if (!params.samples?.years?.length && state.distMethod !== 'lognormal') {
+  if (!params.samples?.years?.length && params.distMethod !== 'lognormal') {
     showAlert('Historical sample is empty for this year range.', 'Accumulate');
     return;
   }
 
-  const numCores = resolveNumCores(state.parallelCores || 'high', navigator.hardwareConcurrency);
+  const numCores = resolveNumCores(latest.parallelCores || 'high', navigator.hardwareConcurrency);
   pendingResults = null;
   setAccumulateResultStale(false);
   setAccumulateLoading(true);

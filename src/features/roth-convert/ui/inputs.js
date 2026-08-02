@@ -11,6 +11,13 @@ import {
 } from '../session.js';
 import { normalizeTaxLadder } from '../../../data/taxLadderIllustrative.js';
 import { MONEY_SCALE, formatCurrency, parseCurrency } from '../../../state/scenario.js';
+import { mountPortfolioPanel } from '../../../portfolio/ui/panel.js';
+import { renderPortfolioPreview } from '../../../portfolio/ui/preview.js';
+import { fromWithdrawScenario } from '../../../portfolio/adapters.js';
+import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
+
+/** @type {ReturnType<typeof mountPortfolioPanel> | null} */
+let portfolioUi = null;
 
 function el(id) {
   return document.getElementById(id);
@@ -130,7 +137,7 @@ export async function refreshRothScenarioPicker() {
   select.innerHTML = '';
   const none = document.createElement('option');
   none.value = '';
-  none.textContent = 'None — use constant real return';
+  none.textContent = 'Select a saved Withdraw session…';
   select.appendChild(none);
   for (const name of names) {
     const opt = document.createElement('option');
@@ -145,14 +152,37 @@ export async function refreshRothScenarioPicker() {
     select.appendChild(missing);
   }
   select.value = current || '';
-  updateReturnModeUi();
+  await updatePortfolioSourceUi();
 }
 
-function updateReturnModeUi() {
-  const linked = !!(el('roth-convert-scenario')?.value);
-  el('roth-convert-const-return-wrap')?.classList.toggle('opacity-50', linked);
-  const input = el('roth-convert-const-return');
-  if (input) input.disabled = linked;
+async function updatePortfolioPreview() {
+  const name = el('roth-convert-scenario')?.value;
+  const host = el('roth-convert-portfolio-preview');
+  if (!name) {
+    renderPortfolioPreview(host, null);
+    return;
+  }
+  try {
+    const loaded = await sessions.load(FEATURE_WITHDRAW, name);
+    if (!loaded?.payload) {
+      renderPortfolioPreview(host, null);
+      return;
+    }
+    renderPortfolioPreview(host, fromWithdrawScenario(loaded.payload), { sessionName: name });
+  } catch {
+    renderPortfolioPreview(host, null);
+  }
+}
+
+async function updatePortfolioSourceUi() {
+  const source = document.querySelector('input[name="roth-convert-portfolio-source"]:checked')?.value
+    || getRothConvertState().portfolioSource
+    || 'local';
+  const linkMode = source === 'link';
+  el('roth-convert-link-wrap')?.classList.toggle('hidden', !linkMode);
+  el('roth-convert-returns-host')?.classList.toggle('hidden', linkMode);
+  if (linkMode) await updatePortfolioPreview();
+  else portfolioUi?.refreshFromState();
 }
 
 function updateCoupleUi() {
@@ -194,16 +224,26 @@ export function renderRothConvertForm() {
   if (el('roth-convert-qcd-annual')) el('roth-convert-qcd-annual').value = formatCurrency(s.qcdAnnual);
   if (el('roth-convert-spouse-sole')) el('roth-convert-spouse-sole').checked = !!s.spouseSoleBeneficiary;
 
-  if (el('roth-convert-const-return')) el('roth-convert-const-return').value = String(s.constantRealReturn);
   if (el('roth-convert-years')) el('roth-convert-years').value = String(s.numYears);
   if (el('roth-convert-paths')) el('roth-convert-paths').value = String(s.numSimulations);
 
+  const source = s.scenarioRef?.name ? 'link' : (s.portfolioSource || 'local');
+  const linkRadio = el('roth-convert-source-link');
+  const localRadio = el('roth-convert-source-local');
+  if (linkRadio) linkRadio.checked = source === 'link';
+  if (localRadio) localRadio.checked = source !== 'link';
+
+  portfolioUi?.refreshFromState();
   void refreshRothScenarioPicker();
 }
 
 export function syncRothConvertFormToState() {
   const pay = document.querySelector('input[name="roth-convert-tax-payment"]:checked')?.value;
+  const source = document.querySelector('input[name="roth-convert-portfolio-source"]:checked')?.value
+    || 'local';
   const scenarioName = el('roth-convert-scenario')?.value || '';
+  const localPortfolio = portfolioUi?.readFromDom()
+    || pickReturnsAllocationSlice(getRothConvertState().portfolio || {});
   patchRothConvertState({
     presetActive: isPresetAttached(),
     presetLevel: currentPresetLevel(),
@@ -226,10 +266,11 @@ export function syncRothConvertFormToState() {
     qcdEnabled: !!el('roth-convert-qcd')?.checked,
     qcdAnnual: parseCurrency(el('roth-convert-qcd-annual')?.value),
     spouseSoleBeneficiary: !!el('roth-convert-spouse-sole')?.checked,
-    scenarioRef: scenarioName
+    portfolioSource: source,
+    scenarioRef: source === 'link' && scenarioName
       ? { feature: FEATURE_WITHDRAW, name: scenarioName }
       : null,
-    constantRealReturn: Number(el('roth-convert-const-return')?.value),
+    portfolio: localPortfolio,
     numYears: parseInt(el('roth-convert-years')?.value, 10),
     numSimulations: parseInt(el('roth-convert-paths')?.value, 10),
   });
@@ -241,6 +282,26 @@ function onFieldChange() {
 }
 
 export function bindRothConvertInputs() {
+  const host = el('roth-convert-returns-host');
+  if (host && !portfolioUi) {
+    portfolioUi = mountPortfolioPanel(host, {
+      idPrefix: 'roth-convert-',
+      mountMarkup: true,
+      wrapAccordion: true,
+      showOverTime: false,
+      syncSparklines: true,
+      sectionTitle: 'Investment Planning',
+      sectionHelp: 'Historical years, distribution method, and asset allocation for Monte Carlo returns.',
+      getPortfolio: () => pickReturnsAllocationSlice(getRothConvertState().portfolio || {}),
+      setPortfolio: (partial) => {
+        patchRothConvertState({
+          portfolio: { ...pickReturnsAllocationSlice(getRothConvertState().portfolio || {}), ...partial },
+          portfolioSource: 'local',
+        });
+      },
+    });
+  }
+
   el('roth-convert-preset-active')?.addEventListener('change', () => {
     if (isPresetAttached()) applyCurrentPreset();
     else {
@@ -260,7 +321,7 @@ export function bindRothConvertInputs() {
     'roth-convert-fill-tier', 'roth-convert-annual-cap',
     'roth-convert-rate-premium', 'roth-convert-tax-noise',
     'roth-convert-rmd', 'roth-convert-qcd', 'roth-convert-qcd-annual', 'roth-convert-spouse-sole',
-    'roth-convert-const-return', 'roth-convert-years', 'roth-convert-paths',
+    'roth-convert-years', 'roth-convert-paths',
   ];
   for (const id of ids) {
     el(id)?.addEventListener('change', () => {
@@ -271,10 +332,16 @@ export function bindRothConvertInputs() {
   document.querySelectorAll('input[name="roth-convert-tax-payment"]').forEach((r) => {
     r.addEventListener('change', onFieldChange);
   });
+  document.querySelectorAll('input[name="roth-convert-portfolio-source"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      onFieldChange();
+      void updatePortfolioSourceUi();
+    });
+  });
   el('roth-convert-ladder')?.addEventListener('change', onFieldChange);
 
   el('roth-convert-scenario')?.addEventListener('change', () => {
     onFieldChange();
-    updateReturnModeUi();
+    void updatePortfolioSourceUi();
   });
 }

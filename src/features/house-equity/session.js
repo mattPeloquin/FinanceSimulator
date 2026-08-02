@@ -3,6 +3,7 @@
 
 import { HOUSE_EQUITY_STATE_VERSION } from '../../state/migrations.js';
 import { FEATURE_HOUSE_EQUITY, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
+import { defaultPortfolio, normalizePortfolio } from '../../portfolio/slice.js';
 import { SCHEMA_VERSION } from '../../state/scenario.js';
 import * as sessions from '../../state/sessions.js';
 import {
@@ -96,7 +97,8 @@ export function defaultHouseEquityState() {
     numSimulations: 500,
     seed: null,
     scenarioRef: null,
-    constantRealReturn: 4,
+    portfolioSource: 'local',
+    portfolio: defaultPortfolio(),
     focusStrategyId: 'simplifiedRm',
   };
 }
@@ -200,10 +202,10 @@ export function normalizeHouseEquityState(raw) {
       : base.numSimulations,
     seed: Number.isFinite(Number(raw.seed)) ? (Number(raw.seed) >>> 0) : null,
     scenarioRef,
-    constantRealReturn: pct(raw.constantRealReturn, base.constantRealReturn, {
-      min: -20,
-      max: 30,
-    }),
+    portfolioSource: scenarioRef
+      ? 'link'
+      : (raw.portfolioSource === 'link' ? 'link' : 'local'),
+    portfolio: normalizePortfolio(raw.portfolio || base.portfolio),
     focusStrategyId: typeof raw.focusStrategyId === 'string'
       ? raw.focusStrategyId
       : base.focusStrategyId,

@@ -1,7 +1,7 @@
 // Core Monte Carlo engine. Pure and DOM-free so it can run in a web worker
 // and be unit-tested directly.
 
-import { createRng, deriveSeed, logNormalMuSigma, applyLogNormalMuSigma } from './rng.js';
+import { createRng, deriveSeed } from './rng.js';
 import { median, irrFromPath } from './statistics.js';
 import {
   resolveAdjustment,
@@ -18,6 +18,7 @@ import {
   grossUpPlanSchedule,
 } from './feesTaxes.js';
 import { fitSpecificWithdrawalsToHorizon } from '../state/scenario.js';
+import { sampleYearReturn } from '../portfolio/api.js';
 
 const DEPLETION_EPSILON = 1e-6;
 const MAX_HORIZON_YEARS = 100;
@@ -156,50 +157,6 @@ function sampleHorizonYears(rng, endpoint, horizonRange) {
   return years;
 }
 
-// `logNormalMuSigma` only depends on an asset's fixed mean/stdDev, never on the
-// random draw, so it's wasteful to recompute it every year of every simulation
-// (Goal Seek alone can run hundreds of thousands of years across its candidate
-// searches). Cache the derived {mu, sigma} per `logNormal` config object — that
-// object is reused by reference across an entire Monte Carlo run (and across
-// every Goal Seek candidate, since only portfolio/lever fields change between
-// candidates), so this cache effectively computes each asset's parameters once.
-const logNormalMuSigmaCache = new WeakMap();
-
-// Canonical order of the 7 log-normal assets (6 asset classes + inflation),
-// matching the correlated draw order (`params.logNormal.chol`).
-const LOGNORMAL_ASSET_ORDER = ['usLgGrowth', 'usLgValue', 'usSmMid', 'exUs', 'bond', 'cash', 'inflation'];
-
-function getLogNormalMuSigmas(logNormal, assetKeysInOrder) {
-  let cached = logNormalMuSigmaCache.get(logNormal);
-  if (!cached) {
-    cached = assetKeysInOrder.map((key) => logNormalMuSigma(logNormal[key].mean, logNormal[key].stdDev));
-    logNormalMuSigmaCache.set(logNormal, cached);
-  }
-  return cached;
-}
-
-// Stationary (circular) block bootstrap: continue consecutive years or jump to a
-// new random start with probability 1/blockSize (average run length = blockSize).
-function nextBootstrapIndex(rng, currentIndex, poolLen, blockSize) {
-  const restartProb = blockSize > 1 ? 1 / blockSize : 1;
-  if (currentIndex < 0 || rng.uniform() < restartProb) {
-    return Math.floor(rng.uniform() * poolLen);
-  }
-  return (currentIndex + 1) % poolLen;
-}
-
-// Lower-triangular matrix · vector (L is N×N, v length N).
-function matVec(L, v) {
-  const N = v.length;
-  const out = new Array(N);
-  for (let i = 0; i < N; i++) {
-    let sum = 0;
-    for (let k = 0; k <= i; k++) sum += L[i][k] * v[k];
-    out[i] = sum;
-  }
-  return out;
-}
-
 // The unadjusted per-year withdrawal plan the glide path must keep funding —
 // mirrors the year loop's own `unadjustedTarget` derivation (schedule or
 // specific-list amount, clamped at 0 for non-deposit years). The minimum
@@ -250,14 +207,14 @@ export function simulatePath(
   const maxYears = maxYearsParam ?? endpointYears ?? params.numYears;
   const horizonYears = sampleHorizonYears(rng, endpointYears ?? params.numYears, horizonRange);
 
-  const smoothing = scaledHistoricalSmoothing ?? 0;
   // Goal Seek's early-years objective (see core/goalSeek.js): how much was
   // withdrawn during just the first `earlyYearsWindow` years, so a search can
   // maximize early-retirement spending instead of the lifetime total.
   const earlyWindow = earlyYearsWindow || 0;
 
   let totalRealGrowthFactor = 1.0;
-  let currentYearIndex = -1;
+  // Mutable MC SOR sampler state (bootstrap cursor / AR(1) z) — portfolio API.
+  const marketSampleState = { bootIndex: -1, lnPrevZ: null };
 
   let balance = portfolio.start;
   let totalWithdrawn = 0;
@@ -283,9 +240,6 @@ export function simulatePath(
   // measures market timing, not house sales or known large payments.
   let irrBalance = portfolio.start;
   const irrYearlyWithdrawals = new Array(horizonYears);
-
-  const sampleYears = samples ? samples.years : null;
-  const sampleLen = sampleYears ? sampleYears.length : 0;
 
   const fittedWithdrawals =
     portfolio.strategy === 'specific'
@@ -336,124 +290,28 @@ export function simulatePath(
   let consecutiveMinYears = 0;
   let forcedPlanYearsRemaining = 0;
 
-  // Log-normal setup (only used when distMethod === 'lognormal').
-  // Assets/inflation ordered to match the correlation Cholesky factor.
-  // Allocation weights are NOT cached here: Adjust allocation over time can
-  // glide the mix each year, so weights are read inside the year loop.
-  let lnMuSigma = null;
-  let lnChol = null;
-  let lnPhi = 0;
-  let lnPrevZ = null;
-  if (distMethod === 'lognormal') {
-    lnMuSigma = getLogNormalMuSigmas(logNormal, LOGNORMAL_ASSET_ORDER);
-    lnChol = logNormal.chol || null;
-    // Block size drives year-to-year smoothing via an AR(1) on the standard
-    // normals: φ = 1 − 1/blockSize (blockSize 1 ⇒ φ=0 ⇒ independent years).
-    lnPhi = blockSize > 1 ? 1 - 1 / blockSize : 0;
-  }
-
-  // Smoothed Historical setup: target mean/stdDev per asset (same fields as log-normal).
-  let shTargets = null;
-  if (distMethod === 'scaledHistorical') {
-    shTargets = [
-      logNormal.usLgGrowth,
-      logNormal.usLgValue,
-      logNormal.usSmMid,
-      logNormal.exUs,
-      logNormal.bond,
-      logNormal.cash,
-      logNormal.inflation,
-    ];
-  }
-
   for (let j = 0; j < horizonYears; j++) {
-    let portfolioReturn;
-    let inflation;
-
-    // This year's portfolio mix: either the fixed Asset Allocation, or the
-    // interpolated weight from Adjust allocation over time (same series the
-    // preview chart uses).
+    // This year's portfolio mix: fixed Asset Allocation or allocation-over-time.
     const yearAlloc = allocationSeries?.[j] ?? allocation;
-    const yearAllocWeights = [
-      yearAlloc.usLgGrowth,
-      yearAlloc.usLgValue,
-      yearAlloc.usSmMid,
-      yearAlloc.exUs,
-      yearAlloc.bond,
-      yearAlloc.cash,
-    ];
 
-    if (distMethod === 'lognormal') {
-      // Fresh independent standard normals, then correlate across assets.
-      const eps = new Array(7);
-      for (let k = 0; k < 7; k++) eps[k] = rng.normal();
-      const c = lnChol ? matVec(lnChol, eps) : eps;
-
-      // Serial smoothing: blend this year's correlated shock with last year's,
-      // preserving the marginal unit variance and the cross-asset correlation.
-      let z;
-      if (lnPrevZ === null || lnPhi === 0) {
-        z = c;
-      } else {
-        const a = Math.sqrt(1 - lnPhi * lnPhi);
-        z = new Array(7);
-        for (let k = 0; k < 7; k++) z[k] = lnPhi * lnPrevZ[k] + a * c[k];
-      }
-      lnPrevZ = z;
-
-      portfolioReturn = 0;
-      for (let k = 0; k < 6; k++) {
-        portfolioReturn += applyLogNormalMuSigma(lnMuSigma[k].mu, lnMuSigma[k].sigma, z[k]) * yearAllocWeights[k];
-      }
-      inflation = applyLogNormalMuSigma(lnMuSigma[6].mu, lnMuSigma[6].sigma, z[6]);
-    } else if (distMethod === 'scaledHistorical') {
-      // Resample real historical year-to-year sequences, then rescale each asset
-      // from its historical z-score onto the user's target mean/stdDev.
-      const shockPool = scaledHistoricalShocks;
-      const shockLen = shockPool ? shockPool.length : 0;
-      currentYearIndex = nextBootstrapIndex(rng, currentYearIndex, shockLen, blockSize);
-
-      const z = shockPool[currentYearIndex];
-      portfolioReturn = 0;
-      for (let k = 0; k < 6; k++) {
-        const { mean, stdDev } = shTargets[k];
-        const jitter = smoothing > 0 ? rng.normal() * smoothing * stdDev : 0;
-        portfolioReturn += (mean + z[k] * stdDev + jitter) * yearAllocWeights[k];
-      }
-      const inf = shTargets[6];
-      const infJitter = smoothing > 0 ? rng.normal() * smoothing * inf.stdDev : 0;
-      inflation = inf.mean + z[6] * inf.stdDev + infJitter;
-    } else {
-      // Historical years: a stationary (circular) block bootstrap for Monte
-      // Carlo resampling, or — for 'historicalSequence' (the plan-backtest
-      // band) — a deterministic contiguous walk from `sequenceStart`, wrapping
-      // when the selection is shorter than the horizon.
-      currentYearIndex =
-        distMethod === 'historicalSequence'
-          ? ((sequenceStart ?? 0) + j) % sampleLen
-          : nextBootstrapIndex(rng, currentYearIndex, sampleLen, blockSize);
-
-      const yearData = sampleYears[currentYearIndex];
-      const usLgGrowthReturn = yearData.us_lg_growth / 100;
-      const usLgValueReturn = yearData.us_lg_value / 100;
-      const usSmMidReturn = yearData.us_sm_mid / 100;
-      const exUsReturn = yearData.ex_us / 100;
-      const bondReturn = yearData.bond / 100;
-      const cashReturn = yearData.cash / 100;
-      inflation = yearData.inflation / 100;
-
-      portfolioReturn =
-        usLgGrowthReturn * yearAlloc.usLgGrowth +
-        usLgValueReturn * yearAlloc.usLgValue +
-        usSmMidReturn * yearAlloc.usSmMid +
-        exUsReturn * yearAlloc.exUs +
-        bondReturn * yearAlloc.bond +
-        cashReturn * yearAlloc.cash;
-    }
+    // Shared MC SOR sampler (resampling / scaledHistorical / lognormal / sequence).
+    const { realReturn } = sampleYearReturn(
+      {
+        distMethod,
+        logNormal,
+        samples,
+        scaledHistoricalShocks,
+        scaledHistoricalSmoothing,
+        blockSize,
+        sequenceStart,
+      },
+      rng,
+      yearAlloc,
+      j,
+      marketSampleState,
+    );
 
     const startOfYearBalance = balance;
-
-    const realReturn = (1 + portfolioReturn) / (1 + inflation) - 1;
     // Path charts / Market Return tooltips use the same real return the
     // portfolio grew by (and that drives the market-adjustment curve).
     if (returns) returns.push(realReturn);

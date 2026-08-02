@@ -122,7 +122,7 @@ flowchart TD
 ### From inputs to results
 
 - **Scenario** — Everything you type into the form is collected into one object (`src/state/scenario.js`). It autosaves to your browser’s local storage as you type; named sessions are also stored in the browser. Money fields are entered in thousands of dollars ($000s) and converted to real dollars just before the math runs.
-- **History** — Built-in yearly returns from 1900 onward for six asset classes (US large growth, US large value, US small/mid, international, bonds, cash) plus inflation (`src/data/historicalData.js`). Changing the year range updates average-return / volatility profiles and the pool of years available for resampling (`src/core/history.js`).
+- **History** — Built-in yearly returns from 1900 onward for the asset classes defined in the portfolio registry, plus inflation (`src/portfolio/`). Changing the year range updates average-return / volatility profiles and the pool of years available for resampling.
 
 > **A note on the data:** the built-in numbers are good-faith approximations assembled for illustration — the early decades especially are rounded reconstructions, since precise style-level index data doesn’t exist that far back. They’re great for exploring risk, but don’t treat any single year as an exact historical fact.
 

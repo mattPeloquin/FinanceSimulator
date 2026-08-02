@@ -127,34 +127,25 @@ export function drawHomeAppreciationShock(baseSeed, pathIndex, yearIndex, std = 
 }
 
 /**
- * Inflation + optional portfolio return for one year.
- * Market mode uses sampleRealPortfolioReturn; constant mode uses fixed rates + light inflation noise.
+ * Inflation + portfolio return for one year via shared MC SOR sampler.
  */
 function sampleYearMarket(params, pathCtx, yearIndex, yearAlloc) {
-  const { returnMode, constantRealReturn, expectedInflation, marketParams, seed, pathIndex } = params;
-  if (returnMode === 'market' && marketParams) {
-    const sampled = sampleRealPortfolioReturn(
-      marketParams,
-      pathCtx.rng,
-      yearAlloc || pathCtx.defaultAlloc,
-      yearIndex,
-      pathCtx.sampleState,
-    );
-    return {
-      realReturn: sampled.realReturn,
-      inflation: sampled.inflation,
-      portfolioReturn: sampled.portfolioReturn,
-    };
+  const { marketParams } = params;
+  if (!marketParams) {
+    throw new Error('House Equity requires market portfolio params (linked or local).');
   }
-  // Constant real portfolio return; inflation = expected ± light CRN noise.
-  const infRng = createRng(deriveSeed(seed >>> 0, pathIndex * 2048 + yearIndex * 3 + 11));
-  const inflation = Math.max(
-    -0.05,
-    (Number(expectedInflation) || 0.025) + infRng.normal() * 0.005,
+  const sampled = sampleRealPortfolioReturn(
+    marketParams,
+    pathCtx.rng,
+    yearAlloc || pathCtx.defaultAlloc,
+    yearIndex,
+    pathCtx.sampleState,
   );
-  const realReturn = Number(constantRealReturn) || 0;
-  const portfolioReturn = (1 + realReturn) * (1 + inflation) - 1;
-  return { realReturn, inflation, portfolioReturn };
+  return {
+    realReturn: sampled.realReturn,
+    inflation: sampled.inflation,
+    portfolioReturn: sampled.portfolioReturn,
+  };
 }
 
 function nominalHomeGrowth(expectedRealAppreciation, homeShock, inflation) {
@@ -713,7 +704,8 @@ export function runHouseEquityAnalysis(input, { onProgress } = {}) {
       numSimulations,
       accessYear,
       seed,
-      returnMode: input.returnMode === 'market' ? 'market' : 'constant',
+      returnMode: 'market',
+      portfolioSource: input.portfolioSource || 'local',
       homeShockStd: params.homeShockStd,
     },
     strategies: STRATEGY_IDS.map((id) => ({ id, label: STRATEGY_LABELS[id] })),

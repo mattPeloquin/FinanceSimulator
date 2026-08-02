@@ -2,6 +2,7 @@
 
 import { ROTH_CONVERT_STATE_VERSION } from '../../state/migrations.js';
 import { FEATURE_ROTH_CONVERT, FEATURE_WITHDRAW } from '../../state/storageKeys.js';
+import { defaultPortfolio, normalizePortfolio } from '../../portfolio/slice.js';
 import { SCHEMA_VERSION } from '../../state/scenario.js';
 import * as sessions from '../../state/sessions.js';
 import {
@@ -64,9 +65,10 @@ export function defaultRothConvertState() {
     numYears: 20,
     numSimulations: 500,
     seed: null,
-    // Soft-link to Plan for market returns; null → constant real return.
+    // Soft-link to Withdraw / Plan for market returns, or local portfolio.
     scenarioRef: null,
-    constantRealReturn: 0.04,
+    portfolioSource: 'local', // 'link' | 'local'
+    portfolio: defaultPortfolio(),
     focusStrategyId: 'custom',
   };
 }
@@ -178,9 +180,10 @@ export function normalizeRothConvertState(raw) {
       : base.numSimulations,
     seed: Number.isFinite(Number(raw.seed)) ? (Number(raw.seed) >>> 0) : null,
     scenarioRef,
-    constantRealReturn: Number.isFinite(Number(raw.constantRealReturn))
-      ? Number(raw.constantRealReturn)
-      : base.constantRealReturn,
+    portfolioSource: scenarioRef
+      ? 'link'
+      : (raw.portfolioSource === 'link' ? 'link' : 'local'),
+    portfolio: normalizePortfolio(raw.portfolio || base.portfolio),
     focusStrategyId: typeof raw.focusStrategyId === 'string'
       ? raw.focusStrategyId
       : base.focusStrategyId,

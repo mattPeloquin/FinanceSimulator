@@ -1,4 +1,4 @@
-// House Equity config panel — DOM ↔ session + Easy Mode + Plan picker.
+// House Equity config panel — DOM ↔ session + Easy Mode + portfolio source.
 
 import * as sessions from '../../../state/sessions.js';
 import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
@@ -10,6 +10,13 @@ import {
   detachHouseEquityPreset,
 } from '../session.js';
 import { formatCurrency, parseCurrency } from '../../../state/scenario.js';
+import { mountPortfolioPanel } from '../../../portfolio/ui/panel.js';
+import { renderPortfolioPreview } from '../../../portfolio/ui/preview.js';
+import { fromWithdrawScenario } from '../../../portfolio/adapters.js';
+import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
+
+/** @type {ReturnType<typeof mountPortfolioPanel> | null} */
+let portfolioUi = null;
 
 function el(id) {
   return document.getElementById(id);
@@ -62,32 +69,62 @@ function readNum(id, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+async function updatePortfolioPreview() {
+  const name = el('house-equity-scenario')?.value;
+  const host = el('house-equity-portfolio-preview');
+  if (!name) {
+    renderPortfolioPreview(host, null);
+    return;
+  }
+  try {
+    const loaded = await sessions.load(FEATURE_WITHDRAW, name);
+    if (!loaded?.payload) {
+      renderPortfolioPreview(host, null);
+      return;
+    }
+    renderPortfolioPreview(host, fromWithdrawScenario(loaded.payload), { sessionName: name });
+  } catch {
+    renderPortfolioPreview(host, null);
+  }
+}
+
+async function updatePortfolioSourceUi() {
+  const source = document.querySelector('input[name="house-equity-portfolio-source"]:checked')?.value
+    || getHouseEquityState().portfolioSource
+    || 'local';
+  const linkMode = source === 'link';
+  el('house-equity-link-wrap')?.classList.toggle('hidden', !linkMode);
+  el('house-equity-returns-host')?.classList.toggle('hidden', linkMode);
+  if (linkMode) await updatePortfolioPreview();
+  else portfolioUi?.refreshFromState();
+}
+
 export async function refreshHouseEquityScenarioPicker() {
   const select = el('house-equity-scenario');
   if (!select) return;
   const current = getHouseEquityState().scenarioRef?.name || '';
   let names;
   try {
-    names = await sessions.list(FEATURE_WITHDRAW);
+    const list = await sessions.list(FEATURE_WITHDRAW);
+    names = (list || []).map((s) => s.name).filter(Boolean);
   } catch {
     names = [];
   }
-  if (!Array.isArray(names)) names = [];
-  select.innerHTML = '<option value="">— Constant return —</option>';
+  select.innerHTML = '<option value="">Select a saved Withdraw session…</option>';
   for (const name of names) {
     const opt = document.createElement('option');
     opt.value = name;
     opt.textContent = name;
     select.appendChild(opt);
   }
-  select.value = names.includes(current) ? current : '';
-  updateConstReturnEnabled();
-}
-
-function updateConstReturnEnabled() {
-  const linked = !!(el('house-equity-scenario')?.value);
-  const node = el('house-equity-const-return');
-  if (node) node.disabled = linked;
+  if (current && !names.includes(current)) {
+    const missing = document.createElement('option');
+    missing.value = current;
+    missing.textContent = `(missing) ${current}`;
+    select.appendChild(missing);
+  }
+  select.value = current || '';
+  await updatePortfolioSourceUi();
 }
 
 export function renderHouseEquityForm() {
@@ -113,7 +150,6 @@ export function renderHouseEquityForm() {
   setNum('house-equity-cg-rate', s.longTermCgRate);
   setMoney('house-equity-rent', s.annualRent);
   setNum('house-equity-rent-growth', s.realRentGrowth);
-  setNum('house-equity-const-return', s.constantRealReturn);
   el('house-equity-paths').value = String(s.numSimulations);
   el('house-equity-srm-mode').value = s.simplifiedRmMode;
   setNum('house-equity-srm-rate', s.simplifiedRmRate);
@@ -125,11 +161,22 @@ export function renderHouseEquityForm() {
   setNum('house-equity-cashout-ltv', s.cashOutLtv);
   setNum('house-equity-cashout-rate', s.cashOutRate);
 
+  const source = s.scenarioRef?.name ? 'link' : (s.portfolioSource || 'local');
+  const linkRadio = el('house-equity-source-link');
+  const localRadio = el('house-equity-source-local');
+  if (linkRadio) linkRadio.checked = source === 'link';
+  if (localRadio) localRadio.checked = source !== 'link';
+
+  portfolioUi?.refreshFromState();
   void refreshHouseEquityScenarioPicker();
 }
 
 export function syncHouseEquityFormToState() {
+  const source = document.querySelector('input[name="house-equity-portfolio-source"]:checked')?.value
+    || 'local';
   const scenarioName = el('house-equity-scenario')?.value || '';
+  const localPortfolio = portfolioUi?.readFromDom()
+    || pickReturnsAllocationSlice(getHouseEquityState().portfolio || {});
   patchHouseEquityState({
     presetActive: isPresetAttached(),
     presetLevel: currentPresetLevel(),
@@ -150,7 +197,6 @@ export function syncHouseEquityFormToState() {
     longTermCgRate: readNum('house-equity-cg-rate', 0.15),
     annualRent: readMoney('house-equity-rent'),
     realRentGrowth: readNum('house-equity-rent-growth', 0),
-    constantRealReturn: readNum('house-equity-const-return', 0.04),
     numSimulations: Number(el('house-equity-paths')?.value) || 500,
     simplifiedRmMode: el('house-equity-srm-mode')?.value === 'tenure' ? 'tenure' : 'loc',
     simplifiedRmRate: readNum('house-equity-srm-rate', 6),
@@ -161,13 +207,35 @@ export function syncHouseEquityFormToState() {
     helocRate: readNum('house-equity-heloc-rate', 8),
     cashOutLtv: readNum('house-equity-cashout-ltv', 70),
     cashOutRate: readNum('house-equity-cashout-rate', 6.5),
-    scenarioRef: scenarioName
+    portfolioSource: source,
+    scenarioRef: source === 'link' && scenarioName
       ? { feature: FEATURE_WITHDRAW, name: scenarioName }
       : null,
+    portfolio: localPortfolio,
   });
 }
 
 export function bindHouseEquityInputs() {
+  const host = el('house-equity-returns-host');
+  if (host && !portfolioUi) {
+    portfolioUi = mountPortfolioPanel(host, {
+      idPrefix: 'house-equity-',
+      mountMarkup: true,
+      wrapAccordion: true,
+      showOverTime: false,
+      syncSparklines: true,
+      sectionTitle: 'Investment Planning',
+      sectionHelp: 'Historical years, distribution method, and asset allocation for Monte Carlo returns.',
+      getPortfolio: () => pickReturnsAllocationSlice(getHouseEquityState().portfolio || {}),
+      setPortfolio: (partial) => {
+        patchHouseEquityState({
+          portfolio: { ...pickReturnsAllocationSlice(getHouseEquityState().portfolio || {}), ...partial },
+          portfolioSource: 'local',
+        });
+      },
+    });
+  }
+
   el('house-equity-preset-active')?.addEventListener('change', () => {
     if (isPresetAttached()) applyCurrentPreset();
     else detachHouseEquityPreset();
@@ -182,6 +250,11 @@ export function bindHouseEquityInputs() {
   root?.addEventListener('change', (ev) => {
     const t = ev.target;
     if (!(t instanceof HTMLElement)) return;
+    if (t.name === 'house-equity-portfolio-source') {
+      syncHouseEquityFormToState();
+      void updatePortfolioSourceUi();
+      return;
+    }
     if (t.id?.startsWith('house-equity-') && t.id !== 'house-equity-preset-level'
       && t.id !== 'house-equity-preset-active') {
       if (isPresetAttached() && t.id !== 'house-equity-scenario' && t.id !== 'house-equity-paths') {
@@ -190,14 +263,7 @@ export function bindHouseEquityInputs() {
         updatePresetLabel();
       }
       syncHouseEquityFormToState();
-      if (t.id === 'house-equity-scenario') updateConstReturnEnabled();
-    }
-  });
-  root?.addEventListener('input', (ev) => {
-    const t = ev.target;
-    if (!(t instanceof HTMLElement)) return;
-    if (t.classList?.contains('currency-input') || t.id?.startsWith('house-equity-')) {
-      // Live sync on blur is enough for currency; change handler covers selects.
+      if (t.id === 'house-equity-scenario') void updatePortfolioSourceUi();
     }
   });
 

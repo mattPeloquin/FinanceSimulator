@@ -17,6 +17,7 @@ import {
   getAccumulateState,
   applyAccumulatePreset,
   getAccumulateCashflowSeries,
+  getAccumulateDependencies,
 } from './session.js';
 import { applyAccumulateHistoryProfiles } from './history.js';
 import { bindAccumulateInputs, renderAccumulateForm } from './ui/inputs.js';
@@ -50,6 +51,7 @@ async function initAccumulateDom() {
     applyImported: (loaded, opts) => applyImportedAccumulate(loaded, opts),
     onNewSession: () => resetAccumulateToDefaults(),
     getCashflowSeries: ({ sessionName } = {}) => getAccumulateCashflowSeries({ sessionName }),
+    getDependencies: () => getAccumulateDependencies(),
   });
 
   bindAccumulateInputs();

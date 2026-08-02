@@ -8,8 +8,14 @@ import {
   ALLOCATION_KEYS,
 } from '../session.js';
 import { getAccumulatePresets } from '../presets.js';
+import { FEATURE_WITHDRAW } from '../../../state/storageKeys.js';
 import { pickReturnsAllocationSlice } from '../../../state/returnsAllocationSlice.js';
-import { createReturnsAllocationUi } from '../../../ui/returnsAllocation/controller.js';
+import { mountPortfolioPanel } from '../../../portfolio/ui/panel.js';
+import {
+  populateWithdrawScenarioSelect,
+  refreshLinkedPortfolioPreview,
+  syncPortfolioSourceVisibility,
+} from '../../../portfolio/ui/sourceControls.js';
 import { buildAllocationOverTimeSeries, allocationFromConfig } from '../../../core/accumulation.js';
 
 const SLEEVE_META = [
@@ -21,7 +27,7 @@ const SLEEVE_META = [
 /** Guard while Easy Mode writes the form (avoid treating as a user detach). */
 let isApplyingPreset = false;
 
-/** @type {ReturnType<typeof createReturnsAllocationUi> | null} */
+/** @type {ReturnType<typeof mountPortfolioPanel> | null} */
 let returnsUi = null;
 
 function el(id) {
@@ -100,6 +106,9 @@ export function syncAccumulateFormToState() {
   }
 
   const returnsPartial = returnsUi?.readFromDom() || pickReturnsAllocationSlice(state);
+  const source = document.querySelector('input[name="accumulate-portfolio-source"]:checked')?.value
+    || 'local';
+  const scenarioName = el('accumulate-scenario')?.value || '';
 
   const events = [];
   document.querySelectorAll('#accumulate-events [data-accum-event-row]').forEach((row) => {
@@ -126,7 +135,36 @@ export function syncAccumulateFormToState() {
     events,
     presetActive: isPresetAttached(),
     presetLevel: currentPresetLevel(),
+    portfolioSource: source,
+    scenarioRef: source === 'link' && scenarioName
+      ? { feature: FEATURE_WITHDRAW, name: scenarioName }
+      : null,
   });
+}
+
+async function updateAccumulatePortfolioSourceUi() {
+  const source = document.querySelector('input[name="accumulate-portfolio-source"]:checked')?.value
+    || getAccumulateState().portfolioSource
+    || 'local';
+  syncPortfolioSourceVisibility({
+    source,
+    linkWrapEl: el('accumulate-link-wrap'),
+    localHostEl: el('accumulate-returns-host'),
+  });
+  if (source === 'link') {
+    await refreshLinkedPortfolioPreview(
+      el('accumulate-portfolio-preview'),
+      el('accumulate-scenario')?.value,
+    );
+  } else {
+    returnsUi?.refreshFromState();
+  }
+}
+
+export async function refreshAccumulateScenarioPicker() {
+  const current = getAccumulateState().scenarioRef?.name || '';
+  await populateWithdrawScenarioSelect(el('accumulate-scenario'), current);
+  await updateAccumulatePortfolioSourceUi();
 }
 
 function tierRowHtml(tier, isLast) {
@@ -264,7 +302,14 @@ export function renderAccumulateForm() {
   renderEasyMode(state);
   renderSleeves(state);
   renderEvents(state);
+
+  const source = state.scenarioRef?.name ? 'link' : (state.portfolioSource || 'local');
+  const linkRadio = el('accumulate-source-link');
+  const localRadio = el('accumulate-source-local');
+  if (linkRadio) linkRadio.checked = source === 'link';
+  if (localRadio) localRadio.checked = source !== 'link';
   returnsUi?.refreshFromState();
+  void refreshAccumulateScenarioPicker();
 }
 
 /** Deterministic glidepath series for the preview chart (engine decimals). */
@@ -282,12 +327,17 @@ export function getGlidePreviewSeries() {
 export function bindAccumulateInputs() {
   const host = el('accumulate-returns-host');
   if (host && !returnsUi) {
-    returnsUi = createReturnsAllocationUi(host, {
+    returnsUi = mountPortfolioPanel(host, {
       idPrefix: 'accumulate-',
       mountMarkup: true,
-      getSlice: () => pickReturnsAllocationSlice(getAccumulateState()),
-      setSlice: (partial) => {
-        patchAccumulateState(partial);
+      wrapAccordion: true,
+      showOverTime: false,
+      syncSparklines: true,
+      sectionTitle: 'Investment Planning',
+      sectionHelp: 'Historical years, distribution method, and asset allocation for Monte Carlo returns.',
+      getPortfolio: () => pickReturnsAllocationSlice(getAccumulateState()),
+      setPortfolio: (partial) => {
+        patchAccumulateState({ ...partial, portfolioSource: 'local' });
       },
       onChange: () => {
         if (isApplyingPreset) return;
@@ -321,12 +371,27 @@ export function bindAccumulateInputs() {
     applyLevelFromSlider();
   });
 
+  document.querySelectorAll('input[name="accumulate-portfolio-source"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      syncAccumulateFormToState();
+      void updateAccumulatePortfolioSourceUi();
+    });
+  });
+  el('accumulate-scenario')?.addEventListener('change', () => {
+    syncAccumulateFormToState();
+    void updateAccumulatePortfolioSourceUi();
+  });
+
   root.addEventListener('change', (e) => {
     if (isApplyingPreset) return;
     if (!(e.target instanceof HTMLElement)) return;
     if (e.target.id === 'accumulate-preset-active'
       || e.target.id === 'accumulate-preset-level'
       || e.target.closest('#accumulate-preset-control')) {
+      return;
+    }
+    if (e.target.name === 'accumulate-portfolio-source'
+      || e.target.id === 'accumulate-scenario') {
       return;
     }
     if (e.target.closest('#accumulate-returns-host')) {

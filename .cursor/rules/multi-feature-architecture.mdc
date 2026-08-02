@@ -40,22 +40,21 @@ not bake tornado-only shapes into the persisted result model.
 
 ### Shared assets (no feature forks)
 
-Return tables and allocation math are **shared-only**. Features must not copy or
-fork `src/data/historicalData.js`, `src/core/history.js`, or
-`src/core/allocation.js`. Cross-feature investable-class contract:
+Portfolio / returns concerns live in **`src/portfolio/`** (sole contract). Features
+must not hard-code market segment names, sleeve counts, or parallel key lists.
+Use the portfolio API (`listSleeves`, `buildMarketParams`, `sampleYearReturn`,
+`allocationPresentation`, adapters). Compat re-exports remain at
+`src/data/historicalData.js`, `src/core/history.js`, `src/core/allocation.js`,
+and `src/state/returnsAllocationSlice.js` during rollout.
 
-- **`ALLOCATION_ENGINE_KEYS`** (`src/core/allocation.js`) — camelCase six classes
-  (`usLgGrowth` … `cash`), no inflation.
-- **`LOGNORMAL_ORDER`** (`src/core/history.js`) — snake_case history keys including
-  `inflation`.
-- **Returns / allocation UI** is shared via
-  [`src/state/returnsAllocationSlice.js`](../../src/state/returnsAllocationSlice.js)
-  (pure slice + `distMethod` canonicalize) and
-  [`src/ui/returnsAllocation/controller.js`](../../src/ui/returnsAllocation/controller.js)
-  (mountable year range / distribution / allocation panel). Withdraw keeps legacy
-  DOM ids through a thin wrapper in `src/features/withdraw/history.js`;
-  Accumulate and Social Security mount the shared controller. Do not fork
-  per-feature history/allocation panels.
+- **`src/portfolio/registry.js`** — only place that enumerates investable sleeves
+  + inflation metadata (variable count; no fixed N).
+- **`src/portfolio/historicalData.js`** — annual return table keyed by registry
+  history keys.
+- **`src/portfolio/ui/panel.js`** — Withdraw-parity mountable portfolio panel
+  (years, dist methods, sparklines, allocation, over-time). Features mount via
+  `mountPortfolioPanel`; do not fork per-feature history/allocation panels.
+- Encapsulation is guarded by `tests/portfolioEncapsulation.test.js`.
 
 ### Worker dispatcher
 

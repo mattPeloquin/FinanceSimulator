@@ -1,4 +1,5 @@
 import { loadAppPrefs, saveAppPrefs } from '../state/appPrefs.js';
+import { sleeveColorMap, getSleeveMeta } from '../portfolio/registry.js';
 
 export const themeTokens = {
   meta: { light: '#4f46e5', dark: '#1e293b' },
@@ -52,17 +53,16 @@ export const themeTokens = {
     p85: { light: '37 99 235', dark: '96 165 250' },
   },
 
-  // Cohesive blue→teal→green family — deeper/richer (not chalky), similar
-  // chroma so neighbors don't clash. Shared by sparklines and the preview.
-  chartAssets: {
-    us_lg_growth: '#2a6f9c',
-    us_lg_value: '#2a8490',
-    us_sm_mid: '#268a72',
-    ex_us: '#3a78a8',
-    bond: '#4f9438',
-    cash: '#3d5f78',
-  },
+  // Asset colors come from the portfolio registry (no hard-coded segment map).
+  chartAssets: sleeveColorMap(),
 };
+
+/** Resolve a sleeve chart color by history/engine/pct key. */
+export function themeAssetColor(key) {
+  const sleeve = getSleeveMeta(key);
+  if (sleeve) return sleeve.color;
+  return themeTokens.chartAssets[key] || null;
+}
 
 function rgbTripletToHex(triplet) {
   return (

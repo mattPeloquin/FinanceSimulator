@@ -1,19 +1,7 @@
 // Build worker payload from House Equity session state.
 
-import * as sessions from '../../state/sessions.js';
-import { FEATURE_WITHDRAW } from '../../state/storageKeys.js';
-import {
-  buildSamplesAndProfiles,
-  sliceFromWithdrawScenario,
-  canonicalizeDistMethod,
-  ALLOCATION_PCT_KEYS,
-} from '../../state/returnsAllocationSlice.js';
-import {
-  profilesToLogNormal,
-  correlationCholesky,
-  computeStandardizedYears,
-} from '../../core/history.js';
-import { allocationFromConfig, ALLOCATION_ENGINE_KEYS } from '../../core/accumulation.js';
+import { resolveFeatureMarket } from '../../portfolio/resolve.js';
+import { pctKeys } from '../../portfolio/registry.js';
 import { toDollars } from '../../state/scenario.js';
 
 /** Session percents → engine decimals (4 → 0.04). */
@@ -22,57 +10,16 @@ function toRate(pct) {
 }
 
 /**
- * Resolve Plan soft-link (if any) into market params, or constant-return mode.
+ * Resolve linked Withdraw session or local portfolio into MC SOR market params.
  * Money fields arrive as $000s; rate fields as percents.
  * @param {object} state
  */
 export async function buildHouseEquityWorkerPayload(state, { seed } = {}) {
   const runSeed = (seed ?? state.seed ?? (Math.random() * 0xffffffff)) >>> 0;
-  const linked = !!(state.scenarioRef?.name);
-
-  let returnMode = 'constant';
-  let marketParams = null;
-  let allocation = null;
-  let allocationOverTimeTiers = [];
-
-  if (linked) {
-    const loaded = await sessions.load(
-      state.scenarioRef.feature || FEATURE_WITHDRAW,
-      state.scenarioRef.name,
-    );
-    if (!loaded?.payload) {
-      throw new Error(
-        `Could not load Withdraw session "${state.scenarioRef.name}". Save a scenario in Withdraw first, or clear the link to use a constant return.`,
-      );
-    }
-    const slice = sliceFromWithdrawScenario(loaded.payload);
-    const { samples, profiles: derived } = buildSamplesAndProfiles(slice, {
-      forceProfiles: true,
-    });
-    const profiles = derived || {};
-    const logNormal = profilesToLogNormal(profiles);
-    logNormal.chol = samples.years.length >= 2
-      ? correlationCholesky(samples.years)
-      : null;
-    allocation = allocationFromConfig(slice.allocation, ALLOCATION_PCT_KEYS);
-    allocationOverTimeTiers = slice.allocationOverTimeTiers || [];
-    returnMode = 'market';
-    marketParams = {
-      seed: runSeed,
-      distMethod: canonicalizeDistMethod(slice.distMethod),
-      blockSize: slice.blockSize,
-      allocation,
-      allocationKeys: ALLOCATION_PCT_KEYS,
-      allocationOverTimeTiers,
-      samples,
-      logNormal,
-      scaledHistoricalShocks: samples.years.length
-        ? computeStandardizedYears(samples.years)
-        : null,
-      scaledHistoricalSmoothing: slice.scaledHistoricalSmoothing || 0,
-      engineKeys: ALLOCATION_ENGINE_KEYS,
-    };
-  }
+  const { marketParams, portfolio, source } = await resolveFeatureMarket(state, {
+    horizonYears: state.numYears,
+    seed: runSeed,
+  });
 
   return {
     type: 'houseEquity',
@@ -111,12 +58,12 @@ export async function buildHouseEquityWorkerPayload(state, { seed } = {}) {
       cashOutRate: toRate(state.cashOutRate),
       cashOutTermYears: state.cashOutTermYears,
       cashOutClosingPct: toRate(state.cashOutClosingPct),
-      returnMode,
-      constantRealReturn: toRate(state.constantRealReturn),
+      returnMode: 'market',
       marketParams,
-      allocation,
-      allocationOverTimeTiers,
-      allocationKeys: ALLOCATION_PCT_KEYS,
+      allocation: marketParams.allocation,
+      allocationOverTimeTiers: portfolio.allocationOverTimeTiers,
+      allocationKeys: pctKeys(),
+      portfolioSource: source,
       numCores: 1,
       subWorkerPorts: [],
     },

@@ -4,16 +4,9 @@
 
 import { percentileLinear } from './resultPackaging.js';
 import { meanYearlyWithdrawals } from './statistics.js';
-import { MONEY_SCALE, ALLOCATION_KEYS } from '../state/scenario.js';
+import { MONEY_SCALE } from '../state/scenario.js';
 import { presetForLevel } from '../state/presets/index.js';
-
-const STOCK_ALLOCATION_KEYS = [
-  'usLgGrowthAllocation',
-  'usLgValueAllocation',
-  'usSmMidAllocation',
-  'exUsAllocation',
-];
-const BOND_CASH_KEYS = ['bondAllocation', 'cashAllocation'];
+import { allocationPresentation } from '../portfolio/api.js';
 
 /** Format dollars as a short $000s string for report sentences (with $ prefix). */
 function dollarK(dollars) {
@@ -219,17 +212,16 @@ export function snapshotMetricBands(result, pLow, pHigh, scenario = null) {
 }
 
 export function allocationSummary(scenario) {
-  let stocks = 0;
-  let bondCash = 0;
-  for (const key of STOCK_ALLOCATION_KEYS) stocks += Number(scenario[key]) || 0;
-  for (const key of BOND_CASH_KEYS) bondCash += Number(scenario[key]) || 0;
+  const pres = allocationPresentation(scenario || {});
   return {
-    stocksPct: Math.round(stocks),
-    bondCashPct: Math.round(bondCash),
-    label: `${Math.round(stocks)}% stocks / ${Math.round(bondCash)}% bonds/cash`,
-    sleeves: ALLOCATION_KEYS.map((key) => ({
-      key,
-      pct: Number(scenario[key]) || 0,
+    stocksPct: pres.stocksPct,
+    bondCashPct: pres.bondCashPct,
+    label: `${pres.stocksPct}% stocks / ${pres.bondCashPct}% bonds/cash`,
+    sleeves: pres.sleeves.map((s) => ({
+      key: s.key,
+      pct: s.pct,
+      label: s.label,
+      color: s.color,
     })),
   };
 }

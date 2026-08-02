@@ -16,6 +16,18 @@ import {
 import { rmdDivisor } from '../src/data/rmdFactors.js';
 import { HANDLERS } from '../src/workers/dispatch.js';
 import { drawTaxRateShock } from '../src/core/policyShocks.js';
+import { buildMarketParams, defaultPortfolio } from '../src/portfolio/api.js';
+
+function marketFixture(numYears = 5) {
+  const marketParams = buildMarketParams(defaultPortfolio({ distMethod: 'lognormal' }), {
+    horizonYears: numYears,
+  });
+  return {
+    returnMode: 'market',
+    marketParams,
+    allocation: marketParams.allocation,
+  };
+}
 
 describe('tax ladder', () => {
   it('computes progressive tax and marginal rate', () => {
@@ -88,8 +100,7 @@ describe('strategies and path simulation', () => {
     taxNoiseStd: 0,
     rmdEnabled: false,
     qcdEnabled: false,
-    returnMode: 'constant',
-    constantRealReturn: 0.03,
+    ...marketFixture(5),
   };
 
   it('always includes a $0 strategy', () => {
@@ -158,8 +169,7 @@ describe('runRothConversionAnalysis packaging', () => {
       rmdEnabled: true,
       qcdEnabled: false,
       spouseSoleBeneficiary: true,
-      returnMode: 'constant',
-      constantRealReturn: 0.04,
+      ...marketFixture(4),
     });
 
     expect(result.responseCurve.length).toBeGreaterThanOrEqual(4);
@@ -198,8 +208,7 @@ describe('runRothConversionAnalysis packaging', () => {
       ratePremium: 0.15,
       taxNoiseStd: 0,
       rmdEnabled: false,
-      returnMode: 'constant',
-      constantRealReturn: 0.05,
+      ...marketFixture(3),
     });
     // Not asserting best === zero always (rates interact), but packaging stays valid.
     expect(result.byStrategy.zero.percentiles.p50.endingWealth).toBeGreaterThan(0);

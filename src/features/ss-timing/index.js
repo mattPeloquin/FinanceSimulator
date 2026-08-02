@@ -17,6 +17,7 @@ import {
   getSsTimingState,
   applySsTimingPreset,
   getSsTimingCashflowSeries,
+  getSsTimingDependencies,
 } from './session.js';
 import { bindSsTimingInputs, renderSsTimingForm } from './ui/inputs.js';
 import {
@@ -49,6 +50,7 @@ async function initSsTimingDom() {
     applyImported: (loaded, opts) => applyImportedSsTiming(loaded, opts),
     onNewSession: () => resetSsTimingToDefaults(),
     getCashflowSeries: ({ sessionName } = {}) => getSsTimingCashflowSeries({ sessionName }),
+    getDependencies: () => getSsTimingDependencies(),
   });
 
   bindSsTimingInputs();

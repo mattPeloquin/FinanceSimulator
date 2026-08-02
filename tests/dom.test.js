@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { FIELDS } from '../src/state/scenario.js';
+import { buildRichMarkup } from '../src/portfolio/ui/panel.js';
+import { listSleeves } from '../src/portfolio/registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -39,7 +41,17 @@ for (const feature of [
 ]) {
   loadPartials(join(root, 'features', feature, 'partials'), partials);
 }
-const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials);
+
+// Portfolio sleeve rows / dist radios are mounted at runtime from the registry.
+const portfolioMarkup = buildRichMarkup('', {
+  showOverTime: true,
+  wrapAccordion: true,
+  sectionTitle: 'Investment Planning',
+  sectionHelp: 'Return assumptions and portfolio allocation.',
+});
+
+const html = inlinePartials(readFileSync(join(__dirname, '..', 'index.html'), 'utf8'), partials)
+  + portfolioMarkup;
 
 // Required non-field element ids the app wires up at runtime.
 const REQUIRED_IDS = [
@@ -57,24 +69,11 @@ const REQUIRED_IDS = [
   'messageDialogOk',
   'totalAllocation',
   'year-labels',
-  'usLgGrowthAvgReturn',
-  'usLgValueAvgReturn',
-  'usSmMidAvgReturn',
-  'exUsAvgReturn',
-  'bondAvgReturn',
-  'cashAvgReturn',
-  'usLgGrowthMaxReturn',
-  'usLgGrowthMinReturn',
-  'usLgValueMaxReturn',
-  'usLgValueMinReturn',
-  'usSmMidMaxReturn',
-  'usSmMidMinReturn',
-  'exUsMaxReturn',
-  'exUsMinReturn',
-  'bondMaxReturn',
-  'bondMinReturn',
-  'cashMaxReturn',
-  'cashMinReturn',
+  ...listSleeves().flatMap((s) => [
+    `${s.domId}AvgReturn`,
+    `${s.domId}MaxReturn`,
+    `${s.domId}MinReturn`,
+  ]),
   'historical-range-msg',
   'historical-range-help',
   'lognormal-profiles',
@@ -142,6 +141,7 @@ const REQUIRED_IDS = [
   'irrScatterBalanceCanvas',
   'largeWithdrawalCanvas',
   'largeBalanceCanvas',
+  'withdraw-portfolio-host',
 ];
 
 const PERCENTILE_CARD_IDS = [];
@@ -170,8 +170,14 @@ describe('index.html wiring', () => {
   });
 
   it('has all distribution-method radios', () => {
-    expect(html).toMatch(/name="distribution-method"[^>]*value="resampling"/);
-    expect(html).toMatch(/name="distribution-method"[^>]*value="scaledHistorical"/);
-    expect(html).toMatch(/name="distribution-method"[^>]*value="lognormal"/);
+    expect(portfolioMarkup).toMatch(/name="distribution-method"[^>]*value="resampling"/);
+    expect(portfolioMarkup).toMatch(/name="distribution-method"[^>]*value="scaledHistorical"/);
+    expect(portfolioMarkup).toMatch(/name="distribution-method"[^>]*value="lognormal"/);
+  });
+
+  it('generates one allocation row per registry sleeve', () => {
+    for (const s of listSleeves()) {
+      expect(portfolioMarkup).toContain(`id="${s.pctKey}"`);
+    }
   });
 });

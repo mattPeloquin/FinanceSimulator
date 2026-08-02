@@ -124,8 +124,28 @@
         </label>
       </div>
 
-      <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-theme-heading">Returns &amp; allocation</h3>
+      <div class="space-y-2 rounded-lg border border-theme-border px-3 py-3">
+        <h3 class="text-sm font-semibold text-theme-heading">Bridge portfolio returns</h3>
+        <fieldset class="space-y-2">
+          <legend class="text-xs text-theme-muted">Portfolio source</legend>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="ss-timing-portfolio-source" id="ss-timing-source-link" value="link" class="border-theme-border" />
+            Use linked Withdraw / Plan scenario
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm text-theme-body">
+            <input type="radio" name="ss-timing-portfolio-source" id="ss-timing-source-local" value="local" class="border-theme-border" checked />
+            Define portfolio here
+          </label>
+        </fieldset>
+        <div id="ss-timing-link-wrap" class="space-y-2 hidden">
+          <label class="block space-y-1">
+            <span class="text-sm font-medium text-theme-body">Withdraw session</span>
+            <select id="ss-timing-scenario" class="w-full rounded-lg border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-heading">
+              <option value="">Select a saved Withdraw session…</option>
+            </select>
+          </label>
+          <div id="ss-timing-portfolio-preview"></div>
+        </div>
         <div id="ss-timing-returns-host"></div>
       </div>
 
