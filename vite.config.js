@@ -40,6 +40,8 @@ export default defineConfig({
         ...getDirectories(resolve(__dirname, 'src/features/roth-convert/partials')),
         resolve(__dirname, 'src/features/house-equity/partials'),
         ...getDirectories(resolve(__dirname, 'src/features/house-equity/partials')),
+        resolve(__dirname, 'src/features/plan/partials'),
+        ...getDirectories(resolve(__dirname, 'src/features/plan/partials')),
       ],
     }),
     viteSingleFile(),

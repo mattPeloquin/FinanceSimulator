@@ -57,6 +57,28 @@ export function registerSessionAdapter(featureId, adapter) {
   }
 }
 
+/**
+ * Read-only lookup of a registered session adapter (used by Plan to reach
+ * live state / cashflowSeries of other features without importing their modules).
+ * @param {string} featureId
+ * @returns {SessionAdapter|undefined}
+ */
+export function getSessionAdapter(featureId) {
+  return sessionAdapters.get(featureId);
+}
+
+/**
+ * Current (or last-snapshotted) session name for a feature.
+ * Empty string means the feature's unsaved working state.
+ * @param {string} featureId
+ * @returns {string}
+ */
+export function getFeatureSessionName(featureId) {
+  if (!featureId) return '';
+  if (getActiveFeatureId() === featureId) return currentSessionName || '';
+  return sessionUiByFeature.get(featureId)?.name || '';
+}
+
 export function getActiveFeatureId() {
   return getActiveFeature()?.id || FEATURE_WITHDRAW;
 }

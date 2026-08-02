@@ -13,8 +13,10 @@ import {
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
+  FEATURE_PLAN,
   ROTH_CONVERT_UI_KEY,
   HOUSE_EQUITY_UI_KEY,
+  PLAN_UI_KEY,
 } from '../src/state/storageKeys.js';
 
 describe('storageKeys', () => {
@@ -32,6 +34,7 @@ describe('storageKeys', () => {
     expect(FEATURE_SS_TIMING).toBe('ss-timing');
     expect(FEATURE_ROTH_CONVERT).toBe('roth-convert');
     expect(FEATURE_HOUSE_EQUITY).toBe('house-equity');
+    expect(FEATURE_PLAN).toBe('plan');
     expect(APP_PREFS_KEY).toBe('fs:app:prefs');
     expect(WITHDRAW_UI_KEY).toBe('fs:withdraw:ui');
     expect(WITHDRAW_AUTOSAVE_KEY).toBe('fs:withdraw:autosave');
@@ -39,6 +42,7 @@ describe('storageKeys', () => {
     expect(SOR_LAB_UI_KEY).toBe('fs:sor-lab:ui');
     expect(ROTH_CONVERT_UI_KEY).toBe('fs:roth-convert:ui');
     expect(HOUSE_EQUITY_UI_KEY).toBe('fs:house-equity:ui');
+    expect(PLAN_UI_KEY).toBe('fs:plan:ui');
   });
 
   it('rejects empty key segments', () => {

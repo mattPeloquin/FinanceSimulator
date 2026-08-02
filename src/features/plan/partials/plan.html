@@ -1,0 +1,163 @@
+<section id="feature-plan" role="tabpanel" aria-labelledby="more-item-plan" class="hidden space-y-4" aria-hidden="true">
+  <div>
+    <h2 id="plan-heading" class="text-xl font-semibold text-theme-heading">Lifetime Plan</h2>
+    <p class="mt-1 text-sm text-theme-muted max-w-3xl">
+      Combine saved (or current unsaved) scenarios into one
+      <span class="font-medium text-theme-body">net worth over time</span> view.
+      Social Security and home-equity cashflows are fed into
+      Accumulate and Withdraw so they
+      <span class="font-medium text-theme-body">reduce (or increase) the portfolio draw</span>
+      — surplus cash rolls into the portfolio. Net worth =
+      <span class="font-medium text-theme-body">portfolio + home equity</span>.
+      Link Withdraw to an Accumulate source with “starts after” to hand off the
+      ending balance. Age-based sources align via birth year; use the per-source
+      offset to nudge a timeline.
+    </p>
+    <p class="mt-1 text-xs text-theme-faint max-w-3xl">
+      Note: injected inflows are untaxed in the Withdraw engine (gross Social Security
+      is slightly optimistic). The net-worth band shows portfolio uncertainty only;
+      home equity is a median path.
+    </p>
+    <p id="plan-status" class="mt-1 text-xs text-theme-faint" aria-live="polite"></p>
+  </div>
+
+  <div id="plan-preset-control" class="rounded-lg border border-theme-border bg-theme-muted/40 px-4 py-3 space-y-2">
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-theme-body">
+      <input type="checkbox" id="plan-preset-active" class="rounded border-theme-border" checked />
+      Easy Mode
+    </label>
+    <input type="range" id="plan-preset-level" min="0" max="2" step="1" value="0" class="w-full accent-theme-accent" />
+    <p id="plan-preset-name" class="text-xs text-theme-muted"></p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="space-y-4">
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-2">
+        <h3 class="text-sm font-semibold text-theme-heading">Timeline anchor</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Plan start year</span>
+            <input type="number" id="plan-start-year" min="1900" max="2200"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Plan end year</span>
+            <input type="number" id="plan-end-year" min="1900" max="2200"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Birth year (person A)</span>
+            <input type="number" id="plan-birth-a" min="1900" max="2100"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm" />
+          </label>
+          <label class="block space-y-0.5">
+            <span class="text-xs text-theme-muted">Birth year (person B, optional)</span>
+            <input type="number" id="plan-birth-b" min="1900" max="2100"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm"
+              placeholder="—" />
+          </label>
+          <label class="block space-y-0.5 col-span-2">
+            <span class="text-xs text-theme-muted">Refresh simulations (cap for re-runs)</span>
+            <select id="plan-refresh-sims"
+              class="w-full rounded border border-theme-border bg-theme-input px-2 py-1 text-sm">
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+              <option value="1000">1000</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-lg border border-theme-border px-3 py-3 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold text-theme-heading">Sources</h3>
+          <button type="button" id="plan-add-source"
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-theme-border bg-theme-surface text-theme-body hover:bg-theme-muted transition-colors">
+            Add source
+          </button>
+        </div>
+        <p class="text-xs text-theme-muted">
+          Pick a feature, a saved session (or current unsaved state), and which strategy to include.
+          External cashflows (SS, home equity) are injected into Accumulate and Withdraw.
+          For Withdraw, optionally start after an Accumulate row to hand off the ending balance.
+        </p>
+        <div id="plan-sources-list" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col items-center gap-3 pt-2">
+    <button id="plan-run" type="button"
+      class="bg-theme-accent text-theme-on-accent font-bold rounded-lg shadow-md hover:bg-theme-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme-accent focus:ring-offset-theme-ring-offset px-10 py-4 transition-all duration-300 text-lg">
+      Refresh Plan
+    </button>
+    <div id="plan-loading" class="hidden items-center gap-3 w-full max-w-md">
+      <div class="flex-1 h-2 rounded-full bg-theme-muted overflow-hidden">
+        <div id="plan-loading-bar" class="h-full bg-theme-accent transition-all" style="width:0%"></div>
+      </div>
+      <span id="plan-loading-text" class="text-xs text-theme-muted whitespace-nowrap">Running…</span>
+      <button type="button" id="plan-cancel"
+        class="px-2 py-1 text-xs rounded border border-theme-border text-theme-body hover:bg-theme-muted">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <div id="plan-results-section" class="hidden space-y-6 pt-4 border-t border-theme-border">
+    <p id="plan-stale" class="hidden text-xs text-amber-600 dark:text-amber-400">
+      Inputs changed since the last refresh — results may be stale.
+    </p>
+    <p id="plan-warnings" class="hidden text-xs text-amber-600 dark:text-amber-400"></p>
+    <p id="plan-summary" class="text-sm text-theme-body"></p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-theme-muted">View</span>
+      <div class="inline-flex rounded-md border border-theme-border overflow-hidden" role="group" aria-label="Plan chart view">
+        <button type="button" id="plan-view-networth" data-view="netWorth"
+          class="px-3 py-1 text-xs font-medium bg-theme-accent text-theme-on-accent">
+          Net worth
+        </button>
+        <button type="button" id="plan-view-cashflow" data-view="cashflow"
+          class="px-3 py-1 text-xs font-medium bg-theme-surface text-theme-body hover:bg-theme-muted">
+          Cashflow
+        </button>
+      </div>
+    </div>
+
+    <div id="plan-view-networth-panel" class="space-y-2">
+      <h3 class="text-sm font-semibold text-theme-heading">Household net worth</h3>
+      <p class="text-xs text-theme-muted">
+        Portfolio (Accumulate then Withdraw) plus median home equity. Band is P10–P90 of the portfolio path.
+      </p>
+      <div class="relative h-80">
+        <canvas id="plan-networth-chart" aria-label="Net worth over calendar years"></canvas>
+      </div>
+    </div>
+
+    <div id="plan-view-cashflow-panel" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="space-y-2">
+          <h3 class="text-sm font-semibold text-theme-heading">Household cashflow by year</h3>
+          <div class="relative h-72">
+            <canvas id="plan-stack-chart" aria-label="Stacked cashflow by calendar year"></canvas>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <h3 class="text-sm font-semibold text-theme-heading">Cumulative net</h3>
+          <div class="relative h-72">
+            <canvas id="plan-cumulative-chart" aria-label="Cumulative net cashflow"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <h3 class="text-sm font-semibold text-theme-heading">Year-by-year ($000s)</h3>
+      <div id="plan-totals" class="text-sm text-theme-body"></div>
+      <div id="plan-year-table" class="overflow-x-auto text-sm"></div>
+    </div>
+  </div>
+</section>

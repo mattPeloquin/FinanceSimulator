@@ -74,6 +74,7 @@ export function registerSsTiming() {
     title: 'Social Security',
     rootId: 'feature-ss-timing',
     placement: 'more',
+    moreGroup: 'plan-input',
     init: initSsTimingDom,
     onActivate() {
       flushPendingSsTimingResults();

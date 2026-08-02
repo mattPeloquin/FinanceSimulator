@@ -41,15 +41,32 @@ test('Core simulation flow runs and populates results', async ({ page }) => {
   await expect(page.locator('#feature-ss-timing')).toBeHidden();
   await expect(page.locator('#feature-roth-convert')).toBeHidden();
   await expect(page.locator('#feature-house-equity')).toBeHidden();
+  await expect(page.locator('#feature-plan')).toBeHidden();
   await page.click('#feature-more-button');
-  await expect(page.locator('#more-item-sor-lab')).toBeVisible();
-  await expect(page.locator('#more-item-sor-lab')).toContainText('SOR Lab');
+  await expect(page.locator('#more-item-plan')).toBeVisible();
+  await expect(page.locator('#more-item-plan')).toContainText('Lifetime Plan');
   await expect(page.locator('#more-item-ss-timing')).toBeVisible();
   await expect(page.locator('#more-item-ss-timing')).toContainText('Social Security');
-  await expect(page.locator('#more-item-roth-convert')).toBeVisible();
-  await expect(page.locator('#more-item-roth-convert')).toContainText('Roth Convert');
   await expect(page.locator('#more-item-house-equity')).toBeVisible();
   await expect(page.locator('#more-item-house-equity')).toContainText('House Equity');
+  await expect(page.locator('#more-item-roth-convert')).toBeVisible();
+  await expect(page.locator('#more-item-roth-convert')).toContainText('Roth Convert');
+  await expect(page.locator('#more-item-sor-lab')).toBeVisible();
+  await expect(page.locator('#more-item-sor-lab')).toContainText('SOR Lab');
+  await expect(page.locator('#feature-more-menu .feature-more-group')).toHaveText([
+    'Plan inputs',
+    'Standalone',
+  ]);
+  const moreOrder = await page.locator('#feature-more-menu [role="option"]').evaluateAll(
+    (els) => els.map((el) => el.id),
+  );
+  expect(moreOrder).toEqual([
+    'more-item-plan',
+    'more-item-ss-timing',
+    'more-item-house-equity',
+    'more-item-roth-convert',
+    'more-item-sor-lab',
+  ]);
   await page.keyboard.press('Escape');
   await expect(page.locator('#feature-more-menu')).toBeHidden();
   await expect(page.locator('#githubLink')).toBeVisible();

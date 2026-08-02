@@ -13,6 +13,7 @@ import {
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
+  FEATURE_PLAN,
 } from './storageKeys.js';
 
 /** Lab session / envelope state version (also mirrored inside Lab config as `version`). */
@@ -34,6 +35,10 @@ export const ROTH_CONVERT_STATE_VERSION_MIN = 1;
 /** House Equity session / envelope state version. */
 export const HOUSE_EQUITY_STATE_VERSION = 2;
 export const HOUSE_EQUITY_STATE_VERSION_MIN = 1;
+
+/** Lifetime Plan session / envelope state version. */
+export const PLAN_STATE_VERSION = 3;
+export const PLAN_STATE_VERSION_MIN = 1;
 
 /**
  * @typedef {object} FeatureMigrator
@@ -318,4 +323,64 @@ registerFeatureMigrator({
   id: FEATURE_HOUSE_EQUITY,
   stateVersion: HOUSE_EQUITY_STATE_VERSION,
   migrate: migrateHouseEquityState,
+});
+
+/**
+ * Upgrade Plan session state within supported versions.
+ * Field shaping / defaults still run in the Plan feature's normalizePlanState.
+ */
+export function migratePlanState(state, fromVersion) {
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Plan state is missing or invalid.');
+  }
+  if (typeof fromVersion !== 'number' || !Number.isFinite(fromVersion)) {
+    throw new Error('Plan state version is missing or invalid.');
+  }
+  if (fromVersion < PLAN_STATE_VERSION_MIN) {
+    throw new Error(
+      `This Plan session uses state version ${fromVersion}, which is older than this app supports (${PLAN_STATE_VERSION_MIN}).`,
+    );
+  }
+  if (fromVersion > PLAN_STATE_VERSION) {
+    throw new Error(
+      `This Plan session uses state version ${fromVersion}, which is newer than this app supports (${PLAN_STATE_VERSION}).`,
+    );
+  }
+
+  const migrated = { ...state };
+
+  // v1 → v2: net-worth view + Accumulate→Withdraw handoff fields on source rows.
+  if (fromVersion < 2) {
+    if (migrated.view == null) migrated.view = 'netWorth';
+    if (Array.isArray(migrated.sources)) {
+      migrated.sources = migrated.sources.map((src) => {
+        if (!src || typeof src !== 'object') return src;
+        return {
+          ...src,
+          startsAfter: src.startsAfter == null ? '' : String(src.startsAfter),
+          gapYears: Math.max(0, Math.round(Number(src.gapYears)) || 0),
+          handoffPercentile: ['p10', 'p50', 'p90'].includes(src.handoffPercentile)
+            ? src.handoffPercentile
+            : 'p50',
+        };
+      });
+    }
+  }
+
+  // v2 → v3: Roth Convert is no longer a Lifetime Plan source (orthogonal tax overlay).
+  if (fromVersion < 3) {
+    if (Array.isArray(migrated.sources)) {
+      migrated.sources = migrated.sources.filter(
+        (src) => src && src.feature !== 'roth-convert',
+      );
+    }
+  }
+
+  return migrated;
+}
+
+registerFeatureMigrator({
+  id: FEATURE_PLAN,
+  stateVersion: PLAN_STATE_VERSION,
+  migrate: migratePlanState,
 });

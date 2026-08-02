@@ -36,6 +36,15 @@ export const DEFAULT_STRATEGY_IDS = Object.freeze([
   'custom',
 ]);
 
+/** Display labels for default conversion strategies (Plan picker / tables). */
+export const DEFAULT_STRATEGY_LABELS = Object.freeze({
+  zero: '$0 (no convert)',
+  'fill-12': 'Fill to 12%',
+  'fill-22': 'Fill to 22%',
+  'fill-24': 'Fill to 24%',
+  custom: 'Custom',
+});
+
 // ---- Tax ladder helpers -----------------------------------------------------
 
 /**

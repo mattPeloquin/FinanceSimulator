@@ -1,6 +1,8 @@
 // Withdrawal strategy logic, extracted as pure functions so it can be unit-tested
 // in isolation and reused by the simulation engine.
 
+import { buildCashflowSeries } from '../state/cashflowSeries.js';
+
 // Piecewise-linear interpolation of the extra withdrawal adjustment based on the
 // real market return (%), using the low / expected / high anchor points.
 export function getDynamicAdjustment(realReturnPercent, dynConfig) {
@@ -425,4 +427,71 @@ export function buildSpecificWithdrawalFloorSeries(pctTiers, specificAmountsDoll
     series[j] = pct > 0 ? listAmount * (pct / 100) : 0;
   }
   return series;
+}
+
+/**
+ * Per-year median of a Withdraw heatmap source (rank-ordered rows).
+ * Clamps deposits (negative stored withdrawals) to 0 before ranking.
+ * @param {object} heatmap
+ * @returns {number[]}
+ */
+function medianWithdrawalsFromHeatmap(heatmap) {
+  const numYears = heatmap.numYears | 0;
+  const values = heatmap.sourceValues;
+  const median = new Array(numYears).fill(0);
+  if (!values || numYears <= 0) return median;
+
+  // Prefer explicit sourceSpan; otherwise infer from a flat typed/array buffer.
+  let span = heatmap.sourceSpan | 0;
+  if (span <= 0 && typeof values.length === 'number' && values.length >= numYears) {
+    span = Math.floor(values.length / numYears);
+  }
+  if (span <= 0) return median;
+
+  for (let year = 0; year < numYears; year++) {
+    const col = [];
+    for (let row = 0; row < span; row++) {
+      const raw = values[row * numYears + year];
+      if (!Number.isFinite(raw) || Number.isNaN(raw)) continue;
+      col.push(Math.max(0, raw));
+    }
+    if (col.length === 0) continue;
+    col.sort((a, b) => a - b);
+    const idx = (col.length - 1) * 0.5;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    median[year] = lo === hi ? col[lo] : col[lo] + (col[hi] - col[lo]) * (idx - lo);
+  }
+  return median;
+}
+
+/**
+ * Build a household CashflowSeries from a packaged Withdraw run result.
+ *
+ * Median-path annual withdrawals are recorded as **negative** outflows so the
+ * Lifetime Plan cashflow stack shows portfolio drawdown leaving the investment
+ * sleeve (SS / home equity / etc. remain the positive inflows).
+ *
+ * @param {object} result - packaged Withdraw run (buildRunResult shape)
+ * @param {object} [opts]
+ * @param {string|null} [opts.sessionName]
+ * @returns {import('../state/cashflowSeries.js').CashflowSeries|null}
+ */
+export function buildWithdrawCashflowSeries(result, opts = {}) {
+  const heatmap = result?.withdrawalHeatmap;
+  if (!heatmap?.sourceValues || !Number.isFinite(heatmap.numYears)) return null;
+
+  const numYears = heatmap.numYears | 0;
+  const median = medianWithdrawalsFromHeatmap(heatmap);
+
+  // Negate: portfolio withdrawals leave the investment balance.
+  const annual = median.map((v) => (Number.isFinite(v) ? -Math.max(0, v) : 0));
+
+  return buildCashflowSeries({
+    sourceFeature: 'withdraw',
+    startAge: 0,
+    sessionName: opts.sessionName ?? null,
+    numYears,
+    annualByStrategy: { p50: annual },
+  });
 }

@@ -267,6 +267,14 @@
     @apply px-3 py-2 text-sm text-theme-faint;
   }
 
+  .feature-more-group {
+    @apply px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-theme-faint select-none;
+  }
+
+  .feature-more-group:not(:first-child) {
+    @apply mt-1 border-t border-theme-border;
+  }
+
   /* Withdraw — teal */
   .feature-tab[data-feature-id='withdraw'] {
     background-color: rgb(13 148 136 / 0.14);
@@ -339,20 +347,36 @@
     color: rgb(15 23 42);
   }
 
-  /* More (idle) + fallback for other features — slate */
-  .feature-more-button:not([data-feature-id]),
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']) {
+  /* Fallback for other primary-style tabs — slate (exclude More; it has its own rules) */
+  .feature-tab:not(.feature-more-button):not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']) {
     background-color: rgb(var(--theme-bg-muted));
     color: rgb(var(--theme-text-muted));
   }
-  .feature-more-button:not([data-feature-id]):hover,
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']):hover {
+  .feature-tab:not(.feature-more-button):not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab']):hover {
     background-color: rgb(var(--theme-bg-subtle));
   }
-  .feature-more-button:not([data-feature-id])[aria-selected='true'],
-  .feature-tab:not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
+  .feature-tab:not(.feature-more-button):not([data-feature-id='withdraw']):not([data-feature-id='accumulate']):not([data-feature-id='sor-lab'])[aria-selected='true'] {
     background-color: rgb(var(--theme-bg-control));
     color: rgb(var(--theme-on-accent));
+  }
+
+  /* More — idle slate; active uses a solid indigo fill so it matches the
+     visual weight of Accumulate / Withdraw when a More feature is selected.
+     Per-feature tints (e.g. SOR Lab amber) still win via data-feature-id. */
+  .feature-more-button:not([aria-selected='true']) {
+    background-color: rgb(var(--theme-bg-muted));
+    color: rgb(var(--theme-text-muted));
+  }
+  .feature-more-button:not([aria-selected='true']):hover {
+    background-color: rgb(var(--theme-bg-subtle));
+  }
+  .feature-more-button[aria-selected='true'] {
+    background-color: rgb(79 70 229);
+    color: rgb(255 255 255);
+  }
+  .dark .feature-more-button[aria-selected='true'] {
+    background-color: rgb(99 102 241);
+    color: rgb(15 23 42);
   }
 }
 

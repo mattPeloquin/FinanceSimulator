@@ -6,6 +6,7 @@
 import { loadAppPrefs, saveAppPrefs, DEFAULT_APP_PREFS } from './appPrefs.js';
 
 /** @typedef {'primary' | 'more'} FeaturePlacement */
+/** @typedef {'plan-input' | 'standalone'} MoreGroup */
 /** @typedef {{ busy?: boolean, progress?: number|null }} FeatureBadge */
 
 /**
@@ -14,10 +15,16 @@ import { loadAppPrefs, saveAppPrefs, DEFAULT_APP_PREFS } from './appPrefs.js';
  * @property {string} title           tab / menu label
  * @property {string} rootId          DOM id of the feature root element
  * @property {FeaturePlacement} placement
+ * @property {MoreGroup} [moreGroup]  More menu section (omit for hub items like Lifetime Plan)
  * @property {(ctx?: object) => void} [init]
  * @property {() => void} [onActivate]
  * @property {() => void} [onDeactivate]
  */
+
+const MORE_GROUP_LABELS = Object.freeze({
+  'plan-input': 'Plan inputs',
+  standalone: 'Standalone',
+});
 
 /** @type {Map<string, FeatureDescriptor>} */
 const registry = new Map();
@@ -68,11 +75,15 @@ export function registerFeature(feature) {
     throw new Error(`registerFeature: duplicate id "${id}"`);
   }
   const placement = feature.placement === 'more' ? 'more' : 'primary';
+  const moreGroup = feature.moreGroup === 'plan-input' || feature.moreGroup === 'standalone'
+    ? feature.moreGroup
+    : undefined;
   registry.set(id, {
     id,
     title,
     rootId,
     placement,
+    ...(moreGroup ? { moreGroup } : {}),
     init: typeof feature.init === 'function' ? feature.init : () => {},
     onActivate: typeof feature.onActivate === 'function' ? feature.onActivate : () => {},
     onDeactivate: typeof feature.onDeactivate === 'function' ? feature.onDeactivate : () => {},
@@ -289,7 +300,14 @@ function createMoreControl(moreFeatures) {
     empty.textContent = 'No additional features yet';
     menu.appendChild(empty);
   } else {
+    /** @type {string|undefined} */
+    let currentGroup;
     for (const feature of moreFeatures) {
+      const group = feature.moreGroup;
+      if (group && group !== currentGroup) {
+        currentGroup = group;
+        menu.appendChild(createMoreGroupHeader(group));
+      }
       menu.appendChild(createMoreOption(feature));
     }
   }
@@ -312,6 +330,18 @@ function createMoreControl(moreFeatures) {
   moreButton = btn;
   moreMenu = menu;
   return wrap;
+}
+
+/**
+ * Non-selectable section header in the More listbox.
+ * @param {MoreGroup} group
+ */
+function createMoreGroupHeader(group) {
+  const li = document.createElement('li');
+  li.className = 'feature-more-group';
+  li.setAttribute('role', 'presentation');
+  li.textContent = MORE_GROUP_LABELS[group] || group;
+  return li;
 }
 
 function createMoreOption(feature) {

@@ -38,6 +38,7 @@ for (const feature of [
   'ss-timing',
   'roth-convert',
   'house-equity',
+  'plan',
 ]) {
   loadPartials(join(root, 'features', feature, 'partials'), partials);
 }

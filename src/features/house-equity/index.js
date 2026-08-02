@@ -74,6 +74,7 @@ export function registerHouseEquity() {
     title: 'House Equity',
     rootId: 'feature-house-equity',
     placement: 'more',
+    moreGroup: 'plan-input',
     init: initHouseEquityDom,
     onActivate() {
       flushPendingHouseEquityResults();

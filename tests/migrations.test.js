@@ -6,6 +6,7 @@ import {
   migrateSsTimingState,
   migrateRothConvertState,
   migrateHouseEquityState,
+  migratePlanState,
   migrateFeatureState,
   getFeatureStateVersion,
   LAB_STATE_VERSION,
@@ -14,6 +15,7 @@ import {
   SS_TIMING_STATE_VERSION,
   ROTH_CONVERT_STATE_VERSION,
   HOUSE_EQUITY_STATE_VERSION,
+  PLAN_STATE_VERSION,
 } from '../src/state/migrations.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_MIN } from '../src/state/scenario.js';
 import {
@@ -23,16 +25,18 @@ import {
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
+  FEATURE_PLAN,
 } from '../src/state/storageKeys.js';
 
 describe('migrateFeatureState registry', () => {
-  it('exposes Plan, Lab, Accumulate, SS Timing, Roth Convert, and House Equity current versions', () => {
+  it('exposes Withdraw, Lab, Accumulate, SS Timing, Roth Convert, House Equity, and Lifetime Plan current versions', () => {
     expect(getFeatureStateVersion(FEATURE_WITHDRAW)).toBe(SCHEMA_VERSION);
     expect(getFeatureStateVersion(FEATURE_SOR_LAB)).toBe(LAB_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ACCUMULATE)).toBe(ACCUMULATE_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_SS_TIMING)).toBe(SS_TIMING_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_ROTH_CONVERT)).toBe(ROTH_CONVERT_STATE_VERSION);
     expect(getFeatureStateVersion(FEATURE_HOUSE_EQUITY)).toBe(HOUSE_EQUITY_STATE_VERSION);
+    expect(getFeatureStateVersion(FEATURE_PLAN)).toBe(PLAN_STATE_VERSION);
   });
 
   it('delegates Plan migration to migrateScenario', () => {
@@ -75,6 +79,39 @@ describe('migrateFeatureState registry', () => {
     const out = migrateFeatureState(FEATURE_HOUSE_EQUITY, state, HOUSE_EQUITY_STATE_VERSION);
     expect(out).toEqual(state);
     expect(migrateHouseEquityState(state, HOUSE_EQUITY_STATE_VERSION)).toEqual(state);
+  });
+
+  it('delegates Lifetime Plan migration to migratePlanState', () => {
+    const state = { planStartYear: 2026, view: 'netWorth', sources: [] };
+    const out = migrateFeatureState(FEATURE_PLAN, state, PLAN_STATE_VERSION);
+    expect(out).toEqual(state);
+    expect(migratePlanState(state, PLAN_STATE_VERSION)).toEqual(state);
+  });
+
+  it('migrates Lifetime Plan v1 → v2 with view and handoff defaults', () => {
+    const state = {
+      planStartYear: 2026,
+      sources: [{ id: 's1', feature: 'accumulate', sessionName: 'A' }],
+    };
+    const out = migratePlanState(state, 1);
+    expect(out.view).toBe('netWorth');
+    expect(out.sources[0].startsAfter).toBe('');
+    expect(out.sources[0].gapYears).toBe(0);
+    expect(out.sources[0].handoffPercentile).toBe('p50');
+  });
+
+  it('migrates Lifetime Plan v2 → v3 by dropping Roth Convert sources', () => {
+    const state = {
+      planStartYear: 2026,
+      view: 'netWorth',
+      sources: [
+        { id: 'a1', feature: 'accumulate', sessionName: 'A' },
+        { id: 'r1', feature: 'roth-convert', sessionName: 'R' },
+        { id: 's1', feature: 'ss-timing', sessionName: 'S' },
+      ],
+    };
+    const out = migratePlanState(state, 2);
+    expect(out.sources.map((s) => s.feature)).toEqual(['accumulate', 'ss-timing']);
   });
 
   it('rejects unknown features and missing versions', () => {

@@ -123,8 +123,11 @@ from the registry. Active tab persists in `fs:app:prefs`.
 - `registerFeature({ …, placement })` — omit or `'primary'` for top-level tabs;
   `'more'` puts the feature under the More control (button + listbox).
 - **Primary today:** `accumulate`, `withdraw` (tab order; default active is
-  still `withdraw`). **More today:** `sor-lab`,
-  `ss-timing`, `roth-convert`, `house-equity` (plus future features). More is always rendered, even if empty.
+  still `withdraw`). **More today (registration order):** `plan` (hub), then
+  Plan inputs `ss-timing` + `house-equity` (`moreGroup: 'plan-input'`), then
+  Standalone `roth-convert` + `sor-lab` (`moreGroup: 'standalone'`). The More
+  listbox renders non-selectable group headers for those sections. More is
+  always rendered, even if empty.
 - When a More feature is active, the More control’s label becomes that feature’s
   title and the control is `aria-selected`. Escape closes the menu and returns
   focus to the More button.

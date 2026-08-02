@@ -11,6 +11,7 @@ import {
   FEATURE_SS_TIMING,
   FEATURE_ROTH_CONVERT,
   FEATURE_HOUSE_EQUITY,
+  FEATURE_PLAN,
 } from './state/storageKeys.js';
 import { registerWithdraw } from './features/withdraw/index.js';
 import { registerAccumulate } from './features/accumulate/index.js';
@@ -18,6 +19,7 @@ import { registerSorLab } from './features/sor-lab/index.js';
 import { registerSsTiming } from './features/ss-timing/index.js';
 import { registerRothConvert } from './features/roth-convert/index.js';
 import { registerHouseEquity } from './features/house-equity/index.js';
+import { registerPlan } from './features/plan/index.js';
 import { restoreUnsavedScenario } from './features/withdraw/session.js';
 import { initAppAbout } from './ui/appAbout.js';
 import {
@@ -29,14 +31,17 @@ import {
   restoreSessionUi,
 } from './ui/sessionChrome.js';
 
-// Registration order sets primary tab order: Accumulate | Withdraw | More.
+// Registration order sets primary tab order and More menu order.
+// Primary: Accumulate | Withdraw.
+// More: Lifetime Plan → Plan inputs (SS, House Equity) → Standalone (Roth, SOR Lab).
 // Default active tab stays Withdraw (fs:app:prefs / DEFAULT_APP_PREFS).
 registerAccumulate();
 registerWithdraw();
-registerSorLab();
+registerPlan();
 registerSsTiming();
-registerRothConvert();
 registerHouseEquity();
+registerRothConvert();
+registerSorLab();
 
 async function init() {
   try {
@@ -58,6 +63,7 @@ async function init() {
       [FEATURE_SS_TIMING]: { name: '', description: '', lastSelect: '' },
       [FEATURE_ROTH_CONVERT]: { name: '', description: '', lastSelect: '' },
       [FEATURE_HOUSE_EQUITY]: { name: '', description: '', lastSelect: '' },
+      [FEATURE_PLAN]: { name: '', description: '', lastSelect: '' },
     });
     setSessionMeta({
       name: autosaved.name || '',

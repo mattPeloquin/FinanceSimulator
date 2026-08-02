@@ -2,39 +2,17 @@
 // Pure enough to unit-test; DOM-free except that callers supply samples.
 
 import { buildSimParams } from '../../state/scenario.js';
-import {
-  getSampleYears,
-  computeProfiles,
-  profilesToScenarioFields,
-} from '../../core/history.js';
-import { listSleeves } from '../../portfolio/registry.js';
+import { getSampleYears } from '../../core/history.js';
+import { ensureScenarioProfiles } from '../../core/scenarioProfiles.js';
 import { resolveLabVariables } from './variables.js';
+
+export { ensureScenarioProfiles };
 
 export const DEFAULT_SWEEP_POINTS = 7;
 export const DEFAULT_PATHS_PER_POINT = 2000;
 
 /** Shared heavy arrays stripped from each point and restored in the worker. */
 export const SHARED_PARAM_KEYS = ['samples', 'scaledHistoricalShocks'];
-
-/**
- * Ensure log-normal / scaled-historical profile fields are filled from the
- * scenario's historical window when missing (saved Plans usually have them).
- */
-export function ensureScenarioProfiles(scenario) {
-  const out = structuredClone(scenario);
-  const firstMean = listSleeves()[0]?.meanKey;
-  const needsProfiles = firstMean == null || out[firstMean] == null || out[firstMean] === '';
-  if (!needsProfiles) return out;
-  const startYear = Number(out.startYear);
-  const endYear = Number(out.endYear);
-  if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || startYear > endYear) {
-    return out;
-  }
-  const years = getSampleYears(startYear, endYear);
-  if (years.length === 0) return out;
-  Object.assign(out, profilesToScenarioFields(computeProfiles(years)));
-  return out;
-}
 
 /** Evenly spaced design values across [low, high], length = sweepPoints. */
 export function linspace(low, high, count) {

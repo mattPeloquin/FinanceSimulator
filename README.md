@@ -4,20 +4,12 @@ Welcome to the Personal Finance Simulator! This interactive tool helps you visua
 
 **[▶ Try the simulator](https://mattpeloquin.github.io/FinanceSimulator/dist/index.html)** — runs in web browser on your device, no apps or user accounts!
 
-The entire simulator is a **single, self-contained HTML file**. One app hosts several features (tabs under the title); Easy Mode and built-in help will get you started.
+The entire simulator is a **single, self-contained HTML file**. Easy Mode and built-in help will get you started.
 
-- **Accumulate** — Explore how contributions and allocations grow over a fixed horizon, with an uncertainty cone and Low/Med/High savings comparison (under the title, left of Withdraw).
-- **Withdraw** — Build a retirement spending plan and run Monte Carlo simulations (the main planner; opens by default).
-
-- **SOR Lab** — Sensitivity analysis on a saved Withdraw session (under **More**): see which inputs move your outcomes most, then click tornado rows to compare variables on the response curve. Change metrics and percentile bands without re-running. Details live in the app’s Lab help text.
-- **Social Security** — Compare claim ages for one person or a couple (under **More**), with an end-age sensitivity strip and Monte Carlo opportunity cost of delaying a claim. Educational simplifications — not an SSA calculator.
-- **Roth Convert** — Explore how much Roth conversion (if any) helps under uncertain future tax rates (under **More**), with an editable rate ladder, RMD/QCD options, and a $0 baseline in every run. Educational — not a tax-prep tool.
-- **House Equity** — Compare ways to access home equity earlier (under **More**): calibrated HECM (published PLF tables), private RM-style, HELOC, cash-out & invest, or sell and rent. Educational — not a lender quote or tax calculator.
 - **No cloud - you control all data:** No databases, networks, or servers, data stays on your device.
-- **No user accounts:** Your saved sessions are stored on your device; copies can be shared with links. Save, Export, and Link can optionally include your view settings (theme, report band, open sections); the recipient is asked before those settings apply.
-- **Upgrading from an older build:** Named sessions and old share links from earlier versions are not migrated. Use **Export** before upgrading, then **Import** the JSON file after — that is the supported way to carry scenarios forward.
-- **Run anywhere:** Double-click the `index.html` file and run in your browser.
-- **Designed for vibe coding:** Follow instructions below if you want to change or extend.
+- **No user accounts -** Your saved sessions are stored on your device; copies can be shared with links. 
+- **Built for vibe coding -** Follow instructions below if you want to change or extend.
+- **Lifetime Plan (under More) -** Combine Accumulate, Withdraw, Social Security, and House Equity into one net-worth-over-time view (with a cashflow toggle). Roth Convert and SOR Lab stay standalone tools.
 
 ---
 
@@ -44,6 +36,8 @@ Cursor has a built-in AI assistant. You essentially act as the "Product Manager,
 4. **Trust the Tests**
   - This project has automated tests to make sure things don't break. If you add a new feature, you can tell Cursor: "I just added an inflation input. Run the tests and fix any issues caused by my changes."
 
+
+
 ## Setting Up Your Dev Environment
 
 You don't need to be a software engineer to modify this app! You just need a few basic tools installed on your computer.
@@ -60,15 +54,20 @@ Forking makes **your own copy** of the project under your GitHub account. You ca
 6. Choose a folder on your computer when prompted. That folder is the project you’ll open in Cursor next.
 
 *Prefer the command line?* After forking, run:
+
 ```bash
 git clone https://github.com/<your-username>/FinanceSimulator.git
 cd FinanceSimulator
 ```
 
+
+
 ### Step 2: Install the basics
 
 1. **Node.js**: Download and install the LTS version from [nodejs.org](https://nodejs.org/). This runs the background tools needed to build the project.
 2. **Cursor**: Download and install [Cursor](https://cursor.sh/), an AI-powered code editor that will essentially write the code for you.
+
+
 
 ### Step 3: Get the project running
 
@@ -85,6 +84,8 @@ cd FinanceSimulator
    npm run dev
   ```
    *Press Enter. This starts up your local preview. You'll see a web link (usually* `http://localhost:5173`*). Click it or copy it into your browser (or Ctrl-Click the link in the terminal) to see the app running live!*  *The first* `npm install` *also downloads the Chromium browser used for automated UI tests (about 150 MB). If you skip that step or tests complain about a missing browser, run* `npm run setup:e2e` *once.*
+
+
 
 ### Building Your Final Version
 
@@ -137,19 +138,20 @@ flowchart TD
 ### Where to look when vibe-coding
 
 
-| You want to change…                     | Look in…                                                                                             |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| The math of growth/withdrawals          | `src/core/simulation.js`, `src/core/withdrawal.js`                                                   |
-| Find Best Plan's search logic           | `src/core/goalSeek.js`                                                                               |
-| The historical dataset                  | `src/data/historicalData.js`                                                                         |
+| You want to change…                     | Look in…                                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| The math of growth/withdrawals          | `src/core/simulation.js`, `src/core/withdrawal.js`                                                                |
+| Find Best Plan's search logic           | `src/core/goalSeek.js`                                                                                            |
+| The historical dataset                  | `src/data/historicalData.js`                                                                                      |
 | An input field or its default value     | `src/state/scenario.js` (the `FIELDS` list) and the matching form partial under `src/features/withdraw/partials/` |
-| Fees & taxes (AUM fee / withdrawal tax) | Withdraw fees/taxes partial, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js` |
-| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/features/withdraw/ui/riskPreset.js` |
-| A Withdraw chart's look or behavior     | `src/features/withdraw/ui/charts/` (one file per chart) |
-| SOR Lab sensitivity / tornado           | `src/features/sor-lab/`, `src/core/sensitivity.js` |
-| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, Withdraw chart helpers |
-| The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js` |
-| Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js` |
+| Fees & taxes (AUM fee / withdrawal tax) | Withdraw fees/taxes partial, `src/core/feesTaxes.js`, year loop in `src/core/simulation.js`                       |
+| The Risk Level slider presets           | `src/state/presets/` (one JSON per level) and `src/features/withdraw/ui/riskPreset.js`                            |
+| A Withdraw chart's look or behavior     | `src/features/withdraw/ui/charts/` (one file per chart)                                                           |
+| SOR Lab sensitivity / tornado           | `src/features/sor-lab/`, `src/core/sensitivity.js`                                                                |
+| Lifetime Plan (net worth over time)     | `src/features/plan/`, `src/core/lifetimePlan.js`, `src/state/cashflowSeries.js`                                   |
+| 3D drilldown / Show from–to window      | `src/core/surfaceDrilldown.js`, Withdraw chart helpers                                                            |
+| The summary numbers shown               | `src/workers/simulation.worker.js` and `src/core/statistics.js`                                                   |
+| Saving/loading sessions                 | `src/state/sessions.js`, `src/state/persistence.js`                                                               |
 
 
 

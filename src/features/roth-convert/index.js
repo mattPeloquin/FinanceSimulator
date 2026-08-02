@@ -74,6 +74,7 @@ export function registerRothConvert() {
     title: 'Roth Convert',
     rootId: 'feature-roth-convert',
     placement: 'more',
+    moreGroup: 'standalone',
     init: initRothConvertDom,
     onActivate() {
       flushPendingRothConvertResults();
